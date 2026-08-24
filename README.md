@@ -49,6 +49,12 @@ with highest precedence. The golden package is never modified.
 | Liberty installer | 25.0.0.1 Base | `Resources/wlp-base-all-25.0.0.1.jar` — member3/4 |
 | Application WAR | — | `App/server-info.war` |
 
+> **Note for cloners:** The `Resources/` directory is empty in this repository — the Liberty
+> installer JARs are not redistributable and cannot be committed to git. Before running any
+> scripts, copy the installers into `Resources/` manually:
+> - `Resources/wlp-nd-all-26.0.0.8.jar` — download from [IBM Fix Central](https://www.ibm.com/support/fixcentral/) (product: WebSphere Application Server / Liberty, version 26.0.0.8, package type: `wlp-nd-all`)
+> - `Resources/wlp-base-all-25.0.0.1.jar` — same location, version 25.0.0.1, package type: `wlp-base-all`
+
 ---
 
 ## Running the Lab — Full Sequence
