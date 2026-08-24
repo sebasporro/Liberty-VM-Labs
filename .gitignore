@@ -1,0 +1,46 @@
+# ─── macOS ────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverrideFile
+._*
+
+# ─── Liberty runtime directories (extracted by 01-install-runtime*.sh) ────────
+wlp-26/
+wlp-25/
+wlp/
+
+# ─── Golden packages (built by 03-build-package*.sh, ~400 MB each) ────────────
+packages/*.zip
+
+# ─── Liberty installer JARs (large binaries, supplied separately) ─────────────
+Resources/*.jar
+Resources/*.zip
+
+# ─── Deployed instances (created by install-controller.sh / add-member*.sh) ───
+# Keep the installs/ directory itself (tracked via .gitkeep) but ignore contents.
+installs/*/
+
+# ─── Liberty server runtime artifacts ─────────────────────────────────────────
+**/logs/
+**/workarea/
+**/tranlog/
+**/resources/security/
+
+# ─── Java / build artefacts ───────────────────────────────────────────────────
+*.class
+*.jar
+!App/*.war
+
+# ─── Editor / IDE ─────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+*~
+
+# ─── OS temporaries ───────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db

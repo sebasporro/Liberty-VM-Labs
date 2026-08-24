@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  template-26.0.0.8 — role-neutral server template
+  No collective role, no hardcoded ports, no hardcoded hostnames.
+  All runtime values are resolved from bootstrap.properties (variable syntax).
+  configDropins/overrides/ is intentionally absent — populated per-instance at deploy time.
+-->
+<server description="Liberty Template Server 26.0.0.8">
+
+  <featureManager>
+    <feature>servlet-6.0</feature>
+    <feature>ssl-1.0</feature>
+    <feature>pages-3.1</feature>
+    <feature>expressionLanguage-5.0</feature>
+  </featureManager>
+
+  <!-- Ports resolved from bootstrap.properties (or per-instance overrides) -->
+  <httpEndpoint id="defaultHttpEndpoint"
+                host="*"
+                httpPort="${default.http.port}"
+                httpsPort="${default.https.port}"/>
+
+  <!-- Keystore password resolved from bootstrap.properties -->
+  <keyStore id="defaultKeyStore" password="${keystore.password}"/>
+
+  <!--
+    Application is intentionally NOT declared here.
+    It is declared in configDropins/overrides/role-override.xml per instance,
+    so that application-bnd security bindings can be applied cleanly.
+  -->
+
+</server>

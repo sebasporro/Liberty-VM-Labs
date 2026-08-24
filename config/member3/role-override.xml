@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<server description="Member3 role override">
+    <featureManager>
+        <feature>collectiveMember-1.0</feature>
+    </featureManager>
+
+    <!-- Application declaration with open access bindings (no auth required) -->
+    <application id="serverinfo"
+                 name="server-info"
+                 type="war"
+                 location="${server.config.dir}/apps/server-info.war">
+        <application-bnd>
+            <security-role name="Everyone">
+                <special-subject type="EVERYONE"/>
+            </security-role>
+        </application-bnd>
+    </application>
+</server>

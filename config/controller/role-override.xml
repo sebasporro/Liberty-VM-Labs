@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<server description="Collective Controller role override">
+    <featureManager>
+        <feature>collectiveController-1.0</feature>
+        <feature>adminCenter-1.0</feature>
+        <feature>appSecurity-5.0</feature>
+    </featureManager>
+
+    <!-- User registry — admin credentials for Admin Center and collective join -->
+    <basicRegistry id="basic" realm="BasicRealm">
+        <user name="admin" password="${admin.password}"/>
+    </basicRegistry>
+
+    <!-- Grant the 'admin' user full administrative access to Admin Center and JMX -->
+    <administrator-role>
+        <user>admin</user>
+    </administrator-role>
+</server>

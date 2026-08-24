@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<server description="Member1 ports override">
+    <httpEndpoint id="defaultHttpEndpoint"
+                  host="*"
+                  httpPort="9081"
+                  httpsPort="9444"/>
+</server>
