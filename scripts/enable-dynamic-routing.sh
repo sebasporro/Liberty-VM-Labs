@@ -36,7 +36,7 @@ WLP_BIN="${CONTROLLER_DIR}/wlp/bin/server"
 OVERRIDES_DIR="${SERVER_DIR}/configDropins/overrides"
 
 # Locate httpd.conf (IHS on Linux)
-IHS_ROOT="${IHS_INSTALL_ROOT:-/opt/IBM/HTTPServer}"
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
 HTTPD_CONF=""
 for candidate in \
     "${IHS_ROOT}/conf/httpd.conf" \

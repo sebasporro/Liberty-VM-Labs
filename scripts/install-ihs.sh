@@ -16,13 +16,14 @@
 #   export IHS_INSTALLER_DIR=/path/to/dir/containing/ihs-zip
 #   export IHS_INSTALL_ROOT=/opt/IBM/HTTPServer   (default)
 #
-# IHS installs to: /opt/IBM/HTTPServer
+# IHS installs to: /home/itzuser/IBM/HTTPServer  (default — no sudo required)
+# Override: export IHS_INSTALL_ROOT=/opt/IBM/HTTPServer  (requires sudo)
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-IHS_INSTALL_ROOT="${IHS_INSTALL_ROOT:-/opt/IBM/HTTPServer}"
+IHS_INSTALL_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
 IHS_INSTALLER_DIR="${IHS_INSTALLER_DIR:-/home/itzuser/software/IHS}"
 IHS_STAGING="${WORKSPACE_ROOT}/_ihs_staging"
 
@@ -100,8 +101,15 @@ if [[ -n "${ARCHIVE_DIR}" ]]; then
     # ARCHIVE format — move the extracted tree into place
     echo "      Detected: ARCHIVE format (${ARCHIVE_DIR##*/})"
     echo "      Moving to ${IHS_INSTALL_ROOT}..."
-    mkdir -p "$(dirname "${IHS_INSTALL_ROOT}")"
-    mv "${ARCHIVE_DIR}" "${IHS_INSTALL_ROOT}"
+    # Use sudo only if the parent directory is not writable by the current user
+    PARENT_DIR="$(dirname "${IHS_INSTALL_ROOT}")"
+    if [[ -w "${PARENT_DIR}" ]] || mkdir -p "${PARENT_DIR}" 2>/dev/null; then
+        mkdir -p "${PARENT_DIR}"
+        mv "${ARCHIVE_DIR}" "${IHS_INSTALL_ROOT}"
+    else
+        sudo mkdir -p "${PARENT_DIR}"
+        sudo mv "${ARCHIVE_DIR}" "${IHS_INSTALL_ROOT}"
+    fi
     rm -rf "${IHS_STAGING}"
     echo "      Installed"
 else

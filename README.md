@@ -111,13 +111,13 @@ scripts/install-ihs.sh
 
 This script:
 1. Locates the IHS installer ZIP at `/home/itzuser/software/IHS/`
-2. Extracts and runs the silent installer → installs to `/opt/IBM/HTTPServer`
+2. Extracts and runs the silent installer → installs to `/home/itzuser/IBM/HTTPServer`
 3. Configures IHS to listen on port **8080**
 
 After install, add IHS to your PATH so `apachectl` is available to all lab scripts:
 
 ```bash
-echo 'export PATH="/opt/IBM/HTTPServer/bin:$PATH"' >> ~/.bashrc
+echo 'export PATH="/home/itzuser/IBM/HTTPServer/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -506,7 +506,7 @@ Idempotent — safe to run multiple times. Will not add duplicate includes or re
 already-enabled modules.
 
 Steps performed:
-1. Locates `/opt/IBM/HTTPServer/conf/httpd.conf`
+1. Locates `/home/itzuser/IBM/HTTPServer/conf/httpd.conf`
 2. Uncomments required `LoadModule` lines: `mod_proxy`, `mod_proxy_http`, `mod_proxy_balancer`, `mod_slotmem_shm`, `mod_lbmethod_byrequests`
 3. Appends `Include` for `config/apache/httpd-liberty.conf`
 4. Runs `apachectl configtest`
