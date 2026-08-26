@@ -13,18 +13,18 @@
 #
 # Override defaults:
 #   export IHS_INSTALLER_DIR=/path/to/dir/containing/ihs-zip
-#   export IHS_INSTALL_ROOT=/home/itz/IBM/HTTPServer  (default)
+#   export IHS_INSTALL_ROOT=/home/itzuser/IBM/HTTPServer  (default)
 #
 # After install, add IHS to PATH:
-#   echo 'export PATH="/home/itz/IBM/HTTPServer/bin:$PATH"' >> ~/.bashrc
+#   echo 'export PATH="/home/itzuser/IBM/HTTPServer/bin:$PATH"' >> ~/.bashrc
 #   source ~/.bashrc
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-IHS_INSTALL_ROOT="${IHS_INSTALL_ROOT:-/home/itz/IBM/HTTPServer}"
-IHS_INSTALLER_DIR="${IHS_INSTALLER_DIR:-/home/itz/software/IHS}"
+IHS_INSTALL_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
+IHS_INSTALLER_DIR="${IHS_INSTALLER_DIR:-/home/itzuser/software/IHS}"
 IHS_STAGING="${WORKSPACE_ROOT}/_ihs_staging"
 IHS_LIB="${IHS_INSTALL_ROOT}/lib"
 HTTPD_BIN="${IHS_INSTALL_ROOT}/bin/httpd"
@@ -184,8 +184,8 @@ LoadModule mime_module modules/mod_mime.so
 # WebSphere/Liberty WAS plugin — handles routing to Liberty collective members
 LoadModule was_ap24_module modules/mod_was_ap24_http.so
 
-User itz
-Group itz
+User itzuser
+Group itzuser
 
 DocumentRoot "${IHS_INSTALL_ROOT}/htdocs"
 <Directory "${IHS_INSTALL_ROOT}/htdocs">

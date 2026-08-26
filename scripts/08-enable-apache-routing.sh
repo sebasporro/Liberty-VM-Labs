@@ -18,7 +18,7 @@ source "${SCRIPT_DIR}/00-set-env.sh"
 LIBERTY_CONF="${WORKSPACE_ROOT}/config/apache/httpd-liberty.conf"
 
 # Locate httpd.conf (IHS on Linux)
-IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itz/IBM/HTTPServer}"
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
 HTTPD_CONF=""
 for candidate in \
     "${IHS_ROOT}/conf/httpd.conf" \
@@ -150,7 +150,7 @@ fi
 
 if [[ $? -ne 0 ]]; then
     echo "  ERROR: IHS/Apache failed to start."
-    echo "  Check: /home/itz/IBM/HTTPServer/logs/error_log"
+    echo "  Check: /home/itzuser/IBM/HTTPServer/logs/error_log"
     exit 1
 fi
 echo "      IHS/Apache running"
