@@ -43,10 +43,10 @@ with highest precedence. The golden package is never modified.
 | Requirement | Version | Notes |
 |-------------|---------|-------|
 | Java | 17 | Pre-installed on lab VM (IBM Semeru recommended) |
-| IBM HTTP Server (IHS) | 2.4+ | Pre-provisioned at `/home/itz/software/IHS/` |
+| IBM HTTP Server (IHS) | 2.4+ | Pre-provisioned at `/home/itzuser/software/IHS/` |
 | Shell | bash / zsh | Scripts use `#!/bin/zsh`; compatible with bash on Linux |
-| Liberty installer | 26.0.0.8 ND | Pre-provisioned at `/home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` |
-| Liberty installer | 25.0.0.1 Base | Pre-provisioned at `/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar` |
+| Liberty installer | 26.0.0.8 ND | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` |
+| Liberty installer | 25.0.0.1 Base | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar` |
 | Application WAR | — | `App/server-info.war` (committed to repo) |
 
 > **Note:** Installer binaries are pre-provisioned on the lab VM at fixed paths and are not
@@ -107,8 +107,8 @@ template configuration or application changes.
 
 > **Before running:** confirm the Liberty installer JARs are present at their expected paths:
 > ```bash
-> ls /home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar
-> ls /home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar
+> ls /home/itzuser/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar
+> ls /home/itzuser/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar
 > ```
 > If the files are at a different location, export the paths first:
 > ```bash
@@ -264,11 +264,11 @@ scripts/07-validate.sh
 
 Pre-provisioned on the lab VM (outside the repo):
 ```
-/home/itz/software/Liberty/Liberty/
+/home/itzuser/software/Liberty/Liberty/
 ├── wlp-nd-all-26.0.0.8.jar          # Liberty ND 26.0.0.8 installer
 └── wlp-base-all-25.0.0.1.jar        # Liberty Base 25.0.0.1 installer
 
-/home/itz/software/IHS/
+/home/itzuser/software/IHS/
 └── <ihs-installer>.zip               # IBM HTTP Server installer
 ```
 
@@ -597,7 +597,7 @@ scripts/07-validate.sh
 
 ### `scripts/01-install-runtime-25.sh`
 
-**Purpose:** Extracts the Liberty Base 25.0.0.1 runtime from `/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar`
+**Purpose:** Extracts the Liberty Base 25.0.0.1 runtime from `/home/itzuser/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar`
 into `wlp-25/` at workspace root. Coexists with the 26.0.0.8 `wlp/` runtime.
 
 Verifies that `wlp-25/bin/collective` is present (Base edition requirement for collective join).
