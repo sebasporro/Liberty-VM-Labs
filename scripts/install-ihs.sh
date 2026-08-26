@@ -88,10 +88,11 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "[3/4] Installing IHS to ${IHS_INSTALL_ROOT}..."
 
-# --- Detect archive format: look for apachectl anywhere one level deep ---
+# --- Detect archive format: look for known IHS binaries one level deep ---
 ARCHIVE_DIR=""
 for dir in "${IHS_STAGING}"/*/; do
-    if [[ -f "${dir}bin/apachectl" || -f "${dir}bin/httpd" ]]; then
+    if [[ -f "${dir}bin/apachectl" || -f "${dir}bin/httpd" || \
+          -f "${dir}bin/apachectl2" || -d "${dir}bin" ]]; then
         ARCHIVE_DIR="${dir%/}"   # strip trailing slash
         break
     fi
@@ -156,15 +157,33 @@ fi
 echo ""
 echo "[4/4] Verifying IHS installation..."
 
-if [[ ! -x "${IHS_INSTALL_ROOT}/bin/apachectl" ]]; then
-    echo "  ERROR: ${IHS_INSTALL_ROOT}/bin/apachectl not found after install." >&2
-    echo "  Directory contents:" >&2
-    ls "${IHS_INSTALL_ROOT}/bin/" 2>/dev/null >&2
+# Find the IHS control binary — IHS 9.x may use apachectl, apachectl2, or httpd
+IHS_CTL=""
+for candidate in \
+    "${IHS_INSTALL_ROOT}/bin/apachectl" \
+    "${IHS_INSTALL_ROOT}/bin/apachectl2" \
+    "${IHS_INSTALL_ROOT}/bin/httpd"; do
+    if [[ -x "${candidate}" ]]; then
+        IHS_CTL="${candidate}"
+        break
+    fi
+done
+
+if [[ -z "${IHS_CTL}" ]]; then
+    echo "  ERROR: IHS control binary not found after install." >&2
+    echo "  Install root tree:" >&2
+    find "${IHS_INSTALL_ROOT}" -maxdepth 3 2>/dev/null >&2
     exit 1
 fi
 
-echo "      apachectl: OK"
-"${IHS_INSTALL_ROOT}/bin/apachectl" -v 2>&1 | head -2
+echo "      Control binary: ${IHS_CTL}"
+"${IHS_CTL}" -v 2>&1 | head -2
+
+# Symlink apachectl → actual binary so all scripts can use a single name
+if [[ ! -f "${IHS_INSTALL_ROOT}/bin/apachectl" ]]; then
+    ln -sf "${IHS_CTL}" "${IHS_INSTALL_ROOT}/bin/apachectl"
+    echo "      Symlinked: bin/apachectl → $(basename "${IHS_CTL}")"
+fi
 
 HTTPD_CONF="${IHS_INSTALL_ROOT}/conf/httpd.conf"
 
