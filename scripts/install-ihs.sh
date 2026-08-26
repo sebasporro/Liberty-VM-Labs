@@ -152,10 +152,30 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Verify and configure Listen port
+# 5. Install required system libraries (APR / APR-util)
+#    IHS 9.x dynamically links against libapr-1 and libaprutil-1.
+#    These are standard packages on all RHEL/CentOS/Fedora systems.
 # ---------------------------------------------------------------------------
 echo ""
-echo "[4/4] Verifying IHS installation..."
+echo "[4/5] Installing APR/APR-util system dependencies..."
+
+if command -v dnf &>/dev/null; then
+    sudo dnf install -y apr apr-util 2>&1 | tail -3
+elif command -v yum &>/dev/null; then
+    sudo yum install -y apr apr-util 2>&1 | tail -3
+elif command -v apt-get &>/dev/null; then
+    sudo apt-get install -y libapr1 libaprutil1 2>&1 | tail -3
+else
+    echo "  WARNING: Could not detect package manager. Install apr and apr-util manually." >&2
+    echo "  e.g.:  sudo dnf install -y apr apr-util" >&2
+fi
+echo ""
+
+# ---------------------------------------------------------------------------
+# 6. Verify and configure Listen port
+# ---------------------------------------------------------------------------
+echo ""
+echo "[5/5] Verifying IHS installation..."
 
 # Find the IHS control binary — IHS 9.x may use apachectl, apachectl2, or httpd
 IHS_CTL=""

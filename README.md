@@ -111,8 +111,9 @@ scripts/install-ihs.sh
 
 This script:
 1. Locates the IHS installer ZIP at `/home/itzuser/software/IHS/`
-2. Extracts and runs the silent installer → installs to `/home/itzuser/IBM/HTTPServer`
-3. Configures IHS to listen on port **8080**
+2. Extracts the archive → moves it to `/home/itzuser/IBM/HTTPServer`
+3. Installs required system libraries (`apr`, `apr-util`) via `dnf`/`yum`/`apt-get`
+4. Configures IHS to listen on port **8080**
 
 After install, add IHS to your PATH so `apachectl` is available to all lab scripts:
 
