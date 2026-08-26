@@ -28,7 +28,7 @@ using `template-25.0.0.1`.**
   `/Users/sebastianporro/Documents/2026/ITZ/Liberty-VM-Labs`
 
 **Source artifacts:**
-- `Resources/wlp-nd-all-26.0.0.8.jar` — Liberty ND 26.0.0.8 self-extracting installer
+- `/home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` — Liberty ND 26.0.0.8 self-extracting installer
 - `App/server-info.war` — application deployed to both members
 
 ---
@@ -126,8 +126,8 @@ Apache ports 80/443 require `sudo` on macOS — Apache config only.
 │
 ├── App/
 │   └── server-info.war               # already present
-├── Resources/
-│   └── wlp-nd-all-26.0.0.8.jar      # already present
+├── /home/itz/software/Liberty/Liberty/
+│   └── wlp-nd-all-26.0.0.8.jar      # pre-provisioned on VM
 ├── TROUBLESHOOTING.md
 └── liberty-collective-lab-plan.md
 ```
@@ -175,7 +175,7 @@ also use this same Java 17 path — set via `JAVA_HOME` in `jvm.options` and scr
    ```
 4. Extract the Liberty runtime using that Java:
    ```zsh
-   $JAVA_HOME/bin/java -jar Resources/wlp-nd-all-26.0.0.8.jar \
+   $JAVA_HOME/bin/java -jar /home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar \
      --acceptLicense \
      --verbose \
      --installRoot wlp
@@ -187,7 +187,7 @@ also use this same Java 17 path — set via `JAVA_HOME` in `jvm.options` and scr
    so every script sources it
 
 **Relevant Context**
-- Installer: `Resources/wlp-nd-all-26.0.0.8.jar`
+- Installer: `/home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar`
 - Liberty ND is required — `collectiveController` and `collectiveMember` features
   are ND-only and not present in Liberty Core/Base
 - Liberty respects `JAVA_HOME` at launch time — if set, `wlp/bin/server` uses

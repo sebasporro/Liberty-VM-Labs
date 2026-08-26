@@ -112,7 +112,7 @@ grep -m1 "server is ready" <(tail -f installs/controller/wlp/usr/servers/control
 
 ### Java not found or wrong version
 
-**Symptom:** `java -jar Resources/wlp-nd-all-26.0.0.8.jar` fails with `command not found` or wrong version error.
+**Symptom:** `java -jar /home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` fails with `command not found` or wrong version error.
 
 **Cause:** JAVA_HOME not set, or default Java is not version 17.
 

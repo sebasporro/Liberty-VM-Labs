@@ -45,15 +45,14 @@ with highest precedence. The golden package is never modified.
 | Java | 17 | IBM Semeru via SDKMAN, or any JDK 17 |
 | Apache HTTP Server | 2.4+ | Homebrew: `brew install httpd` |
 | macOS shell | zsh | All scripts use `#!/bin/zsh` |
-| Liberty installer | 26.0.0.8 ND | `Resources/wlp-nd-all-26.0.0.8.jar` — controller + member1/2 |
-| Liberty installer | 25.0.0.1 Base | `Resources/wlp-base-all-25.0.0.1.jar` — member3/4 |
+| Liberty installer | 26.0.0.8 ND | `/home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` — controller + member1/2 |
+| Liberty installer | 25.0.0.1 Base | `/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar` — member3/4 |
+| IHS installer | 2.4+ | `/home/itz/software/IHS/<ihs-installer>.zip` |
 | Application WAR | — | `App/server-info.war` |
 
-> **Note for cloners:** The `Resources/` directory is empty in this repository — the Liberty
-> installer JARs are not redistributable and cannot be committed to git. Before running any
-> scripts, copy the installers into `Resources/` manually:
-> - `Resources/wlp-nd-all-26.0.0.8.jar` — download from [IBM Fix Central](https://www.ibm.com/support/fixcentral/) (product: WebSphere Application Server / Liberty, version 26.0.0.8, package type: `wlp-nd-all`)
-> - `Resources/wlp-base-all-25.0.0.1.jar` — same location, version 25.0.0.1, package type: `wlp-base-all`
+> **Note:** Liberty installer JARs are expected at `/home/itz/software/Liberty/Liberty/` and the
+> IHS installer ZIP at `/home/itz/software/IHS/`. These paths are pre-provisioned on the lab VM
+> and are not committed to git.
 
 ---
 
@@ -224,9 +223,10 @@ scripts/07-validate.sh
 Liberty-VM-Labs/
 ├── App/
 │   └── server-info.war                  # Application WAR
-├── Resources/
+├── /home/itz/software/Liberty/Liberty/   # Liberty installer JARs (pre-provisioned)
 │   ├── wlp-nd-all-26.0.0.8.jar          # Liberty ND 26.0.0.8 installer
 │   └── wlp-base-all-25.0.0.1.jar        # Liberty Base 25.0.0.1 installer
+├── /home/itz/software/IHS/               # IHS installer ZIP (pre-provisioned)
 ├── wlp-26/                               # Build-phase runtime — Liberty 26.0.0.8
 ├── wlp-25/                              # Build-phase runtime — Liberty 25.0.0.1
 ├── packages/
@@ -548,7 +548,7 @@ scripts/07-validate.sh
 
 ### `scripts/01-install-runtime-25.sh`
 
-**Purpose:** Extracts the Liberty Base 25.0.0.1 runtime from `Resources/wlp-base-all-25.0.0.1.jar`
+**Purpose:** Extracts the Liberty Base 25.0.0.1 runtime from `/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar`
 into `wlp-25/` at workspace root. Coexists with the 26.0.0.8 `wlp/` runtime.
 
 Verifies that `wlp-25/bin/collective` is present (Base edition requirement for collective join).
