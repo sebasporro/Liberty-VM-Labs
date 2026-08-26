@@ -30,9 +30,10 @@ source "${SCRIPT_DIR}/00-set-env.sh"
 LIBERTY_CONF="${WORKSPACE_ROOT}/config/apache/httpd-liberty.conf"
 
 # Locate httpd.conf (IHS on Linux)
+IHS_ROOT="${IHS_INSTALL_ROOT:-/opt/IBM/HTTPServer}"
 HTTPD_CONF=""
 for candidate in \
-    "/opt/IBM/HTTPServer/conf/httpd.conf" \
+    "${IHS_ROOT}/conf/httpd.conf" \
     "/etc/httpd/conf/httpd.conf" \
     "/etc/apache2/apache2.conf" \
     "/usr/local/apache2/conf/httpd.conf"; do
@@ -41,6 +42,11 @@ for candidate in \
         break
     fi
 done
+
+# Ensure IHS apachectl is on PATH
+if [[ -x "${IHS_ROOT}/bin/apachectl" && ":${PATH}:" != *":${IHS_ROOT}/bin:"* ]]; then
+    export PATH="${IHS_ROOT}/bin:${PATH}"
+fi
 
 echo ""
 echo "=== Liberty Lab — Reset Environment ==="

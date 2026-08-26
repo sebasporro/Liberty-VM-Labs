@@ -18,9 +18,10 @@ source "${SCRIPT_DIR}/00-set-env.sh"
 LIBERTY_CONF="${WORKSPACE_ROOT}/config/apache/httpd-liberty.conf"
 
 # Locate httpd.conf (IHS on Linux)
+IHS_ROOT="${IHS_INSTALL_ROOT:-/opt/IBM/HTTPServer}"
 HTTPD_CONF=""
 for candidate in \
-    "/opt/IBM/HTTPServer/conf/httpd.conf" \
+    "${IHS_ROOT}/conf/httpd.conf" \
     "/etc/httpd/conf/httpd.conf" \
     "/etc/apache2/apache2.conf" \
     "/usr/local/apache2/conf/httpd.conf"; do
@@ -31,8 +32,14 @@ for candidate in \
 done
 
 if [[ -z "${HTTPD_CONF}" ]]; then
-    echo "  ERROR: httpd.conf not found. Expected: /opt/IBM/HTTPServer/conf/httpd.conf"
+    echo "  ERROR: httpd.conf not found. Run scripts/install-ihs.sh first."
+    echo "  Expected: ${IHS_ROOT}/conf/httpd.conf"
     exit 1
+fi
+
+# Ensure IHS apachectl is on PATH
+if [[ -x "${IHS_ROOT}/bin/apachectl" && ":${PATH}:" != *":${IHS_ROOT}/bin:"* ]]; then
+    export PATH="${IHS_ROOT}/bin:${PATH}"
 fi
 
 echo ""

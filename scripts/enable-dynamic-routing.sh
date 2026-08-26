@@ -36,9 +36,10 @@ WLP_BIN="${CONTROLLER_DIR}/wlp/bin/server"
 OVERRIDES_DIR="${SERVER_DIR}/configDropins/overrides"
 
 # Locate httpd.conf (IHS on Linux)
+IHS_ROOT="${IHS_INSTALL_ROOT:-/opt/IBM/HTTPServer}"
 HTTPD_CONF=""
 for candidate in \
-    "/opt/IBM/HTTPServer/conf/httpd.conf" \
+    "${IHS_ROOT}/conf/httpd.conf" \
     "/etc/httpd/conf/httpd.conf" \
     "/etc/apache2/apache2.conf" \
     "/usr/local/apache2/conf/httpd.conf"; do
@@ -47,6 +48,11 @@ for candidate in \
         break
     fi
 done
+
+# Ensure IHS apachectl is on PATH
+if [[ -x "${IHS_ROOT}/bin/apachectl" && ":${PATH}:" != *":${IHS_ROOT}/bin:"* ]]; then
+    export PATH="${IHS_ROOT}/bin:${PATH}"
+fi
 APACHE_PORT=$(grep "^Listen " "${HTTPD_CONF}" 2>/dev/null | head -1 | awk '{print $2}')
 PLUGIN_CFG="${WORKSPACE_ROOT}/config/apache/plugin-cfg.xml"
 

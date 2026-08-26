@@ -28,8 +28,8 @@ wlp-nd-all-26.0.0.8.jar
           │             │              │
           └─────────────┴──────────────┘
                         │
-                  Apache HTTP Server
-                     (port 8080)
+               IBM HTTP Server (IHS)
+                    (port 8080)
 ```
 
 Each deployed instance receives its identity by dropping XML files into
@@ -43,8 +43,8 @@ with highest precedence. The golden package is never modified.
 | Requirement | Version | Notes |
 |-------------|---------|-------|
 | Java | 17 | Pre-installed on lab VM (IBM Semeru recommended) |
-| IBM HTTP Server (IHS) | 2.4+ | Pre-provisioned at `/home/itzuser/software/IHS/` |
-| Shell | bash / zsh | Scripts use `#!/bin/zsh`; compatible with bash on Linux |
+| IBM HTTP Server (IHS) | 2.4+ | Installer ZIP pre-provisioned at `/home/itzuser/software/IHS/` |
+| Shell | bash | All scripts use `#!/bin/bash` |
 | Liberty installer | 26.0.0.8 ND | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` |
 | Liberty installer | 25.0.0.1 Base | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar` |
 | Application WAR | — | `App/server-info.war` (committed to repo) |
@@ -100,6 +100,42 @@ grep WORKSPACE_ROOT scripts/00-set-env.sh
 
 ---
 
+### Step 0b — Install IBM HTTP Server (IHS)
+
+IHS is the front-end HTTP server that load-balances requests across the Liberty collective
+members. Install it once before running the lab steps.
+
+```bash
+scripts/install-ihs.sh
+```
+
+This script:
+1. Locates the IHS installer ZIP at `/home/itzuser/software/IHS/`
+2. Extracts and runs the silent installer → installs to `/opt/IBM/HTTPServer`
+3. Configures IHS to listen on port **8080**
+
+After install, add IHS to your PATH so `apachectl` is available to all lab scripts:
+
+```bash
+echo 'export PATH="/opt/IBM/HTTPServer/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Verify:
+
+```bash
+apachectl -v
+# Expected: Server version: IBM_HTTP_Server/...
+```
+
+> **If the ZIP is at a different path**, override the search directory:
+> ```bash
+> export IHS_INSTALLER_DIR=/path/to/dir/containing/ihs-zip
+> scripts/install-ihs.sh
+> ```
+
+---
+
 ### Step 1 — Build (run once per version)
 
 Build both golden packages before deploying anything. Only needs to be repeated if the
@@ -149,23 +185,23 @@ member1 at `http://localhost:9081/server-info/`, member2 at `http://localhost:90
 
 ---
 
-### Step 3 — Configure Apache with Dynamic Routing
+### Step 3 — Configure IHS with Dynamic Routing
 
 Enable Liberty Dynamic Routing on the controller so that new members joining the collective
-are automatically picked up by Apache — no manual balancer config changes needed.
+are automatically picked up by IHS — no manual balancer config changes needed.
 
 ```bash
-# Start Apache with the static balancer config (sets up modules + include)
+# Configure IHS with the static balancer config (enables modules + adds include)
 scripts/start-apache.sh
 
-# Enable dynamicRouting-1.0 on the controller, restart it, generate Apache dynamic config
+# Enable dynamicRouting-1.0 on the controller, restart it, generate IHS dynamic config
 scripts/enable-dynamic-routing.sh
 ```
 
 The script prints the exact `Include` change to make in `httpd.conf`. After making the change:
 
 ```bash
-sudo apachectl graceful
+apachectl graceful
 ```
 
 **Expected state:** `http://localhost:8080/server-info/` routes via the controller dynamically
@@ -176,14 +212,14 @@ to member1 or member2.
 ### Step 4 — Add 25.0.0.1 Members
 
 With dynamic routing active, member3 and member4 are automatically added to the routing
-table as soon as they join — no Apache config changes required.
+table as soon as they join — no IHS config changes required.
 
 ```bash
 scripts/add-member-25.sh member3   # Deploy member3 (25.0.0.1), join collective
 scripts/add-member-25.sh member4   # Deploy member4 (25.0.0.1), join collective
 ```
 
-**Expected state:** All four members visible in Admin Center. Apache at
+**Expected state:** All four members visible in Admin Center. IHS at
 `http://localhost:8080/server-info/` now rotates across all four members.
 
 ---
@@ -195,7 +231,7 @@ scripts/07-validate.sh
 ```
 
 Checks all 4 members (directories, ports, app response, configDropins), the controller
-(Admin Center, dropins), both package files, the 26.0.0.8 runtime, and the Apache front-end.
+(Admin Center, dropins), both package files, the 26.0.0.8 runtime, and the IHS front-end.
 **Expected result:** All checks `PASS`.
 
 Direct member verification:
@@ -204,7 +240,7 @@ curl http://localhost:9081/server-info/   # member1 (26.0.0.8)
 curl http://localhost:9082/server-info/   # member2 (26.0.0.8)
 curl http://localhost:9083/server-info/   # member3 (25.0.0.1)
 curl http://localhost:9084/server-info/   # member4 (25.0.0.1)
-curl http://localhost:8080/server-info/   # Apache → dynamic routing
+curl http://localhost:8080/server-info/   # IHS → dynamic routing
 ```
 
 ---
@@ -212,8 +248,8 @@ curl http://localhost:8080/server-info/   # Apache → dynamic routing
 ### Reset and Redeploy
 
 `reset-environment.sh` performs a **complete wipe** — stops all servers, removes all deployed
-instances, removes both runtimes (`wlp/`, `wlp-25/`), clears both packages, and restores
-Apache to its original state. After a reset the system is at a clean Step 1 baseline.
+instances, removes both runtimes (`wlp-26/`, `wlp-25/`), clears both packages, and restores
+IHS to its original state. After a reset the system is at a clean Step 1 baseline.
 
 ```bash
 # Wipe everything
@@ -233,7 +269,7 @@ scripts/add-member-26.sh member1
 scripts/add-member-26.sh member2
 scripts/start-apache.sh
 scripts/enable-dynamic-routing.sh
-sudo apachectl graceful
+apachectl graceful
 scripts/add-member-25.sh member3
 scripts/add-member-25.sh member4
 
@@ -255,7 +291,7 @@ scripts/07-validate.sh
 | Member2 app (direct) | `http://localhost:9082/server-info/` | — |
 | Member3 app (direct) | `http://localhost:9083/server-info/` | — |
 | Member4 app (direct) | `http://localhost:9084/server-info/` | — |
-| Apache load balancer | `http://localhost:8080/server-info/` | — |
+| IHS load balancer | `http://localhost:8080/server-info/` | — |
 | Balancer Manager | `http://localhost:8080/balancer-manager` | localhost only |
 
 ---
@@ -327,7 +363,7 @@ Liberty-VM-Labs/
 | member2 | 9082 | 9445 | 26.0.0.8 ND | collectiveMember |
 | member3 | 9083 | 9446 | 25.0.0.1 Base | collectiveMember |
 | member4 | 9084 | 9447 | 25.0.0.1 Base | collectiveMember |
-| Apache | 8080 | — | — | mod_proxy_balancer front-end |
+| IHS | 8080 | — | — | mod_proxy_balancer front-end |
 
 ---
 
@@ -464,28 +500,28 @@ scripts/add-member-26.sh member2
 
 ### `scripts/start-apache.sh`  ⭐
 
-**Purpose:** Configures the HTTP Server (IHS/Apache) as the Liberty Collective front-end and starts it.
+**Purpose:** Configures IBM HTTP Server (IHS) as the Liberty Collective front-end and starts it.
 
 Idempotent — safe to run multiple times. Will not add duplicate includes or re-enable
 already-enabled modules.
 
 Steps performed:
-1. Locates `httpd.conf` (checks common IHS and Apache paths)
+1. Locates `/opt/IBM/HTTPServer/conf/httpd.conf`
 2. Uncomments required `LoadModule` lines: `mod_proxy`, `mod_proxy_http`, `mod_proxy_balancer`, `mod_slotmem_shm`, `mod_lbmethod_byrequests`
 3. Appends `Include` for `config/apache/httpd-liberty.conf`
 4. Runs `apachectl configtest`
-5. **Checks whether IHS/Apache is already listening on port 8080:**
+5. **Checks whether IHS is already listening on port 8080:**
    - Already running → issues `apachectl graceful` to reload the updated config
-   - Not running → issues `apachectl start` (may require `sudo`)
-6. Verifies all member and front-end endpoints respond
+   - Not running → issues `apachectl start`
+6. Verifies all member and IHS endpoints respond
 
 **Usage:**
 ```bash
 scripts/start-apache.sh
 ```
 
-> **Note:** `apachectl` may require `sudo` depending on the IHS installation. IHS listens on
-> port **8080** by default in this lab configuration.
+> **Note:** IHS listens on port **8080** in this lab configuration. `apachectl` must be on
+> `PATH` — run `scripts/install-ihs.sh` and follow the PATH export instruction if not already done.
 
 ---
 
@@ -502,7 +538,7 @@ Steps performed (always — there is no partial mode):
 | 3 | Removes `installs/` and recreates the empty directory |
 | 4 | Strips the Liberty `Include` line and comment from `httpd.conf` |
 | 5 | Comments out the five proxy/balancer `LoadModule` lines in `httpd.conf` |
-| 6 | Reloads Apache/IHS (`apachectl graceful`) if it is running |
+| 6 | Reloads IHS (`apachectl graceful`) if it is running |
 | 7 | Removes `wlp-26/` (extracted Liberty 26.0.0.8 runtime) |
 | 8 | Removes `wlp-25/` (extracted Liberty 25.0.0.1 runtime) |
 | 9 | Removes and recreates `packages/` (both golden ZIPs) |
@@ -539,7 +575,7 @@ scripts/start-apache.sh
 
 Liberty Dynamic Routing (`dynamicRouting-1.0`) allows the collective controller to
 automatically manage request routing across registered members based on live health
-and collective membership — without manually updating Apache config when members
+and collective membership — without manually updating IHS config when members
 are added or removed.
 
 Steps performed:
@@ -549,7 +585,7 @@ Steps performed:
 3. Restarts the controller to load the new feature
 4. Attempts to retrieve `plugin-cfg.xml` from the controller's routing API;
    generates a static version if the API is not yet available
-5. Generates `config/apache/httpd-liberty-dynamic.conf` — an Apache config that
+5. Generates `config/apache/httpd-liberty-dynamic.conf` — an IHS config that
    routes through the controller instead of directly to members
 6. Verifies the controller dynamic routing endpoint
 
@@ -558,14 +594,14 @@ Steps performed:
 scripts/enable-dynamic-routing.sh
 ```
 
-After running, switch Apache from static to dynamic routing by updating `httpd.conf`:
+After running, switch IHS from static to dynamic routing by updating `httpd.conf`:
 ```
 # Change this:
 Include /path/to/config/apache/httpd-liberty.conf
 # To this:
 Include /path/to/config/apache/httpd-liberty-dynamic.conf
 ```
-Then: `sudo apachectl graceful`
+Then: `apachectl graceful`
 
 **Prerequisite:** Controller and at least one member must be running.
 
@@ -667,8 +703,8 @@ day-to-day use.
 |--------|---------|
 | `04-deploy-instances.sh` | Batch deploy of controller + member1 + member2 from package |
 | `05-create-collective.sh` | Full collective setup (create + join + start all) |
-| `06-configure-apache.sh` | Prints Apache include instructions (informational) |
-| `08-enable-apache-routing.sh` | Original Apache setup script (superseded by `start-apache.sh`) |
+| `06-configure-apache.sh` | Prints IHS include instructions (informational) |
+| `08-enable-apache-routing.sh` | Original IHS setup script (superseded by `start-apache.sh`) |
 
 ---
 
@@ -698,7 +734,7 @@ guidance covering:
 1. Member registration failures
 2. Package build / deploy failures
 3. Application deployment failures
-4. Apache routing failures
+4. IHS routing failures
 5. SSL / keystore issues
 6. Collective communication failures
 
