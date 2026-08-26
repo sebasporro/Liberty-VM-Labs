@@ -14,7 +14,7 @@ export WORKSPACE_ROOT="/home/itzuser/Liberty-VM-Labs"
 #   2. SDKMAN candidate (if installed)
 #   3. System java on PATH → derive JAVA_HOME from it
 # ---------------------------------------------------------------------------
-if [[ -n "${JAVA_HOME}" && -x "${JAVA_HOME}/bin/java" ]]; then
+if [[ -n "${JAVA_HOME:-}" && -x "${JAVA_HOME:-}/bin/java" ]]; then
   : # already set — nothing to do
 elif [[ -x "${HOME}/.sdkman/candidates/java/current/bin/java" ]]; then
   export JAVA_HOME="${HOME}/.sdkman/candidates/java/current"
