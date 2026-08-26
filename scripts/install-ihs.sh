@@ -1,13 +1,15 @@
 #!/bin/bash
 # =============================================================================
 # install-ihs.sh
-# Installs IBM HTTP Server (IHS) from the pre-provisioned installer ZIP.
+# Installs IBM HTTP Server (IHS) from the pre-provisioned installer ZIP,
+# and installs the WebSphere/Liberty WAS plugin (mod_was_ap24_http.so).
 #
 # Usage:  scripts/install-ihs.sh
 #
 # Supported ZIP format:
 #   - ARCHIVE format (e.g. 9.0.5-WS-IHS-ARCHIVE-linux-x86_64.zip)
 #     Extracts to a ready-to-use directory tree — moved into place directly.
+#     The same ZIP also contains the WAS plugin under plugin/bin/64bits/.
 #
 # Override defaults:
 #   export IHS_INSTALLER_DIR=/path/to/dir/containing/ihs-zip
@@ -119,9 +121,38 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 5. Generate httpd.conf (archive does not include one)
+# 5. Install WAS plugin (mod_was_ap24_http.so)
+#    The plugin SO is bundled in the same ZIP under plugin/bin/64bits/.
+#    Copy it into IHS modules/ so LoadModule can reference it.
 # ---------------------------------------------------------------------------
-echo "[5/5] Configuring IHS..."
+echo "[5/6] Installing WAS plugin (mod_was_ap24_http.so)..."
+
+WAS_PLUGIN_SRC=$(find "${IHS_INSTALLER_DIR}" -name "mod_was_ap24_http.so" 2>/dev/null | head -1)
+
+if [[ -n "${WAS_PLUGIN_SRC}" ]]; then
+    cp "${WAS_PLUGIN_SRC}" "${IHS_INSTALL_ROOT}/modules/mod_was_ap24_http.so"
+    echo "      Installed: ${IHS_INSTALL_ROOT}/modules/mod_was_ap24_http.so"
+else
+    # Plugin may still be inside the ZIP — extract just that file
+    WAS_PLUGIN_ZIP=$(find "${IHS_INSTALLER_DIR}" -maxdepth 2 -name "*.zip" | head -1)
+    if [[ -n "${WAS_PLUGIN_ZIP}" ]]; then
+        PLUGIN_ENTRY=$(unzip -l "${WAS_PLUGIN_ZIP}" 2>/dev/null | grep "mod_was_ap24_http.so" | awk '{print $NF}' | head -1)
+        if [[ -n "${PLUGIN_ENTRY}" ]]; then
+            unzip -q -j "${WAS_PLUGIN_ZIP}" "${PLUGIN_ENTRY}" -d "${IHS_INSTALL_ROOT}/modules/"
+            echo "      Extracted from ZIP: ${IHS_INSTALL_ROOT}/modules/mod_was_ap24_http.so"
+        else
+            echo "  WARNING: mod_was_ap24_http.so not found in ZIP — plugin not installed." >&2
+        fi
+    else
+        echo "  WARNING: mod_was_ap24_http.so not found — plugin not installed." >&2
+    fi
+fi
+echo ""
+
+# ---------------------------------------------------------------------------
+# 6. Generate httpd.conf (archive does not include one)
+# ---------------------------------------------------------------------------
+echo "[6/6] Configuring IHS..."
 
 mkdir -p "${IHS_INSTALL_ROOT}/conf" \
          "${IHS_INSTALL_ROOT}/logs" \
@@ -149,6 +180,9 @@ LoadModule mime_module modules/mod_mime.so
 #LoadModule proxy_balancer_module modules/mod_proxy_balancer.so
 #LoadModule slotmem_shm_module modules/mod_slotmem_shm.so
 #LoadModule lbmethod_byrequests_module modules/mod_lbmethod_byrequests.so
+
+# WebSphere/Liberty WAS plugin — handles routing to Liberty collective members
+LoadModule was_ap24_module modules/mod_was_ap24_http.so
 
 User itzuser
 Group itzuser
