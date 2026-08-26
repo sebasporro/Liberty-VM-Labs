@@ -198,27 +198,62 @@ fi
 
 # IHS bundles its own APR/APR-util in lib/. Set LD_LIBRARY_PATH so the
 # IHS binaries use their own libraries rather than the system ones.
-# Wrap apachectl in a small shell script that sets this automatically.
+# Strategy:
+#   - If the archive ships its own apachectl control script, preserve it
+#     and instead prepend LD_LIBRARY_PATH in the environment permanently
+#     via ~/.bashrc (so all subprocesses inherit it).
+#   - Only write a wrapper when there is no real apachectl control script.
 IHS_LIB="${IHS_INSTALL_ROOT}/lib"
 
-WRAPPER="${IHS_INSTALL_ROOT}/bin/apachectl"
-# If the real binary is named something other than apachectl, the wrapper
-# will call it; otherwise it wraps itself via the real binary name.
-REAL_BIN="${IHS_CTL}"
+REAL_APACHECTL="${IHS_INSTALL_ROOT}/bin/apachectl"
 
-cat > "${WRAPPER}" <<WRAPPER_EOF
+if [[ -x "${REAL_APACHECTL}" && "${REAL_APACHECTL}" != "${IHS_CTL}" ]]; then
+    # Archive ships its own apachectl — wrap it to prepend LD_LIBRARY_PATH
+    mv "${REAL_APACHECTL}" "${REAL_APACHECTL}.real"
+    cat > "${REAL_APACHECTL}" <<WRAPPER_EOF
 #!/bin/bash
-# IHS apachectl wrapper — sets LD_LIBRARY_PATH to use IHS bundled libraries
+# IHS apachectl wrapper — prepends IHS bundled lib path
 export LD_LIBRARY_PATH="${IHS_LIB}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
-exec "${REAL_BIN}" "\$@"
+exec "${REAL_APACHECTL}.real" "\$@"
 WRAPPER_EOF
-chmod +x "${WRAPPER}"
-echo "      Wrapper written: ${WRAPPER}"
+    chmod +x "${REAL_APACHECTL}"
+    echo "      Wrapped existing apachectl (original saved as apachectl.real)"
+elif [[ ! -x "${REAL_APACHECTL}" ]]; then
+    # No apachectl in archive — write a full control wrapper around httpd
+    cat > "${REAL_APACHECTL}" <<WRAPPER_EOF
+#!/bin/bash
+# IHS apachectl wrapper — translates start/stop/graceful to httpd flags
+export LD_LIBRARY_PATH="${IHS_LIB}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+HTTPD="${IHS_CTL}"
+HTTPD_CONF="${IHS_INSTALL_ROOT}/conf/httpd.conf"
+case "\$1" in
+    start)    exec "\${HTTPD}" -f "\${HTTPD_CONF}" -k start ;;
+    stop)     exec "\${HTTPD}" -f "\${HTTPD_CONF}" -k stop ;;
+    restart)  exec "\${HTTPD}" -f "\${HTTPD_CONF}" -k restart ;;
+    graceful) exec "\${HTTPD}" -f "\${HTTPD_CONF}" -k graceful ;;
+    configtest) exec "\${HTTPD}" -f "\${HTTPD_CONF}" -t ;;
+    -v|-V)    exec "\${HTTPD}" "\$@" ;;
+    *)        exec "\${HTTPD}" -f "\${HTTPD_CONF}" "\$@" ;;
+esac
+WRAPPER_EOF
+    chmod +x "${REAL_APACHECTL}"
+    echo "      Control wrapper written: ${REAL_APACHECTL}"
+else
+    # apachectl IS the detected binary — wrap it in-place
+    mv "${REAL_APACHECTL}" "${REAL_APACHECTL}.real"
+    cat > "${REAL_APACHECTL}" <<WRAPPER_EOF
+#!/bin/bash
+export LD_LIBRARY_PATH="${IHS_LIB}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+exec "${REAL_APACHECTL}.real" "\$@"
+WRAPPER_EOF
+    chmod +x "${REAL_APACHECTL}"
+    echo "      Wrapped apachectl in-place (original saved as apachectl.real)"
+fi
 
-# Verify with bundled libs
-echo "      Testing apachectl -v..."
+# Verify
+echo "      Testing apachectl configtest..."
 LD_LIBRARY_PATH="${IHS_LIB}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-    "${IHS_CTL}" -v 2>&1 | head -2
+    "${REAL_APACHECTL}" configtest 2>&1 | head -3
 
 HTTPD_CONF="${IHS_INSTALL_ROOT}/conf/httpd.conf"
 
