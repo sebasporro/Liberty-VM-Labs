@@ -11,7 +11,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-INSTALLER_JAR="${LIBERTY_INSTALLER_26:-/home/itzuser/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar}"
+INSTALLER_JAR="${LIBERTY_INSTALLER_26:-/home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar}"
 
 # ---------------------------------------------------------------------------
 # Pre-flight checks

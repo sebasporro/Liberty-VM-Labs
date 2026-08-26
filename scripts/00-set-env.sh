@@ -6,7 +6,7 @@
 # Workspace root — absolute path; all other paths are derived from here.
 # Update this value if the repo is cloned to a different location.
 # ---------------------------------------------------------------------------
-export WORKSPACE_ROOT="/home/itzuser/Liberty-VM-Labs"
+export WORKSPACE_ROOT="/home/itz/Liberty-VM-Labs"
 
 # ---------------------------------------------------------------------------
 # Java 17 — resolved in order:

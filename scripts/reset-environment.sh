@@ -30,7 +30,7 @@ source "${SCRIPT_DIR}/00-set-env.sh"
 LIBERTY_CONF="${WORKSPACE_ROOT}/config/apache/httpd-liberty.conf"
 
 # Locate httpd.conf (IHS on Linux)
-IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itz/IBM/HTTPServer}"
 HTTPD_CONF=""
 for candidate in \
     "${IHS_ROOT}/conf/httpd.conf" \

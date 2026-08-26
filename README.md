@@ -43,10 +43,10 @@ with highest precedence. The golden package is never modified.
 | Requirement | Version | Notes |
 |-------------|---------|-------|
 | Java | 17 | Pre-installed on lab VM (IBM Semeru recommended) |
-| IBM HTTP Server (IHS) | 2.4+ | Installer ZIP pre-provisioned at `/home/itzuser/software/IHS/` |
+| IBM HTTP Server (IHS) | 2.4+ | Installer ZIP pre-provisioned at `/home/itz/software/IHS/` |
 | Shell | bash | All scripts use `#!/bin/bash` |
-| Liberty installer | 26.0.0.8 ND | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` |
-| Liberty installer | 25.0.0.1 Base | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar` |
+| Liberty installer | 26.0.0.8 ND | Pre-provisioned at `/home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` |
+| Liberty installer | 25.0.0.1 Base | Pre-provisioned at `/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar` |
 | Application WAR | — | `App/server-info.war` (committed to repo) |
 
 > **Note:** Installer binaries are pre-provisioned on the lab VM at fixed paths and are not
@@ -71,10 +71,10 @@ of different Liberty versions coexist in the same collective without any special
 ### Step 0 — Clone the Repository
 
 Open a terminal on the lab VM. All commands in this lab are run from
-`/home/itzuser/Liberty-VM-Labs` unless noted otherwise.
+`/home/itz/Liberty-VM-Labs` unless noted otherwise.
 
 ```bash
-cd /home/itzuser
+cd /home/itz
 git clone https://github.com/sebasporro/Liberty-VM-Labs.git
 cd Liberty-VM-Labs
 ```
@@ -83,7 +83,7 @@ Once cloned, update the `WORKSPACE_ROOT` variable in `scripts/00-set-env.sh` to 
 the clone location:
 
 ```bash
-sed -i 's|^export WORKSPACE_ROOT=.*|export WORKSPACE_ROOT="/home/itzuser/Liberty-VM-Labs"|' \
+sed -i 's|^export WORKSPACE_ROOT=.*|export WORKSPACE_ROOT="/home/itz/Liberty-VM-Labs"|' \
   scripts/00-set-env.sh
 ```
 
@@ -92,7 +92,7 @@ Verify the change:
 ```bash
 grep WORKSPACE_ROOT scripts/00-set-env.sh
 # Expected output:
-# export WORKSPACE_ROOT="/home/itzuser/Liberty-VM-Labs"
+# export WORKSPACE_ROOT="/home/itz/Liberty-VM-Labs"
 ```
 
 > **Note:** Every other path in the lab scripts is derived from `WORKSPACE_ROOT`, so this
@@ -110,15 +110,15 @@ scripts/install-ihs.sh
 ```
 
 This script:
-1. Locates the IHS installer ZIP at `/home/itzuser/software/IHS/`
-2. Extracts the archive → moves it to `/home/itzuser/IBM/HTTPServer`
+1. Locates the IHS installer ZIP at `/home/itz/software/IHS/`
+2. Extracts the archive → moves it to `/home/itz/IBM/HTTPServer`
 3. Installs required system libraries (`apr`, `apr-util`) via `dnf`/`yum`/`apt-get`
 4. Configures IHS to listen on port **8080**
 
 After install, add IHS to your PATH so `apachectl` is available to all lab scripts:
 
 ```bash
-echo 'export PATH="/home/itzuser/IBM/HTTPServer/bin:$PATH"' >> ~/.bashrc
+echo 'export PATH="/home/itz/IBM/HTTPServer/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -154,8 +154,8 @@ template configuration or application changes.
 
 > **Before running:** confirm the Liberty installer JARs are present at their expected paths:
 > ```bash
-> ls /home/itzuser/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar
-> ls /home/itzuser/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar
+> ls /home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar
+> ls /home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar
 > ```
 > If the files are at a different location, export the paths first:
 > ```bash
@@ -311,11 +311,11 @@ scripts/07-validate.sh
 
 Pre-provisioned on the lab VM (outside the repo):
 ```
-/home/itzuser/software/Liberty/Liberty/
+/home/itz/software/Liberty/Liberty/
 ├── wlp-nd-all-26.0.0.8.jar          # Liberty ND 26.0.0.8 installer
 └── wlp-base-all-25.0.0.1.jar        # Liberty Base 25.0.0.1 installer
 
-/home/itzuser/software/IHS/
+/home/itz/software/IHS/
 └── <ihs-installer>.zip               # IBM HTTP Server installer
 ```
 
@@ -390,7 +390,7 @@ environment variables (`JAVA_HOME`, `WLP_HOME`, `WORKSPACE_ROOT`).
 **Purpose:** Shared environment bootstrap — sourced by every other script.
 
 Sets:
-- `WORKSPACE_ROOT` — absolute path to the cloned repository (`/home/itzuser/Liberty-VM-Labs`); update this if cloned elsewhere
+- `WORKSPACE_ROOT` — absolute path to the cloned repository (`/home/itz/Liberty-VM-Labs`); update this if cloned elsewhere
 - `JAVA_HOME` — resolved in order: existing `$JAVA_HOME` env var → SDKMAN `current` candidate → system `java` on PATH
 - `PATH` — prepends `$JAVA_HOME/bin`
 - `WLP_HOME` — path to the build-phase Liberty 26.0.0.8 runtime (`$WORKSPACE_ROOT/wlp-26`)
@@ -517,7 +517,7 @@ Idempotent — safe to run multiple times. Will not add duplicate includes or re
 already-enabled modules.
 
 Steps performed:
-1. Locates `/home/itzuser/IBM/HTTPServer/conf/httpd.conf`
+1. Locates `/home/itz/IBM/HTTPServer/conf/httpd.conf`
 2. Uncomments required `LoadModule` lines: `mod_proxy`, `mod_proxy_http`, `mod_proxy_balancer`, `mod_slotmem_shm`, `mod_lbmethod_byrequests`
 3. Appends `Include` for `config/apache/httpd-liberty.conf`
 4. Runs `apachectl configtest`
@@ -644,7 +644,7 @@ scripts/07-validate.sh
 
 ### `scripts/01-install-runtime-25.sh`
 
-**Purpose:** Extracts the Liberty Base 25.0.0.1 runtime from `/home/itzuser/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar`
+**Purpose:** Extracts the Liberty Base 25.0.0.1 runtime from `/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar`
 into `wlp-25/` at workspace root. Coexists with the 26.0.0.8 `wlp/` runtime.
 
 Verifies that `wlp-25/bin/collective` is present (Base edition requirement for collective join).

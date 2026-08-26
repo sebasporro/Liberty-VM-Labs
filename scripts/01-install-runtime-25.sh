@@ -11,7 +11,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-INSTALLER_JAR="${LIBERTY_INSTALLER_25:-/home/itzuser/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar}"
+INSTALLER_JAR="${LIBERTY_INSTALLER_25:-/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar}"
 WLP25_HOME="${WORKSPACE_ROOT}/wlp-25"
 
 # ---------------------------------------------------------------------------

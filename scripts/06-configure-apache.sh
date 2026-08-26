@@ -22,7 +22,7 @@ echo ""
 HTTPD_CONF=""
 APACHE_TYPE=""
 for candidate in \
-    "/home/itzuser/IBM/HTTPServer/conf/httpd.conf" \
+    "/home/itz/IBM/HTTPServer/conf/httpd.conf" \
     "/etc/httpd/conf/httpd.conf" \
     "/etc/apache2/apache2.conf" \
     "/usr/local/apache2/conf/httpd.conf"; do

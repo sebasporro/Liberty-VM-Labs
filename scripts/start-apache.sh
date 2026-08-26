@@ -14,8 +14,8 @@
 #   5. Starts or gracefully reloads IHS/Apache
 #   6. Verifies routing to Liberty members
 #
-# IHS default install: /home/itzuser/IBM/HTTPServer
-# httpd.conf location: /home/itzuser/IBM/HTTPServer/conf/httpd.conf
+# IHS default install: /home/itz/IBM/HTTPServer
+# httpd.conf location: /home/itz/IBM/HTTPServer/conf/httpd.conf
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,7 +32,7 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "[1/6] Locating IHS/Apache configuration..."
 
-IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itz/IBM/HTTPServer}"
 HTTPD_CONF=""
 for candidate in \
     "${IHS_ROOT}/conf/httpd.conf" \
@@ -134,7 +134,7 @@ if ss -tlnp 2>/dev/null | grep -q ":${APACHE_PORT} "; then
     apachectl graceful
     if [[ $? -ne 0 ]]; then
         echo "  ERROR: Graceful reload failed."
-        echo "  Check IHS error log (typically /home/itzuser/IBM/HTTPServer/logs/error_log)"
+        echo "  Check IHS error log (typically /home/itz/IBM/HTTPServer/logs/error_log)"
         exit 1
     fi
     sleep 1
@@ -145,7 +145,7 @@ else
         echo ""
         echo "  ERROR: IHS/Apache failed to start."
         echo "  Run manually:  apachectl start"
-        echo "  Check logs:    /home/itzuser/IBM/HTTPServer/logs/error_log"
+        echo "  Check logs:    /home/itz/IBM/HTTPServer/logs/error_log"
         exit 1
     fi
     sleep 2
