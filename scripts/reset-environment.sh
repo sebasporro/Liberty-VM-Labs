@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # =============================================================================
 # reset-environment.sh
 # Completely resets the Liberty Collective lab environment back to a clean
@@ -9,9 +9,10 @@
 #   2. Removes installs/  (all deployed instances)
 #   3. Removes the Apache Liberty include from httpd.conf
 #   4. Disables the proxy/balancer modules in httpd.conf
-#   5. Reloads Apache to apply the clean config
+#   5. Reloads IHS/Apache to apply the clean config
 #   6. Removes wlp-26/  (extracted Liberty 26.0.0.8 runtime)
-#   7. Clears packages/  (golden package ZIP)
+#   7. Removes wlp-25/  (extracted Liberty 25.0.0.1 runtime)
+#   8. Clears packages/  (golden package ZIPs)
 #
 # Usage:
 #   scripts/reset-environment.sh          # full reset — ready for Phase 1
@@ -23,11 +24,23 @@
 #   scripts/03-build-package.sh
 # =============================================================================
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-HTTPD_CONF="/opt/homebrew/etc/httpd/httpd.conf"
 LIBERTY_CONF="${WORKSPACE_ROOT}/config/apache/httpd-liberty.conf"
+
+# Locate httpd.conf (IHS on Linux)
+HTTPD_CONF=""
+for candidate in \
+    "/opt/IBM/HTTPServer/conf/httpd.conf" \
+    "/etc/httpd/conf/httpd.conf" \
+    "/etc/apache2/apache2.conf" \
+    "/usr/local/apache2/conf/httpd.conf"; do
+    if [[ -f "${candidate}" ]]; then
+        HTTPD_CONF="${candidate}"
+        break
+    fi
+done
 
 echo ""
 echo "=== Liberty Lab — Reset Environment ==="
@@ -37,7 +50,7 @@ echo ""
 # ---------------------------------------------------------------------------
 # 1. Stop all Liberty servers
 # ---------------------------------------------------------------------------
-echo "[1/5] Stopping Liberty servers..."
+echo "[1/8] Stopping Liberty servers..."
 
 # Stop controller
 CTRL_BIN="${WORKSPACE_ROOT}/installs/controller/wlp/bin/server"
@@ -87,7 +100,7 @@ echo ""
 # ---------------------------------------------------------------------------
 # 2. Remove installs/ directories
 # ---------------------------------------------------------------------------
-echo "[2/5] Removing installs/ directories..."
+echo "[2/8] Removing installs/ directories..."
 if [[ -d "${WORKSPACE_ROOT}/installs" ]]; then
     rm -rf "${WORKSPACE_ROOT}/installs"
     mkdir -p "${WORKSPACE_ROOT}/installs"
@@ -100,11 +113,11 @@ echo ""
 # ---------------------------------------------------------------------------
 # 3. Remove Apache Liberty include from httpd.conf
 # ---------------------------------------------------------------------------
-echo "[3/5] Removing Liberty include from Apache httpd.conf..."
-if [[ -f "${HTTPD_CONF}" ]]; then
-    # Remove the include line and the comment above it
-    sed -i '' "/# Liberty Collective load balancer/d" "${HTTPD_CONF}"
-    sed -i '' "\|Include ${LIBERTY_CONF}|d" "${HTTPD_CONF}"
+echo "[3/8] Removing Liberty include from httpd.conf..."
+if [[ -n "${HTTPD_CONF}" && -f "${HTTPD_CONF}" ]]; then
+    # Remove the include line and the comment above it (GNU sed — no empty extension)
+    sed -i "/# Liberty Collective load balancer/d" "${HTTPD_CONF}"
+    sed -i "\|Include ${LIBERTY_CONF}|d" "${HTTPD_CONF}"
     echo "      Include removed from ${HTTPD_CONF}"
 else
     echo "      httpd.conf not found — skipped"
@@ -114,8 +127,8 @@ echo ""
 # ---------------------------------------------------------------------------
 # 4. Disable proxy/balancer modules in httpd.conf (comment them back out)
 # ---------------------------------------------------------------------------
-echo "[4/5] Disabling proxy/balancer modules in httpd.conf..."
-if [[ -f "${HTTPD_CONF}" ]]; then
+echo "[4/8] Disabling proxy/balancer modules in httpd.conf..."
+if [[ -n "${HTTPD_CONF}" && -f "${HTTPD_CONF}" ]]; then
     MODULES=(
         "proxy_module"
         "proxy_http_module"
@@ -125,37 +138,40 @@ if [[ -f "${HTTPD_CONF}" ]]; then
     )
     for mod_name in "${MODULES[@]}"; do
         if grep -q "^LoadModule ${mod_name}" "${HTTPD_CONF}"; then
-            sed -i '' "s|^LoadModule ${mod_name}|#LoadModule ${mod_name}|" "${HTTPD_CONF}"
+            sed -i "s|^LoadModule ${mod_name}|#LoadModule ${mod_name}|" "${HTTPD_CONF}"
             echo "      ${mod_name}: disabled"
         else
             echo "      ${mod_name}: already disabled — skipped"
         fi
     done
-fi
-echo ""
-
-# ---------------------------------------------------------------------------
-# 5. Reload Apache to apply clean config
-# ---------------------------------------------------------------------------
-echo "[5/5] Reloading Apache..."
-APACHE_RUNNING=false
-APACHE_PORT=$(grep "^Listen " "${HTTPD_CONF}" 2>/dev/null | head -1 | awk '{print $2}')
-if lsof -iTCP:${APACHE_PORT:-8080} -sTCP:LISTEN &>/dev/null; then
-    APACHE_RUNNING=true
-fi
-
-if [[ "${APACHE_RUNNING}" == "true" ]]; then
-    apachectl configtest 2>/dev/null | grep -q "Syntax OK" && \
-        sudo apachectl graceful 2>/dev/null && \
-        echo "      Apache reloaded" || \
-        echo "      WARNING: Apache reload failed — reload manually with: sudo apachectl graceful"
 else
-    echo "      Apache not running — skipped"
+    echo "      httpd.conf not found — skipped"
 fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 6. Remove wlp-26/ runtime — Liberty 26.0.0.8 (Phase 1 — script 01)
+# 5. Reload IHS/Apache to apply clean config
+# ---------------------------------------------------------------------------
+echo "[5/8] Reloading IHS/Apache..."
+APACHE_PORT=""
+if [[ -n "${HTTPD_CONF}" ]]; then
+    APACHE_PORT=$(grep "^Listen " "${HTTPD_CONF}" 2>/dev/null | head -1 | awk '{print $2}')
+fi
+APACHE_PORT="${APACHE_PORT:-8080}"
+
+# ss is standard on Linux; fall back to netstat if unavailable
+if ss -tlnp 2>/dev/null | grep -q ":${APACHE_PORT} "; then
+    apachectl configtest 2>/dev/null | grep -q "Syntax OK" && \
+        apachectl graceful 2>/dev/null && \
+        echo "      IHS/Apache reloaded" || \
+        echo "      WARNING: IHS/Apache reload failed — run: apachectl graceful"
+else
+    echo "      IHS/Apache not running — skipped"
+fi
+echo ""
+
+# ---------------------------------------------------------------------------
+# 6. Remove wlp-26/ runtime — Liberty 26.0.0.8
 # ---------------------------------------------------------------------------
 echo "[6/8] Removing wlp-26/ runtime (26.0.0.8)..."
 if [[ -d "${WORKSPACE_ROOT}/wlp-26" ]]; then
@@ -167,7 +183,7 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 7. Remove wlp-25/ runtime — Liberty 25.0.0.1 (Phase 1 — script 01-25)
+# 7. Remove wlp-25/ runtime — Liberty 25.0.0.1
 # ---------------------------------------------------------------------------
 echo "[7/8] Removing wlp-25/ runtime (25.0.0.1)..."
 if [[ -d "${WORKSPACE_ROOT}/wlp-25" ]]; then
@@ -179,7 +195,7 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 8. Clear packages/ (Phase 1 — scripts 03 and 03-25)
+# 8. Clear packages/ (golden ZIPs)
 # ---------------------------------------------------------------------------
 echo "[8/8] Clearing packages/..."
 if [[ -d "${WORKSPACE_ROOT}/packages" ]]; then
@@ -206,8 +222,8 @@ echo "    scripts/03-build-package-25.sh"
 echo ""
 echo "  Then deploy:"
 echo "    scripts/install-controller.sh"
-echo "    scripts/add-member.sh member1"
-echo "    scripts/add-member.sh member2"
+echo "    scripts/add-member-26.sh member1"
+echo "    scripts/add-member-26.sh member2"
 echo "    scripts/add-member-25.sh member3"
 echo "    scripts/add-member-25.sh member4"
 echo "    scripts/start-apache.sh"

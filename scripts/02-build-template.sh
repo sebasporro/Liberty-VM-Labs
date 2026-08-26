@@ -1,6 +1,6 @@
-#!/bin/zsh
+#!/bin/bash
 # 02-build-template.sh — Create and stage the role-neutral template server
-# Usage: zsh scripts/02-build-template.sh
+# Usage: bash scripts/02-build-template.sh
 #
 # What this script does:
 #   1. Sources 00-set-env.sh to set JAVA_HOME, WLP_HOME, WORKSPACE_ROOT

@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # 00-set-env.sh — Shared environment for all Liberty lab scripts
 # Source this file at the top of every other script: source "$(dirname "$0")/00-set-env.sh"
 

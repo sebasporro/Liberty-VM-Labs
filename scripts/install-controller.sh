@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # =============================================================================
 # install-controller.sh
 # Deploys and starts the Liberty Collective Controller from the golden package.
@@ -17,7 +17,7 @@
 #   9. Waits for it to be ready and verifies Admin Center
 # =============================================================================
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
 PACKAGE="${WORKSPACE_ROOT}/packages/liberty-package-26.0.0.8.zip"
@@ -122,7 +122,7 @@ fi
 
 # collective create writes an empty quickStartSecurity placeholder — fill it in
 # so the admin user is available for collective join and Admin Center login
-sed -i '' "s|quickStartSecurity userName=\"\" userPassword=\"\"|quickStartSecurity userName=\"admin\" userPassword=\"${ADMIN_PASS}\"|" \
+sed -i "s|quickStartSecurity userName=\"\" userPassword=\"\"|quickStartSecurity userName=\"admin\" userPassword=\"${ADMIN_PASS}\"|" \
     "${OVERRIDES_DIR}/collective-create.xml"
 echo "      PKI initialised + quickStartSecurity configured (admin/${ADMIN_PASS})"
 echo ""

@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh
+#!/bin/bash
 # =============================================================================
 # 05-create-collective.sh
 # Sub-Task 5 — Form the Liberty Collective (controller + members)
@@ -12,7 +12,7 @@
 # =============================================================================
 set -euo pipefail
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
 # --- paths ---

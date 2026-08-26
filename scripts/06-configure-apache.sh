@@ -1,42 +1,49 @@
-#!/bin/zsh
+#!/bin/bash
 # =============================================================================
 # 06-configure-apache.sh
-# Prints the Apache httpd.conf include instructions for the Liberty front-end.
+# Prints the IHS/Apache httpd.conf include instructions for the Liberty front-end.
 # Does NOT modify httpd.conf — prints the line you need to add manually.
 # =============================================================================
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
 CONF_FILE="${WORKSPACE_ROOT}/config/apache/httpd-liberty.conf"
 
 echo ""
-echo "=== Liberty Apache Front-End Configuration ==="
+echo "=== Liberty IHS/Apache Front-End Configuration ==="
 echo ""
 echo "Config file: ${CONF_FILE}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Detect Homebrew Apache httpd.conf location
+# Detect IHS/Apache httpd.conf location (Linux paths)
 # ---------------------------------------------------------------------------
-if [[ -f "/opt/homebrew/etc/httpd/httpd.conf" ]]; then
-    HTTPD_CONF="/opt/homebrew/etc/httpd/httpd.conf"
-    APACHE_TYPE="Homebrew (Apple Silicon)"
-elif [[ -f "/usr/local/etc/httpd/httpd.conf" ]]; then
-    HTTPD_CONF="/usr/local/etc/httpd/httpd.conf"
-    APACHE_TYPE="Homebrew (Intel)"
-elif [[ -f "/etc/httpd/conf/httpd.conf" ]]; then
-    HTTPD_CONF="/etc/httpd/conf/httpd.conf"
-    APACHE_TYPE="System Apache"
-elif [[ -f "/etc/apache2/httpd.conf" ]]; then
-    HTTPD_CONF="/etc/apache2/httpd.conf"
-    APACHE_TYPE="macOS System Apache"
-else
+HTTPD_CONF=""
+APACHE_TYPE=""
+for candidate in \
+    "/opt/IBM/HTTPServer/conf/httpd.conf" \
+    "/etc/httpd/conf/httpd.conf" \
+    "/etc/apache2/apache2.conf" \
+    "/usr/local/apache2/conf/httpd.conf"; do
+    if [[ -f "${candidate}" ]]; then
+        HTTPD_CONF="${candidate}"
+        case "${candidate}" in
+            /opt/IBM/*) APACHE_TYPE="IBM HTTP Server (IHS)" ;;
+            /etc/httpd/*) APACHE_TYPE="System Apache (RHEL/CentOS)" ;;
+            /etc/apache2/*) APACHE_TYPE="System Apache (Debian/Ubuntu)" ;;
+            *) APACHE_TYPE="Apache" ;;
+        esac
+        break
+    fi
+done
+
+if [[ -z "${HTTPD_CONF}" ]]; then
     HTTPD_CONF="<httpd.conf not found — locate manually>"
     APACHE_TYPE="Unknown"
 fi
 
-echo "Detected Apache: ${APACHE_TYPE}"
+echo "Detected:        ${APACHE_TYPE}"
 echo "httpd.conf path: ${HTTPD_CONF}"
 echo ""
 echo "-----------------------------------------------------------"
@@ -50,7 +57,7 @@ echo ""
 # ---------------------------------------------------------------------------
 # Check required modules
 # ---------------------------------------------------------------------------
-echo "Checking required Apache modules..."
+echo "Checking required modules..."
 echo ""
 
 REQUIRED_MODULES=("proxy_module" "proxy_balancer_module" "proxy_http_module" "lbmethod_byrequests_module" "slotmem_shm_module")
@@ -79,23 +86,23 @@ else
     echo "One or more modules are missing. Add the missing LoadModule lines to:"
     echo "  ${HTTPD_CONF}"
     echo ""
-    echo "Example LoadModule lines (adjust path for your Apache installation):"
-    echo "  LoadModule proxy_module           libexec/apache2/mod_proxy.so"
-    echo "  LoadModule proxy_balancer_module  libexec/apache2/mod_proxy_balancer.so"
-    echo "  LoadModule proxy_http_module      libexec/apache2/mod_proxy_http.so"
-    echo "  LoadModule lbmethod_byrequests_module libexec/apache2/mod_lbmethod_byrequests.so"
-    echo "  LoadModule slotmem_shm_module     libexec/apache2/mod_slotmem_shm.so"
+    echo "Example LoadModule lines (IHS default — adjust path if different):"
+    echo "  LoadModule proxy_module           modules/mod_proxy.so"
+    echo "  LoadModule proxy_balancer_module  modules/mod_proxy_balancer.so"
+    echo "  LoadModule proxy_http_module      modules/mod_proxy_http.so"
+    echo "  LoadModule lbmethod_byrequests_module modules/mod_lbmethod_byrequests.so"
+    echo "  LoadModule slotmem_shm_module     modules/mod_slotmem_shm.so"
 fi
 
 echo ""
 echo "-----------------------------------------------------------"
-echo "After adding the Include line, test and reload Apache:"
+echo "After adding the Include line, test and reload IHS/Apache:"
 echo ""
 echo "  apachectl configtest"
-echo "  sudo apachectl graceful"
+echo "  apachectl graceful"
 echo ""
 echo "Access points after reload:"
-echo "  Load-balanced app:  http://localhost/server-info/"
-echo "  Balancer Manager:   http://localhost/balancer-manager"
+echo "  Load-balanced app:  http://localhost:8080/server-info/"
+echo "  Balancer Manager:   http://localhost:8080/balancer-manager"
 echo "-----------------------------------------------------------"
 echo ""

@@ -1,6 +1,6 @@
-#!/bin/zsh
+#!/bin/bash
 # 01-install-runtime.sh — Extract Liberty ND 26.0.0.8 runtime into wlp-26/
-# Usage: zsh scripts/01-install-runtime.sh
+# Usage: bash scripts/01-install-runtime.sh
 
 set -euo pipefail
 

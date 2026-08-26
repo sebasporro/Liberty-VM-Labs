@@ -1,63 +1,73 @@
-#!/bin/zsh
+#!/bin/bash
 # =============================================================================
 # start-apache.sh
-# Configures Apache HTTP Server as the Liberty Collective front-end and
+# Configures IBM HTTP Server (IHS) as the Liberty Collective front-end and
 # starts (or reloads) it.
 #
 # Usage:  scripts/start-apache.sh
 #
 # What it does:
-#   1. Detects Homebrew Apache httpd.conf location
+#   1. Locates httpd.conf (checks common IHS and Apache paths on Linux)
 #   2. Enables required proxy/balancer modules (uncomments LoadModule lines)
 #   3. Adds the Liberty include (idempotent — safe to run multiple times)
-#   4. Tests the Apache configuration
-#   5. Starts or gracefully reloads Apache
+#   4. Tests the IHS/Apache configuration
+#   5. Starts or gracefully reloads IHS/Apache
 #   6. Verifies routing to Liberty members
 #
-# Note: Apache on macOS Homebrew listens on port 8080 by default.
-#       Port 80 requires sudo and a Listen port change — not done here.
+# IHS default install: /opt/IBM/HTTPServer
+# httpd.conf location: /opt/IBM/HTTPServer/conf/httpd.conf
 # =============================================================================
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-HTTPD_CONF="/opt/homebrew/etc/httpd/httpd.conf"
 LIBERTY_CONF="${WORKSPACE_ROOT}/config/apache/httpd-liberty.conf"
 
 echo ""
-echo "=== Apache HTTP Server — Configure and Start ==="
+echo "=== IBM HTTP Server — Configure and Start ==="
 echo ""
 
 # ---------------------------------------------------------------------------
-# 1. Verify httpd.conf exists
+# 1. Locate httpd.conf
 # ---------------------------------------------------------------------------
-echo "[1/6] Locating Apache configuration..."
-if [[ ! -f "${HTTPD_CONF}" ]]; then
-    # Try Intel Homebrew path
-    if [[ -f "/usr/local/etc/httpd/httpd.conf" ]]; then
-        HTTPD_CONF="/usr/local/etc/httpd/httpd.conf"
-    else
-        echo "  ERROR: httpd.conf not found at ${HTTPD_CONF}"
-        echo "  Install Apache via: brew install httpd"
-        exit 1
+echo "[1/6] Locating IHS/Apache configuration..."
+
+HTTPD_CONF=""
+for candidate in \
+    "/opt/IBM/HTTPServer/conf/httpd.conf" \
+    "/opt/IBM/HTTPServer/conf/httpd.conf" \
+    "/etc/httpd/conf/httpd.conf" \
+    "/etc/apache2/apache2.conf" \
+    "/usr/local/apache2/conf/httpd.conf"; do
+    if [[ -f "${candidate}" ]]; then
+        HTTPD_CONF="${candidate}"
+        break
     fi
+done
+
+if [[ -z "${HTTPD_CONF}" ]]; then
+    echo "  ERROR: httpd.conf not found. Set HTTPD_CONF manually or install IHS."
+    echo "  Expected: /opt/IBM/HTTPServer/conf/httpd.conf"
+    exit 1
 fi
+
 APACHE_PORT=$(grep "^Listen " "${HTTPD_CONF}" | head -1 | awk '{print $2}')
-echo "      httpd.conf: ${HTTPD_CONF}"
+APACHE_PORT="${APACHE_PORT:-8080}"
+echo "      httpd.conf:  ${HTTPD_CONF}"
 echo "      Listen port: ${APACHE_PORT}"
 echo ""
 
 # ---------------------------------------------------------------------------
 # 2. Enable required modules
 # ---------------------------------------------------------------------------
-echo "[2/6] Enabling required Apache modules..."
+echo "[2/6] Enabling required proxy/balancer modules..."
 
 MODULES=(
-    "proxy_module lib/httpd/modules/mod_proxy.so"
-    "proxy_http_module lib/httpd/modules/mod_proxy_http.so"
-    "proxy_balancer_module lib/httpd/modules/mod_proxy_balancer.so"
-    "slotmem_shm_module lib/httpd/modules/mod_slotmem_shm.so"
-    "lbmethod_byrequests_module lib/httpd/modules/mod_lbmethod_byrequests.so"
+    "proxy_module modules/mod_proxy.so"
+    "proxy_http_module modules/mod_proxy_http.so"
+    "proxy_balancer_module modules/mod_proxy_balancer.so"
+    "slotmem_shm_module modules/mod_slotmem_shm.so"
+    "lbmethod_byrequests_module modules/mod_lbmethod_byrequests.so"
 )
 
 for entry in "${MODULES[@]}"; do
@@ -66,7 +76,7 @@ for entry in "${MODULES[@]}"; do
     if grep -q "^LoadModule ${mod_name}" "${HTTPD_CONF}"; then
         echo "      ${mod_name}: already enabled"
     else
-        sed -i '' "s|^#LoadModule ${mod_name}.*|LoadModule ${mod_name} ${mod_file}|" "${HTTPD_CONF}"
+        sed -i "s|^#LoadModule ${mod_name}.*|LoadModule ${mod_name} ${mod_file}|" "${HTTPD_CONF}"
         if grep -q "^LoadModule ${mod_name}" "${HTTPD_CONF}"; then
             echo "      ${mod_name}: enabled"
         else
@@ -96,7 +106,7 @@ echo ""
 # ---------------------------------------------------------------------------
 # 4. Config test
 # ---------------------------------------------------------------------------
-echo "[4/6] Testing Apache configuration..."
+echo "[4/6] Testing IHS/Apache configuration..."
 RESULT=$(apachectl configtest 2>&1)
 if echo "${RESULT}" | grep -q "Syntax OK"; then
     echo "      Syntax OK"
@@ -108,30 +118,29 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 5. Start or reload Apache
+# 5. Start or reload IHS/Apache
 # ---------------------------------------------------------------------------
-echo "[5/6] Starting / reloading Apache..."
+echo "[5/6] Starting / reloading IHS/Apache..."
 echo ""
 
-# Check if Apache is already listening on the configured port
-if lsof -iTCP:${APACHE_PORT} -sTCP:LISTEN &>/dev/null; then
-    echo "      Apache is already running on port ${APACHE_PORT} — reloading config..."
-    sudo apachectl graceful
+# Check if already listening on the configured port (ss is standard on Linux)
+if ss -tlnp 2>/dev/null | grep -q ":${APACHE_PORT} "; then
+    echo "      IHS/Apache already running on port ${APACHE_PORT} — reloading config..."
+    apachectl graceful
     if [[ $? -ne 0 ]]; then
-        echo "  ERROR: Apache graceful reload failed."
-        echo "  Check: /opt/homebrew/var/log/httpd/error_log"
+        echo "  ERROR: Graceful reload failed."
+        echo "  Check IHS error log (typically /opt/IBM/HTTPServer/logs/error_log)"
         exit 1
     fi
     sleep 1
 else
-    echo "      Apache is NOT running on port ${APACHE_PORT}."
-    echo "      (sudo required — run in your terminal if this fails)"
-    sudo apachectl start
+    echo "      IHS/Apache not running on port ${APACHE_PORT} — starting..."
+    apachectl start
     if [[ $? -ne 0 ]]; then
         echo ""
-        echo "  ERROR: Apache failed to start."
-        echo "  Run manually:  sudo apachectl start"
-        echo "  Check logs:    /opt/homebrew/var/log/httpd/error_log"
+        echo "  ERROR: IHS/Apache failed to start."
+        echo "  Run manually:  apachectl start"
+        echo "  Check logs:    /opt/IBM/HTTPServer/logs/error_log"
         exit 1
     fi
     sleep 2
@@ -169,15 +178,15 @@ for member_dir in "${WORKSPACE_ROOT}/installs"/member*/; do
     fi
 done
 
-check_url "Apache LB       (:${APACHE_PORT}/server-info/)" \
+check_url "IHS/Apache LB    (:${APACHE_PORT}/server-info/)" \
     "http://localhost:${APACHE_PORT}/server-info/" "200"
 check_url "Balancer Manager (:${APACHE_PORT}/balancer-manager)" \
     "http://localhost:${APACHE_PORT}/balancer-manager" "200"
 
 echo ""
-echo "=== Apache setup complete ==="
+echo "=== IHS/Apache setup complete ==="
 echo ""
-echo "  App via Apache:   http://localhost:${APACHE_PORT}/server-info/"
-echo "  Balancer Manager: http://localhost:${APACHE_PORT}/balancer-manager"
-echo "  Admin Center:     https://localhost:9443/adminCenter  (admin / admin)"
+echo "  App via IHS/Apache: http://localhost:${APACHE_PORT}/server-info/"
+echo "  Balancer Manager:   http://localhost:${APACHE_PORT}/balancer-manager"
+echo "  Admin Center:       https://localhost:9443/adminCenter  (admin / admin)"
 echo ""

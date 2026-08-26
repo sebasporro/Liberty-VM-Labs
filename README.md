@@ -320,7 +320,7 @@ Liberty-VM-Labs/
 
 ## Scripts Reference
 
-All scripts use `#!/bin/zsh` and source `scripts/00-set-env.sh` for shared
+All scripts use `#!/bin/bash` and source `scripts/00-set-env.sh` for shared
 environment variables (`JAVA_HOME`, `WLP_HOME`, `WORKSPACE_ROOT`).
 
 ---

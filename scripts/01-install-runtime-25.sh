@@ -1,10 +1,10 @@
-#!/bin/zsh
+#!/bin/bash
 # 01-install-runtime-25.sh — Extract WebSphere Liberty Base 25.0.0.1 into wlp-25/
-# Usage: zsh scripts/01-install-runtime-25.sh
+# Usage: bash scripts/01-install-runtime-25.sh
 
 set -euo pipefail
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
 INSTALLER_JAR="/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar"

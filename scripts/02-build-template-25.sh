@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # 02-build-template-25.sh — Create and stage the role-neutral template server for 25.0.0.1
 # Usage: zsh scripts/02-build-template-25.sh
 #
@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
 WLP25_HOME="${WORKSPACE_ROOT}/wlp-25"
@@ -55,7 +55,7 @@ cp "${CONFIG_SRC}/bootstrap.properties" "${SERVER_DIR}/bootstrap.properties"
 cp "${CONFIG_SRC}/jvm.options"          "${SERVER_DIR}/jvm.options"
 
 # Update the server description to reflect 25.0.0.1
-sed -i '' 's/Liberty Template Server 26.0.0.8/Liberty Template Server 25.0.0.1/' \
+sed -i 's/Liberty Template Server 26.0.0.8/Liberty Template Server 25.0.0.1/' \
   "${SERVER_DIR}/server.xml"
 
 # ---------------------------------------------------------------------------

@@ -1,11 +1,11 @@
-#!/bin/zsh
+#!/bin/bash
 # 03-build-package.sh — Package the Liberty template server into a self-contained ZIP
 #
 # Output: packages/liberty-package-26.0.0.8.zip
 #   - Contains the full Liberty runtime + usr directory (config + apps)
 #   - Equivalent to a "golden image" that Sub-Task 4 stamps out 3 times
 #
-# Usage: ./scripts/03-build-package.sh
+# Usage: bash scripts/03-build-package.sh
 
 set -euo pipefail
 

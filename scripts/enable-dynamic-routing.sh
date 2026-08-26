@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # =============================================================================
 # enable-dynamic-routing.sh
 # Enables Liberty Dynamic Routing on the Collective Controller.
@@ -27,14 +27,26 @@
 #   - Apache must be running (scripts/start-apache.sh)
 # =============================================================================
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
 CONTROLLER_DIR="${WORKSPACE_ROOT}/installs/controller"
 SERVER_DIR="${CONTROLLER_DIR}/wlp/usr/servers/controller"
 WLP_BIN="${CONTROLLER_DIR}/wlp/bin/server"
 OVERRIDES_DIR="${SERVER_DIR}/configDropins/overrides"
-HTTPD_CONF="/opt/homebrew/etc/httpd/httpd.conf"
+
+# Locate httpd.conf (IHS on Linux)
+HTTPD_CONF=""
+for candidate in \
+    "/opt/IBM/HTTPServer/conf/httpd.conf" \
+    "/etc/httpd/conf/httpd.conf" \
+    "/etc/apache2/apache2.conf" \
+    "/usr/local/apache2/conf/httpd.conf"; do
+    if [[ -f "${candidate}" ]]; then
+        HTTPD_CONF="${candidate}"
+        break
+    fi
+done
 APACHE_PORT=$(grep "^Listen " "${HTTPD_CONF}" 2>/dev/null | head -1 | awk '{print $2}')
 PLUGIN_CFG="${WORKSPACE_ROOT}/config/apache/plugin-cfg.xml"
 
@@ -269,7 +281,7 @@ echo "    Include ${WORKSPACE_ROOT}/config/apache/httpd-liberty.conf"
 echo "  To:"
 echo "    Include ${WORKSPACE_ROOT}/config/apache/httpd-liberty-dynamic.conf"
 echo ""
-echo "  Then: sudo apachectl graceful"
+echo "  Then: apachectl graceful"
 echo ""
 
 # ---------------------------------------------------------------------------

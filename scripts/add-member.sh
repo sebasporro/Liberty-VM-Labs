@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # =============================================================================
 # add-member.sh — DEPRECATED
 # Renamed to add-member-26.sh for naming consistency with add-member-25.sh.
@@ -7,4 +7,4 @@
 echo "NOTE: add-member.sh has been renamed to add-member-26.sh."
 echo "      Delegating to add-member-26.sh ..."
 echo ""
-exec "${0:A:h}/add-member-26.sh" "$@"
+exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/add-member-26.sh" "$@"

@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # =============================================================================
 # add-member-25.sh
 # Deploys a Liberty 25.0.0.1 Collective Member and joins it to the running
@@ -26,7 +26,7 @@
 #     (run scripts/install-controller.sh)
 # =============================================================================
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
 # ---------------------------------------------------------------------------

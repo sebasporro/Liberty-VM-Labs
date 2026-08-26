@@ -1,6 +1,6 @@
-#!/bin/zsh
+#!/bin/bash
 # 04-deploy-instances.sh — Deploy controller, member1, member2 from package
-# Usage: ./scripts/04-deploy-instances.sh
+# Usage: bash scripts/04-deploy-instances.sh
 # Requires: packages/liberty-package-26.0.0.8.zip (built by Sub-Task 3)
 
 set -euo pipefail

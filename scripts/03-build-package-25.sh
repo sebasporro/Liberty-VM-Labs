@@ -1,15 +1,15 @@
-#!/bin/zsh
+#!/bin/bash
 # 03-build-package-25.sh — Package the Liberty 25.0.0.1 template into a golden artifact ZIP
 #
 # Output: packages/liberty-package-25.0.0.1.zip
 #   - Full Liberty Base 25.0.0.1 runtime + config + server-info.war
 #   - Used by add-member-25.sh to deploy member3 and member4
 #
-# Usage: zsh scripts/03-build-package-25.sh
+# Usage: bash scripts/03-build-package-25.sh
 
 set -euo pipefail
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
 WLP25_HOME="${WORKSPACE_ROOT}/wlp-25"

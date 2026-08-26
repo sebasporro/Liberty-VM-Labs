@@ -1,25 +1,43 @@
-#!/bin/zsh
+#!/bin/bash
 # =============================================================================
 # 08-enable-apache-routing.sh
-# Enables Apache HTTP Server routing to the Liberty Collective members.
+# Enables IHS/Apache routing to the Liberty Collective members.
 #
 # What this script does:
 #   1. Starts the Liberty member servers (member1, member2)
 #   2. Enables required proxy/balancer modules in httpd.conf (uncomments them)
 #   3. Adds the Liberty include to httpd.conf (idempotent — won't add twice)
-#   4. Tests the Apache config
-#   5. Starts (or restarts) Apache
+#   4. Tests the IHS/Apache config
+#   5. Starts (or reloads) IHS/Apache
 #   6. Verifies routing is working
 # =============================================================================
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-HTTPD_CONF="/opt/homebrew/etc/httpd/httpd.conf"
 LIBERTY_CONF="${WORKSPACE_ROOT}/config/apache/httpd-liberty.conf"
 
+# Locate httpd.conf (IHS on Linux)
+HTTPD_CONF=""
+for candidate in \
+    "/opt/IBM/HTTPServer/conf/httpd.conf" \
+    "/etc/httpd/conf/httpd.conf" \
+    "/etc/apache2/apache2.conf" \
+    "/usr/local/apache2/conf/httpd.conf"; do
+    if [[ -f "${candidate}" ]]; then
+        HTTPD_CONF="${candidate}"
+        break
+    fi
+done
+
+if [[ -z "${HTTPD_CONF}" ]]; then
+    echo "  ERROR: httpd.conf not found. Expected: /opt/IBM/HTTPServer/conf/httpd.conf"
+    exit 1
+fi
+
 echo ""
-echo "=== Liberty Apache Routing Setup ==="
+echo "=== Liberty IHS/Apache Routing Setup ==="
+echo "    httpd.conf: ${HTTPD_CONF}"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -48,25 +66,23 @@ echo ""
 # ---------------------------------------------------------------------------
 # Step 2 — Enable required modules in httpd.conf (uncomment if commented)
 # ---------------------------------------------------------------------------
-echo "[2/6] Enabling required Apache modules in ${HTTPD_CONF}..."
+echo "[2/6] Enabling required modules in ${HTTPD_CONF}..."
 
 MODULES=(
-    "proxy_module lib/httpd/modules/mod_proxy.so"
-    "proxy_http_module lib/httpd/modules/mod_proxy_http.so"
-    "proxy_balancer_module lib/httpd/modules/mod_proxy_balancer.so"
-    "slotmem_shm_module lib/httpd/modules/mod_slotmem_shm.so"
-    "lbmethod_byrequests_module lib/httpd/modules/mod_lbmethod_byrequests.so"
+    "proxy_module modules/mod_proxy.so"
+    "proxy_http_module modules/mod_proxy_http.so"
+    "proxy_balancer_module modules/mod_proxy_balancer.so"
+    "slotmem_shm_module modules/mod_slotmem_shm.so"
+    "lbmethod_byrequests_module modules/mod_lbmethod_byrequests.so"
 )
 
 for entry in "${MODULES[@]}"; do
     mod_name="${entry%% *}"
     mod_file="${entry##* }"
-    # Check if already active (uncommented)
     if grep -q "^LoadModule ${mod_name}" "${HTTPD_CONF}"; then
         echo "      ${mod_name}: already enabled"
     else
-        # Uncomment the line
-        sed -i '' "s|^#LoadModule ${mod_name}.*|LoadModule ${mod_name} ${mod_file}|" "${HTTPD_CONF}"
+        sed -i "s|^#LoadModule ${mod_name}.*|LoadModule ${mod_name} ${mod_file}|" "${HTTPD_CONF}"
         if grep -q "^LoadModule ${mod_name}" "${HTTPD_CONF}"; then
             echo "      ${mod_name}: enabled"
         else
@@ -96,45 +112,48 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 4 — Test Apache configuration
+# Step 4 — Test IHS/Apache configuration
 # ---------------------------------------------------------------------------
-echo "[4/6] Testing Apache configuration..."
+echo "[4/6] Testing IHS/Apache configuration..."
 CONFIGTEST=$(apachectl configtest 2>&1)
 if echo "${CONFIGTEST}" | grep -q "Syntax OK"; then
     echo "      Syntax OK"
 else
-    echo "  ERROR: Apache config test failed:"
+    echo "  ERROR: IHS/Apache config test failed:"
     echo "${CONFIGTEST}"
     exit 1
 fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 5 — Start or restart Apache
+# Step 5 — Start or reload IHS/Apache
 # ---------------------------------------------------------------------------
-echo "[5/6] Starting / reloading Apache..."
+echo "[5/6] Starting / reloading IHS/Apache..."
 
-# Check if Apache is already running
-if apachectl status 2>/dev/null | grep -q "running\|active"; then
-    echo "      Apache already running — reloading gracefully..."
-    sudo apachectl graceful
+APACHE_PORT=$(grep "^Listen " "${HTTPD_CONF}" | head -1 | awk '{print $2}')
+APACHE_PORT="${APACHE_PORT:-8080}"
+
+if ss -tlnp 2>/dev/null | grep -q ":${APACHE_PORT} "; then
+    echo "      IHS/Apache already running — reloading gracefully..."
+    apachectl graceful
 else
-    echo "      Starting Apache..."
-    sudo apachectl start
+    echo "      Starting IHS/Apache..."
+    apachectl start
 fi
 
 if [[ $? -ne 0 ]]; then
-    echo "  ERROR: Apache failed to start. Check /opt/homebrew/var/log/httpd/error_log"
+    echo "  ERROR: IHS/Apache failed to start."
+    echo "  Check: /opt/IBM/HTTPServer/logs/error_log"
     exit 1
 fi
-echo "      Apache running"
+echo "      IHS/Apache running"
 echo ""
 
 # ---------------------------------------------------------------------------
 # Step 6 — Verify routing
 # ---------------------------------------------------------------------------
-echo "[6/6] Verifying Apache → Liberty routing..."
-sleep 2   # brief pause for Apache to fully reload
+echo "[6/6] Verifying IHS/Apache → Liberty routing..."
+sleep 2   # brief pause for IHS/Apache to fully reload
 
 check_url() {
     local label="$1"
@@ -151,13 +170,13 @@ check_url() {
 
 check_url "member1 direct  (:9081/server-info/)"  "http://localhost:9081/server-info/"  "200"
 check_url "member2 direct  (:9082/server-info/)"  "http://localhost:9082/server-info/"  "200"
-check_url "Apache frontend (:8080/server-info/)"  "http://localhost:8080/server-info/"  "200"
+check_url "IHS/Apache LB   (:8080/server-info/)"  "http://localhost:8080/server-info/"  "200"
 check_url "Balancer Manager (:8080/balancer-mgr)" "http://localhost:8080/balancer-manager" "200"
 
 echo ""
 echo "=== Setup complete ==="
 echo ""
-echo "  App via Apache:      http://localhost:8080/server-info/"
+echo "  App via IHS/Apache:  http://localhost:8080/server-info/"
 echo "  Balancer Manager:    http://localhost:8080/balancer-manager"
 echo "  Admin Center:        https://localhost:9443/adminCenter  (admin / admin)"
 echo ""

@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # =============================================================================
 # 07-validate.sh — Liberty Collective Lab Readiness Report
 #
@@ -13,7 +13,7 @@
 # Exit 0 = all pass | Exit 1 = one or more failures
 # =============================================================================
 
-SCRIPT_DIR="${0:A:h}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
 # ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ check_member_dir() {
 
 check_port() {
     local port="$1"
-    lsof -iTCP:${port} -sTCP:LISTEN
+    ss -tlnp 2>/dev/null | grep -q ":${port} "
 }
 
 check_app() {
@@ -117,7 +117,7 @@ echo ""
 
 # --- Environment ---
 run_check "Java 17 available" \
-    "Fix: check SDKMAN or export JAVA_HOME=\$(/usr/libexec/java_home -v 17)" \
+    "Fix: export JAVA_HOME=<path-to-java17>  e.g. /usr/lib/jvm/java-17" \
     check_java17
 
 run_check "Liberty 26.0.0.8 runtime installed (wlp/)" \
@@ -222,8 +222,8 @@ run_check "Member4 configDropins/overrides populated" \
     check_dropins "member4/wlp/usr/servers/member4"
 
 # --- Apache front-end ---
-run_check "Apache front-end reachable (:8080/server-info/)" \
-    "Fix: scripts/start-apache.sh then sudo apachectl graceful" \
+run_check "IHS/Apache front-end reachable (:8080/server-info/)" \
+    "Fix: scripts/start-apache.sh then apachectl graceful" \
     check_apache
 
 # ---------------------------------------------------------------------------
