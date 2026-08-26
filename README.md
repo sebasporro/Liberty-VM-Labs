@@ -105,27 +105,40 @@ grep WORKSPACE_ROOT scripts/00-set-env.sh
 Build both golden packages before deploying anything. Only needs to be repeated if the
 template configuration or application changes.
 
+> **Before running:** confirm the Liberty installer JARs are present at their expected paths:
+> ```bash
+> ls /home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar
+> ls /home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar
+> ```
+> If the files are at a different location, export the paths first:
+> ```bash
+> export LIBERTY_INSTALLER_26=/path/to/wlp-nd-all-26.0.0.8.jar
+> export LIBERTY_INSTALLER_25=/path/to/wlp-base-all-25.0.0.1.jar
+> # Hint — find them with:
+> find / -name 'wlp-nd-all-26.0.0.8.jar' 2>/dev/null
+> ```
+
 #### Liberty 26.0.0.8
 
-```zsh
-scripts/01-install-runtime.sh    # Extract ND runtime → wlp-26/
-scripts/02-build-template.sh     # Create template-26.0.0.8 server + stage WAR
-scripts/03-build-package.sh      # Package → packages/liberty-package-26.0.0.8.zip (~416 MB)
+```bash
+scripts/01-install-runtime.sh && \
+scripts/02-build-template.sh && \
+scripts/03-build-package.sh
 ```
 
 #### Liberty 25.0.0.1
 
-```zsh
-scripts/01-install-runtime-25.sh   # Extract Base runtime → wlp-25/
-scripts/02-build-template-25.sh    # Create template-25.0.0.1 server + stage WAR
-scripts/03-build-package-25.sh     # Package → packages/liberty-package-25.0.0.1.zip (~368 MB)
+```bash
+scripts/01-install-runtime-25.sh && \
+scripts/02-build-template-25.sh && \
+scripts/03-build-package-25.sh
 ```
 
 ---
 
 ### Step 2 — Deploy Controller and 26.0.0.8 Members
 
-```zsh
+```bash
 scripts/install-controller.sh      # Deploy + start controller
 scripts/add-member-26.sh member1   # Deploy member1, join collective
 scripts/add-member-26.sh member2   # Deploy member2, join collective
@@ -141,7 +154,7 @@ member1 at `http://localhost:9081/server-info/`, member2 at `http://localhost:90
 Enable Liberty Dynamic Routing on the controller so that new members joining the collective
 are automatically picked up by Apache — no manual balancer config changes needed.
 
-```zsh
+```bash
 # Start Apache with the static balancer config (sets up modules + include)
 scripts/start-apache.sh
 
@@ -151,7 +164,7 @@ scripts/enable-dynamic-routing.sh
 
 The script prints the exact `Include` change to make in `httpd.conf`. After making the change:
 
-```zsh
+```bash
 sudo apachectl graceful
 ```
 
@@ -165,7 +178,7 @@ to member1 or member2.
 With dynamic routing active, member3 and member4 are automatically added to the routing
 table as soon as they join — no Apache config changes required.
 
-```zsh
+```bash
 scripts/add-member-25.sh member3   # Deploy member3 (25.0.0.1), join collective
 scripts/add-member-25.sh member4   # Deploy member4 (25.0.0.1), join collective
 ```
@@ -177,7 +190,7 @@ scripts/add-member-25.sh member4   # Deploy member4 (25.0.0.1), join collective
 
 ### Step 5 — Validate
 
-```zsh
+```bash
 scripts/07-validate.sh
 ```
 
@@ -186,7 +199,7 @@ Checks all 4 members (directories, ports, app response, configDropins), the cont
 **Expected result:** All checks `PASS`.
 
 Direct member verification:
-```zsh
+```bash
 curl http://localhost:9081/server-info/   # member1 (26.0.0.8)
 curl http://localhost:9082/server-info/   # member2 (26.0.0.8)
 curl http://localhost:9083/server-info/   # member3 (25.0.0.1)
@@ -202,7 +215,7 @@ curl http://localhost:8080/server-info/   # Apache → dynamic routing
 instances, removes both runtimes (`wlp/`, `wlp-25/`), clears both packages, and restores
 Apache to its original state. After a reset the system is at a clean Step 1 baseline.
 
-```zsh
+```bash
 # Wipe everything
 scripts/reset-environment.sh
 
@@ -336,7 +349,7 @@ Sets:
 - `WLP_HOME` — path to the build-phase Liberty 26.0.0.8 runtime (`$WORKSPACE_ROOT/wlp-26`)
 
 **Usage:**
-```zsh
+```bash
 source scripts/00-set-env.sh   # from another script
 scripts/00-set-env.sh          # run directly to print current values
 ```
@@ -352,7 +365,7 @@ runtime used to create and package the template server. Each deployed instance c
 its own copy of the runtime inside the package ZIP.
 
 **Usage:**
-```zsh
+```bash
 scripts/01-install-runtime.sh
 ```
 
@@ -369,7 +382,7 @@ All ports are variable-based (`${default.http.port}`) resolved from `bootstrap.p
 `server-info.war` is pre-staged in `apps/`.
 
 **Usage:**
-```zsh
+```bash
 scripts/02-build-template.sh
 ```
 
@@ -386,7 +399,7 @@ Runs `server package --include=all` which bundles the full Liberty runtime,
 server configuration, and application into a single redistributable ZIP.
 
 **Usage:**
-```zsh
+```bash
 scripts/03-build-package.sh
 ```
 
@@ -411,7 +424,7 @@ Steps performed:
 7. Verifies Admin Center is accessible
 
 **Usage:**
-```zsh
+```bash
 scripts/install-controller.sh
 ```
 
@@ -437,7 +450,7 @@ Steps performed:
 7. Starts the member and verifies the app is reachable
 
 **Usage:**
-```zsh
+```bash
 scripts/add-member-26.sh member1
 scripts/add-member-26.sh member2
 ```
@@ -467,7 +480,7 @@ Steps performed:
 6. Verifies all member and front-end endpoints respond
 
 **Usage:**
-```zsh
+```bash
 scripts/start-apache.sh
 ```
 
@@ -495,7 +508,7 @@ Steps performed (always — there is no partial mode):
 | 9 | Removes and recreates `packages/` (both golden ZIPs) |
 
 **Usage:**
-```zsh
+```bash
 scripts/reset-environment.sh
 ```
 
@@ -503,7 +516,7 @@ scripts/reset-environment.sh
 > a no-op — a reset is always a full reset.
 
 After reset, run the full pipeline from Phase 1:
-```zsh
+```bash
 scripts/01-install-runtime.sh
 scripts/02-build-template.sh
 scripts/03-build-package.sh
@@ -541,7 +554,7 @@ Steps performed:
 6. Verifies the controller dynamic routing endpoint
 
 **Usage:**
-```zsh
+```bash
 scripts/enable-dynamic-routing.sh
 ```
 
@@ -576,7 +589,7 @@ Checks performed:
 Exits 0 if all checks pass, exits 1 if any fail. Each failure prints the fix command.
 
 **Usage:**
-```zsh
+```bash
 scripts/07-validate.sh
 ```
 
@@ -590,7 +603,7 @@ into `wlp-25/` at workspace root. Coexists with the 26.0.0.8 `wlp/` runtime.
 Verifies that `wlp-25/bin/collective` is present (Base edition requirement for collective join).
 
 **Usage:**
-```zsh
+```bash
 scripts/01-install-runtime-25.sh
 ```
 
@@ -604,7 +617,7 @@ scripts/01-install-runtime-25.sh
 `config/template/` source files as the 26.0.0.8 template.
 
 **Usage:**
-```zsh
+```bash
 scripts/02-build-template-25.sh
 ```
 
@@ -617,7 +630,7 @@ scripts/02-build-template-25.sh
 **Purpose:** Packages the 25.0.0.1 template into a self-contained golden artifact ZIP.
 
 **Usage:**
-```zsh
+```bash
 scripts/03-build-package-25.sh
 ```
 
@@ -634,7 +647,7 @@ Mirrors `add-member-26.sh` exactly but unpacks `liberty-package-25.0.0.1.zip` an
 version-agnostic — mixed-version members coexist in the same collective.
 
 **Usage:**
-```zsh
+```bash
 scripts/add-member-25.sh member3
 scripts/add-member-25.sh member4
 ```
@@ -690,7 +703,7 @@ guidance covering:
 6. Collective communication failures
 
 **Quick diagnostics:**
-```zsh
+```bash
 # Check all server statuses
 installs/controller/wlp/bin/server status controller
 installs/member1/wlp/bin/server status member1

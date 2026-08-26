@@ -1,13 +1,17 @@
 #!/bin/bash
 # 01-install-runtime-25.sh — Extract WebSphere Liberty Base 25.0.0.1 into wlp-25/
 # Usage: bash scripts/01-install-runtime-25.sh
+#
+# The installer JAR path defaults to the TechZone VM pre-provisioned location.
+# Override by setting LIBERTY_INSTALLER_25 before running:
+#   export LIBERTY_INSTALLER_25=/path/to/wlp-base-all-25.0.0.1.jar
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-INSTALLER_JAR="/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar"
+INSTALLER_JAR="${LIBERTY_INSTALLER_25:-/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar}"
 WLP25_HOME="${WORKSPACE_ROOT}/wlp-25"
 
 # ---------------------------------------------------------------------------
@@ -19,6 +23,9 @@ echo "==> [01-25] Checking Java 17..."
 echo "==> [01-25] Checking installer JAR..."
 if [[ ! -f "${INSTALLER_JAR}" ]]; then
   echo "ERROR: Installer JAR not found at: ${INSTALLER_JAR}" >&2
+  echo "       Locate the JAR and re-run with:" >&2
+  echo "       export LIBERTY_INSTALLER_25=/path/to/wlp-base-all-25.0.0.1.jar" >&2
+  echo "       Hint: find / -name 'wlp-base-all-25.0.0.1.jar' 2>/dev/null" >&2
   exit 1
 fi
 

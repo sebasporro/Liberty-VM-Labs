@@ -1,13 +1,17 @@
 #!/bin/bash
 # 01-install-runtime.sh — Extract Liberty ND 26.0.0.8 runtime into wlp-26/
 # Usage: bash scripts/01-install-runtime.sh
+#
+# The installer JAR path defaults to the TechZone VM pre-provisioned location.
+# Override by setting LIBERTY_INSTALLER_26 before running:
+#   export LIBERTY_INSTALLER_26=/path/to/wlp-nd-all-26.0.0.8.jar
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-INSTALLER_JAR="/home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar"
+INSTALLER_JAR="${LIBERTY_INSTALLER_26:-/home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar}"
 
 # ---------------------------------------------------------------------------
 # Pre-flight checks
@@ -18,6 +22,9 @@ echo "==> [01] Checking Java 17..."
 echo "==> [01] Checking installer JAR..."
 if [[ ! -f "${INSTALLER_JAR}" ]]; then
   echo "ERROR: Installer JAR not found at: ${INSTALLER_JAR}" >&2
+  echo "       Locate the JAR and re-run with:" >&2
+  echo "       export LIBERTY_INSTALLER_26=/path/to/wlp-nd-all-26.0.0.8.jar" >&2
+  echo "       Hint: find / -name 'wlp-nd-all-26.0.0.8.jar' 2>/dev/null" >&2
   exit 1
 fi
 
