@@ -68,6 +68,38 @@ of different Liberty versions coexist in the same collective without any special
 
 ---
 
+### Step 0 — Clone the Repository
+
+Open a terminal on the lab VM. All commands in this lab are run from
+`/home/itzuser/Liberty-VM-Labs` unless noted otherwise.
+
+```bash
+cd /home/itzuser
+git clone https://github.com/sebasporro/Liberty-VM-Labs.git
+cd Liberty-VM-Labs
+```
+
+Once cloned, update the `WORKSPACE_ROOT` variable in `scripts/00-set-env.sh` to match
+the clone location:
+
+```bash
+sed -i 's|^export WORKSPACE_ROOT=.*|export WORKSPACE_ROOT="/home/itzuser/Liberty-VM-Labs"|' \
+  scripts/00-set-env.sh
+```
+
+Verify the change:
+
+```bash
+grep WORKSPACE_ROOT scripts/00-set-env.sh
+# Expected output:
+# export WORKSPACE_ROOT="/home/itzuser/Liberty-VM-Labs"
+```
+
+> **Note:** Every other path in the lab scripts is derived from `WORKSPACE_ROOT`, so this
+> one-line change is the only configuration required after cloning.
+
+---
+
 ### Step 1 — Build (run once per version)
 
 Build both golden packages before deploying anything. Only needs to be repeated if the
@@ -298,10 +330,10 @@ environment variables (`JAVA_HOME`, `WLP_HOME`, `WORKSPACE_ROOT`).
 **Purpose:** Shared environment bootstrap — sourced by every other script.
 
 Sets:
-- `JAVA_HOME` — Java 17 path (resolved via SDKMAN if available, otherwise falls back to system `java`)
+- `WORKSPACE_ROOT` — absolute path to the cloned repository (`/home/itzuser/Liberty-VM-Labs`); update this if cloned elsewhere
+- `JAVA_HOME` — resolved in order: existing `$JAVA_HOME` env var → SDKMAN `current` candidate → system `java` on PATH
 - `PATH` — prepends `$JAVA_HOME/bin`
-- `WLP_HOME` — path to the build-phase Liberty 26.0.0.8 runtime (`wlp-26/`)
-- `WORKSPACE_ROOT` — absolute path to the cloned repository on the VM
+- `WLP_HOME` — path to the build-phase Liberty 26.0.0.8 runtime (`$WORKSPACE_ROOT/wlp-26`)
 
 **Usage:**
 ```zsh

@@ -3,33 +3,31 @@
 # Source this file at the top of every other script: source "$(dirname "$0")/00-set-env.sh"
 
 # ---------------------------------------------------------------------------
-# Java 17 — resolved via SDKMAN (canonical path, avoids macOS java_home quirk)
-# /usr/libexec/java_home -v 17 returns the wrong JDK on this machine because
-# the Java 17 install is managed by SDKMAN and not registered in the macOS
-# JavaVirtualMachines registry.
+# Workspace root — absolute path; all other paths are derived from here.
+# Update this value if the repo is cloned to a different location.
 # ---------------------------------------------------------------------------
-SDKMAN_JAVA17="/Users/sebastianporro/.sdkman/candidates/java/17.0.15-sem"
+export WORKSPACE_ROOT="/home/itzuser/Liberty-VM-Labs"
 
-if [[ -x "${SDKMAN_JAVA17}/bin/java" ]]; then
-  export JAVA_HOME="${SDKMAN_JAVA17}"
+# ---------------------------------------------------------------------------
+# Java 17 — resolved in order:
+#   1. JAVA_HOME already set in the environment → use it as-is
+#   2. SDKMAN candidate (if installed)
+#   3. System java on PATH → derive JAVA_HOME from it
+# ---------------------------------------------------------------------------
+if [[ -n "${JAVA_HOME}" && -x "${JAVA_HOME}/bin/java" ]]; then
+  : # already set — nothing to do
+elif [[ -x "${HOME}/.sdkman/candidates/java/current/bin/java" ]]; then
+  export JAVA_HOME="${HOME}/.sdkman/candidates/java/current"
 else
-  # Fallback: try macOS java_home for 17, then use whatever is on PATH
-  _jhome=$(/usr/libexec/java_home -v 17 2>/dev/null)
-  if [[ -n "${_jhome}" && -x "${_jhome}/bin/java" ]]; then
-    export JAVA_HOME="${_jhome}"
-  else
-    echo "[00-set-env] WARNING: Java 17 not found via SDKMAN or java_home." >&2
-    echo "[00-set-env] Falling back to system java: $(which java)" >&2
-    export JAVA_HOME="$(dirname $(dirname $(which java)))"
+  _java_bin=$(which java 2>/dev/null)
+  if [[ -z "${_java_bin}" ]]; then
+    echo "[00-set-env] ERROR: java not found on PATH. Install Java 17 and set JAVA_HOME." >&2
+    exit 1
   fi
+  export JAVA_HOME="$(dirname $(dirname $(readlink -f ${_java_bin})))"
 fi
 
 export PATH="${JAVA_HOME}/bin:${PATH}"
-
-# ---------------------------------------------------------------------------
-# Workspace root — absolute path; all other paths are derived from here
-# ---------------------------------------------------------------------------
-export WORKSPACE_ROOT="/Users/sebastianporro/Documents/2026/ITZ/Liberty-VM-Labs"
 
 # ---------------------------------------------------------------------------
 # Liberty runtime — extracted once at workspace root
@@ -39,7 +37,7 @@ export WLP_HOME="${WORKSPACE_ROOT}/wlp-26"
 # ---------------------------------------------------------------------------
 # Quick sanity check (only when script is executed directly, not sourced)
 # ---------------------------------------------------------------------------
-if [[ "${ZSH_EVAL_CONTEXT}" == "toplevel" ]]; then
+if [[ "${ZSH_EVAL_CONTEXT}" == "toplevel" || "${BASH_SOURCE[0]}" == "${0}" ]]; then
   echo "JAVA_HOME     = ${JAVA_HOME}"
   echo "JAVA version  = $("${JAVA_HOME}/bin/java" -version 2>&1 | head -1)"
   echo "WLP_HOME      = ${WLP_HOME}"
