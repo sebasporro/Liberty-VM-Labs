@@ -196,14 +196,29 @@ if [[ -z "${IHS_CTL}" ]]; then
     exit 1
 fi
 
-echo "      Control binary: ${IHS_CTL}"
-"${IHS_CTL}" -v 2>&1 | head -2
+# IHS bundles its own APR/APR-util in lib/. Set LD_LIBRARY_PATH so the
+# IHS binaries use their own libraries rather than the system ones.
+# Wrap apachectl in a small shell script that sets this automatically.
+IHS_LIB="${IHS_INSTALL_ROOT}/lib"
 
-# Symlink apachectl → actual binary so all scripts can use a single name
-if [[ ! -f "${IHS_INSTALL_ROOT}/bin/apachectl" ]]; then
-    ln -sf "${IHS_CTL}" "${IHS_INSTALL_ROOT}/bin/apachectl"
-    echo "      Symlinked: bin/apachectl → $(basename "${IHS_CTL}")"
-fi
+WRAPPER="${IHS_INSTALL_ROOT}/bin/apachectl"
+# If the real binary is named something other than apachectl, the wrapper
+# will call it; otherwise it wraps itself via the real binary name.
+REAL_BIN="${IHS_CTL}"
+
+cat > "${WRAPPER}" <<WRAPPER_EOF
+#!/bin/bash
+# IHS apachectl wrapper — sets LD_LIBRARY_PATH to use IHS bundled libraries
+export LD_LIBRARY_PATH="${IHS_LIB}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+exec "${REAL_BIN}" "\$@"
+WRAPPER_EOF
+chmod +x "${WRAPPER}"
+echo "      Wrapper written: ${WRAPPER}"
+
+# Verify with bundled libs
+echo "      Testing apachectl -v..."
+LD_LIBRARY_PATH="${IHS_LIB}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+    "${IHS_CTL}" -v 2>&1 | head -2
 
 HTTPD_CONF="${IHS_INSTALL_ROOT}/conf/httpd.conf"
 
@@ -221,7 +236,7 @@ echo "=== IHS install complete ==="
 echo ""
 echo "  Install root:  ${IHS_INSTALL_ROOT}"
 echo "  httpd.conf:    ${HTTPD_CONF}"
-echo "  apachectl:     ${IHS_INSTALL_ROOT}/bin/apachectl"
+echo "  apachectl:     ${WRAPPER}"
 echo ""
 echo "  Add IHS to PATH (required for lab scripts):"
 echo "    echo 'export PATH=\"${IHS_INSTALL_ROOT}/bin:\$PATH\"' >> ~/.bashrc"
