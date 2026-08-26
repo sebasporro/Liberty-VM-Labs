@@ -37,7 +37,7 @@ export WLP_HOME="${WORKSPACE_ROOT}/wlp-26"
 # ---------------------------------------------------------------------------
 # Quick sanity check (only when script is executed directly, not sourced)
 # ---------------------------------------------------------------------------
-if [[ "${ZSH_EVAL_CONTEXT}" == "toplevel" || "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   echo "JAVA_HOME     = ${JAVA_HOME}"
   echo "JAVA version  = $("${JAVA_HOME}/bin/java" -version 2>&1 | head -1)"
   echo "WLP_HOME      = ${WLP_HOME}"
