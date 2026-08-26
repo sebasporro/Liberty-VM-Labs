@@ -122,11 +122,19 @@ echo 'export PATH="/home/itzuser/IBM/HTTPServer/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-Verify:
+Verify and start IHS:
 
 ```bash
 apachectl -v
 # Expected: Server version: IBM_HTTP_Server/...
+
+apachectl configtest
+# Expected: Syntax OK
+
+apachectl start
+
+ss -tlnp | grep 8080
+# Expected: a line showing LISTEN on *:8080
 ```
 
 > **If the ZIP is at a different path**, override the search directory:
@@ -134,6 +142,8 @@ apachectl -v
 > export IHS_INSTALLER_DIR=/path/to/dir/containing/ihs-zip
 > scripts/install-ihs.sh
 > ```
+
+> **To stop IHS** at any point: `apachectl stop`
 
 ---
 
