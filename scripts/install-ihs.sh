@@ -267,6 +267,7 @@ Listen 8080
 ServerName localhost:8080
 ServerAdmin admin@localhost
 
+LoadModule mpm_worker_module modules/mod_mpm_worker.so
 LoadModule authz_core_module modules/mod_authz_core.so
 LoadModule log_config_module modules/mod_log_config.so
 LoadModule unixd_module modules/mod_unixd.so
