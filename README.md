@@ -42,17 +42,15 @@ with highest precedence. The golden package is never modified.
 
 | Requirement | Version | Notes |
 |-------------|---------|-------|
-| Java | 17 | IBM Semeru via SDKMAN, or any JDK 17 |
-| Apache HTTP Server | 2.4+ | Homebrew: `brew install httpd` |
-| macOS shell | zsh | All scripts use `#!/bin/zsh` |
-| Liberty installer | 26.0.0.8 ND | `/home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` — controller + member1/2 |
-| Liberty installer | 25.0.0.1 Base | `/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar` — member3/4 |
-| IHS installer | 2.4+ | `/home/itz/software/IHS/<ihs-installer>.zip` |
-| Application WAR | — | `App/server-info.war` |
+| Java | 17 | Pre-installed on lab VM (IBM Semeru recommended) |
+| IBM HTTP Server (IHS) | 2.4+ | Pre-provisioned at `/home/itz/software/IHS/` |
+| Shell | bash / zsh | Scripts use `#!/bin/zsh`; compatible with bash on Linux |
+| Liberty installer | 26.0.0.8 ND | Pre-provisioned at `/home/itz/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` |
+| Liberty installer | 25.0.0.1 Base | Pre-provisioned at `/home/itz/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar` |
+| Application WAR | — | `App/server-info.war` (committed to repo) |
 
-> **Note:** Liberty installer JARs are expected at `/home/itz/software/Liberty/Liberty/` and the
-> IHS installer ZIP at `/home/itz/software/IHS/`. These paths are pre-provisioned on the lab VM
-> and are not committed to git.
+> **Note:** Installer binaries are pre-provisioned on the lab VM at fixed paths and are not
+> committed to git. No manual download is required before running the scripts.
 
 ---
 
@@ -219,14 +217,21 @@ scripts/07-validate.sh
 
 ## Directory Structure
 
+Pre-provisioned on the lab VM (outside the repo):
+```
+/home/itz/software/Liberty/Liberty/
+├── wlp-nd-all-26.0.0.8.jar          # Liberty ND 26.0.0.8 installer
+└── wlp-base-all-25.0.0.1.jar        # Liberty Base 25.0.0.1 installer
+
+/home/itz/software/IHS/
+└── <ihs-installer>.zip               # IBM HTTP Server installer
+```
+
+Workspace (this repository):
 ```
 Liberty-VM-Labs/
 ├── App/
 │   └── server-info.war                  # Application WAR
-├── /home/itz/software/Liberty/Liberty/   # Liberty installer JARs (pre-provisioned)
-│   ├── wlp-nd-all-26.0.0.8.jar          # Liberty ND 26.0.0.8 installer
-│   └── wlp-base-all-25.0.0.1.jar        # Liberty Base 25.0.0.1 installer
-├── /home/itz/software/IHS/               # IHS installer ZIP (pre-provisioned)
 ├── wlp-26/                               # Build-phase runtime — Liberty 26.0.0.8
 ├── wlp-25/                              # Build-phase runtime — Liberty 25.0.0.1
 ├── packages/
@@ -293,10 +298,10 @@ environment variables (`JAVA_HOME`, `WLP_HOME`, `WORKSPACE_ROOT`).
 **Purpose:** Shared environment bootstrap — sourced by every other script.
 
 Sets:
-- `JAVA_HOME` — Java 17 path (IBM Semeru via SDKMAN, with fallback to `/usr/libexec/java_home -v 17`)
+- `JAVA_HOME` — Java 17 path (resolved via SDKMAN if available, otherwise falls back to system `java`)
 - `PATH` — prepends `$JAVA_HOME/bin`
-- `WLP_HOME` — path to the build-phase Liberty runtime (`wlp-26/`)
-- `WORKSPACE_ROOT` — absolute path to this workspace
+- `WLP_HOME` — path to the build-phase Liberty 26.0.0.8 runtime (`wlp-26/`)
+- `WORKSPACE_ROOT` — absolute path to the cloned repository on the VM
 
 **Usage:**
 ```zsh
@@ -414,31 +419,28 @@ scripts/add-member-26.sh member2
 
 ### `scripts/start-apache.sh`  ⭐
 
-**Purpose:** Configures Apache HTTP Server as the Liberty Collective front-end and starts it.
+**Purpose:** Configures the HTTP Server (IHS/Apache) as the Liberty Collective front-end and starts it.
 
 Idempotent — safe to run multiple times. Will not add duplicate includes or re-enable
 already-enabled modules.
 
 Steps performed:
-1. Detects Apache `httpd.conf` location (Homebrew Apple Silicon or Intel)
+1. Locates `httpd.conf` (checks common IHS and Apache paths)
 2. Uncomments required `LoadModule` lines: `mod_proxy`, `mod_proxy_http`, `mod_proxy_balancer`, `mod_slotmem_shm`, `mod_lbmethod_byrequests`
 3. Appends `Include` for `config/apache/httpd-liberty.conf`
 4. Runs `apachectl configtest`
-5. **Checks whether Apache is already listening on port 8080:**
-   - Already running → issues `sudo apachectl graceful` to reload the updated config
-   - Not running → issues `sudo apachectl start`; if `sudo` fails (no terminal), prints the exact manual command to run
-6. Verifies all member and Apache endpoints respond
+5. **Checks whether IHS/Apache is already listening on port 8080:**
+   - Already running → issues `apachectl graceful` to reload the updated config
+   - Not running → issues `apachectl start` (may require `sudo`)
+6. Verifies all member and front-end endpoints respond
 
 **Usage:**
 ```zsh
 scripts/start-apache.sh
 ```
 
-> **Note:** Step 5 requires `sudo` for `apachectl`. If the script is run
-> non-interactively and Apache is not yet started, run `sudo apachectl start`
-> manually in your terminal, then re-run `scripts/start-apache.sh` to complete
-> the verification step.
-> Apache on Homebrew listens on port **8080** by default (not 80).
+> **Note:** `apachectl` may require `sudo` depending on the IHS installation. IHS listens on
+> port **8080** by default in this lab configuration.
 
 ---
 
@@ -455,9 +457,10 @@ Steps performed (always — there is no partial mode):
 | 3 | Removes `installs/` and recreates the empty directory |
 | 4 | Strips the Liberty `Include` line and comment from `httpd.conf` |
 | 5 | Comments out the five proxy/balancer `LoadModule` lines in `httpd.conf` |
-| 6 | Reloads Apache (`sudo apachectl graceful`) if it is running |
-| 7 | Removes `wlp-26/` (extracted Liberty runtime — Phase 1 script 01) |
-| 8 | Removes and recreates `packages/` (golden ZIP — Phase 1 script 03) |
+| 6 | Reloads Apache/IHS (`apachectl graceful`) if it is running |
+| 7 | Removes `wlp-26/` (extracted Liberty 26.0.0.8 runtime) |
+| 8 | Removes `wlp-25/` (extracted Liberty 25.0.0.1 runtime) |
+| 9 | Removes and recreates `packages/` (both golden ZIPs) |
 
 **Usage:**
 ```zsh
@@ -525,17 +528,18 @@ Then: `sudo apachectl graceful`
 
 ### `scripts/07-validate.sh`
 
-**Purpose:** Runs 15 checks across the entire lab topology and prints a Lab Readiness Report.
+**Purpose:** Runs 26 checks across the entire lab topology and prints a Lab Readiness Report.
 
 Checks performed:
 - Java 17 available
-- Liberty runtime installed
-- Golden package exists
-- All 3 server directories exist
-- All 3 servers running (port checks)
-- `server-info.war` app reachable on both members
-- Admin Center reachable
-- `configDropins/overrides/` populated on all 3 instances
+- Both Liberty runtimes installed (`wlp-26/`, `wlp-25/`)
+- Both golden packages exist
+- Controller: directory, port 9443, Admin Center, configDropins
+- Member1 (26.0.0.8): directory, port 9081, app response, configDropins
+- Member2 (26.0.0.8): directory, port 9082, app response, configDropins
+- Member3 (25.0.0.1): directory, port 9083, app response, configDropins
+- Member4 (25.0.0.1): directory, port 9084, app response, configDropins
+- Apache/IHS front-end reachable on port 8080
 
 Exits 0 if all checks pass, exits 1 if any fail. Each failure prints the fix command.
 
@@ -659,9 +663,11 @@ guidance covering:
 installs/controller/wlp/bin/server status controller
 installs/member1/wlp/bin/server status member1
 installs/member2/wlp/bin/server status member2
+installs/member3/wlp/bin/server status member3
+installs/member4/wlp/bin/server status member4
 
 # Check ports
-for port in 9080 9081 9082 9443 8080; do
+for port in 9080 9081 9082 9083 9084 9443 8080; do
   lsof -iTCP:$port -sTCP:LISTEN 2>/dev/null && echo "PORT $port IN USE" || echo "PORT $port free"
 done
 
@@ -679,7 +685,7 @@ are registered with the same controller and visible in Admin Center.
 
 Key points:
 - The **collective protocol** is version-agnostic — members of different Liberty versions join the same controller without any special configuration.
-- Each version has its own isolated runtime directory (`wlp/` vs `wlp-25/`) and golden package, so they never interfere.
-- `reset-environment.sh` cleans **both** runtimes (`wlp/` and `wlp-25/`) and **both** packages.
+- Each version has its own isolated runtime directory (`wlp-26/` vs `wlp-25/`) and golden package, so they never interfere.
+- `reset-environment.sh` cleans **both** runtimes (`wlp-26/` and `wlp-25/`) and **both** packages.
 - `add-member-26.sh` always uses the 26.0.0.8 package; `add-member-25.sh` always uses the 25.0.0.1 package.
 - `add-member.sh` is kept as a compatibility wrapper that delegates to `add-member-26.sh`.
