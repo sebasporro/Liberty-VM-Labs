@@ -75,12 +75,11 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "[2/6] Enabling required modules in ${HTTPD_CONF}..."
 
+# mod_proxy_balancer.so and mod_lbmethod_byrequests.so are NOT included in
+# this IHS archive install — only enable the modules that are present.
 MODULES=(
     "proxy_module modules/mod_proxy.so"
     "proxy_http_module modules/mod_proxy_http.so"
-    "proxy_balancer_module modules/mod_proxy_balancer.so"
-    "slotmem_shm_module modules/mod_slotmem_shm.so"
-    "lbmethod_byrequests_module modules/mod_lbmethod_byrequests.so"
 )
 
 for entry in "${MODULES[@]}"; do
