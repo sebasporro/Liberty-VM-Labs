@@ -107,19 +107,23 @@ echo "      Copied: ${PLUGIN_CFG_DEST}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 4 — Add Liberty include to httpd.conf (idempotent)
+# Step 4 — Add WebSpherePluginConfig directly to httpd.conf (idempotent)
+#           The WAS plugin reads this directive before Include files are
+#           processed, so it must live in the main httpd.conf directly.
 # ---------------------------------------------------------------------------
-echo "[4/6] Adding Liberty include to ${HTTPD_CONF}..."
+echo "[4/6] Adding WebSpherePluginConfig to ${HTTPD_CONF}..."
 
-INCLUDE_LINE="Include ${LIBERTY_CONF}"
+PLUGIN_LINE="WebSpherePluginConfig ${PLUGIN_CFG_DEST}"
 
-if grep -qF "${INCLUDE_LINE}" "${HTTPD_CONF}"; then
-    echo "      Include already present — skipped"
+if grep -qF "WebSpherePluginConfig" "${HTTPD_CONF}"; then
+    # Update the path in case it changed
+    sed -i "s|^WebSpherePluginConfig .*|${PLUGIN_LINE}|" "${HTTPD_CONF}"
+    echo "      WebSpherePluginConfig: already present (path updated)"
 else
     echo "" >> "${HTTPD_CONF}"
     echo "# Liberty Collective WAS plugin routing — added by 08-enable-apache-routing.sh" >> "${HTTPD_CONF}"
-    echo "${INCLUDE_LINE}" >> "${HTTPD_CONF}"
-    echo "      Include added"
+    echo "${PLUGIN_LINE}" >> "${HTTPD_CONF}"
+    echo "      WebSpherePluginConfig: added"
 fi
 echo ""
 

@@ -21,15 +21,12 @@
                    Name="CollectiveCluster" PostSizeLimit="-1"
                    RemoveSpecialHeaders="true" RetryInterval="60">
         <Server CloneID="controller" ConnectTimeout="0" ExtendedHandshake="false"
-                MaxConnections="-1" Name="controller_localhost_9443"
+                MaxConnections="-1" Name="controller_localhost_9080"
                 ServerIOTimeout="900" WaitForContinue="false">
-            <Transport Hostname="localhost" Port="9443" Protocol="https">
-                <Property Name="keyring" Value="/home/itzuser/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/resources/security/key.p12"/>
-                <Property Name="stashfile" Value="/home/itzuser/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/resources/security/key.p12"/>
-            </Transport>
+            <Transport Hostname="localhost" Port="9080" Protocol="http"/>
         </Server>
         <PrimaryServers>
-            <Server Name="controller_localhost_9443"/>
+            <Server Name="controller_localhost_9080"/>
         </PrimaryServers>
     </ServerCluster>
     <UriGroup Name="CollectiveCluster_URIs">
