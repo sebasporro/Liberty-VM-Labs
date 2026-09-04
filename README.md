@@ -225,15 +225,26 @@ done
 
 #### Step 3b — Dynamic routing via controller
 
-Switches routing so the controller (`dynamicRouting-1.0`) manages member discovery
-automatically. New members joining the collective are picked up without any IHS config change.
+Enables `dynamicRouting-1.0` on the controller. The controller monitors collective membership
+and **rewrites `plugin-cfg.xml`** to keep the member list current. IHS still routes traffic
+directly to members — the controller manages the file, not the traffic.
+
+```
+Browser → IHS:8080 → mod_was_ap24_http.so → member1:9081 / member2:9082
+                             ↑
+             plugin-cfg.xml kept current by controller (dynamicRouting-1.0)
+```
+
+> **Important:** `plugin-cfg.xml` must remain pointing at the members (from Step 3a).
+> `step2-dynamic-routing.sh` does **not** overwrite it.
 
 ```bash
 scripts/step2-dynamic-routing.sh
 ```
 
-**Expected state:** `http://localhost:8080/server-info/` still returns `200`; the controller
-now handles all routing decisions dynamically.
+**Expected state:** `http://localhost:8080/server-info/` still returns `200`. The controller
+now rewrites `plugin-cfg.xml` automatically — new members joining the collective are picked
+up within `RefreshInterval` (60s) with no IHS config changes.
 
 ---
 
