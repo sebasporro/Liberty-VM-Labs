@@ -196,27 +196,44 @@ member1 at `http://localhost:9081/server-info/`, member2 at `http://localhost:90
 
 ---
 
-### Step 3 — Configure IHS with Dynamic Routing
+### Step 3 — Configure IHS with WAS Plugin Routing
 
-Enable Liberty Dynamic Routing on the controller so that new members joining the collective
-are automatically picked up by IHS — no manual balancer config changes needed.
+The lab uses the Liberty WAS plugin (`mod_was_ap24_http.so`) for IHS routing.
+There are two sub-steps: static routing first, then dynamic routing.
 
-```bash
-# Configure IHS with the static balancer config (enables modules + adds include)
-scripts/start-apache.sh
+#### Step 3a — Static WAS plugin routing (Round Robin)
 
-# Enable dynamicRouting-1.0 on the controller, restart it, generate IHS dynamic config
-scripts/enable-dynamic-routing.sh
-```
-
-The script prints the exact `Include` change to make in `httpd.conf`. After making the change:
+Reset IHS to a clean baseline, then wire the plugin directly to the two members.
 
 ```bash
-apachectl graceful
+# Reset httpd.conf to clean baseline, remove any stale plugin-cfg.xml
+scripts/reset-ihs.sh
+
+# Write plugin-cfg.xml (member1:9081 + member2:9082), add WebSpherePluginConfig, start IHS
+scripts/step1-was-plugin.sh
 ```
 
-**Expected state:** `http://localhost:8080/server-info/` routes via the controller dynamically
-to member1 or member2.
+**Expected state:** `http://localhost:8080/server-info/` returns `200` and alternates
+between member1 (port 9081) and member2 (port 9082) on successive requests.
+
+```bash
+# Verify round robin
+for i in 1 2 3 4; do
+  curl -s http://localhost:8080/server-info/ | grep -o "PORT.*[0-9]\{4\}"
+done
+```
+
+#### Step 3b — Dynamic routing via controller
+
+Switches routing so the controller (`dynamicRouting-1.0`) manages member discovery
+automatically. New members joining the collective are picked up without any IHS config change.
+
+```bash
+scripts/step2-dynamic-routing.sh
+```
+
+**Expected state:** `http://localhost:8080/server-info/` still returns `200`; the controller
+now handles all routing decisions dynamically.
 
 ---
 
@@ -258,12 +275,11 @@ curl http://localhost:8080/server-info/   # IHS → dynamic routing
 
 ### Reset and Redeploy
 
-`reset-environment.sh` performs a **complete wipe** — stops all servers, removes all deployed
-instances, removes both runtimes (`wlp-26/`, `wlp-25/`), clears both packages, and restores
-IHS to its original state. After a reset the system is at a clean Step 1 baseline.
+**Full environment reset** — stops all servers, removes all deployed instances, both runtimes,
+and both packages. After a full reset the system is at a clean Step 1 baseline.
 
 ```bash
-# Wipe everything
+# Wipe everything (Liberty instances, runtimes, packages)
 scripts/reset-environment.sh
 
 # Rebuild Step 1 — both versions
@@ -278,9 +294,9 @@ scripts/03-build-package-25.sh
 scripts/install-controller.sh
 scripts/add-member-26.sh member1
 scripts/add-member-26.sh member2
-scripts/start-apache.sh
-scripts/enable-dynamic-routing.sh
-apachectl graceful
+scripts/reset-ihs.sh
+scripts/step1-was-plugin.sh
+scripts/step2-dynamic-routing.sh
 scripts/add-member-25.sh member3
 scripts/add-member-25.sh member4
 
@@ -290,6 +306,13 @@ scripts/07-validate.sh
 
 > **Note:** The `--full` flag is accepted for backwards compatibility but is a no-op —
 > a reset is always a full reset.
+
+**IHS-only reset** — use this when only IHS config needs to be cleaned up without
+touching Liberty instances:
+
+```bash
+scripts/reset-ihs.sh
+```
 
 ---
 
@@ -536,6 +559,79 @@ scripts/start-apache.sh
 
 ---
 
+### `scripts/reset-ihs.sh`  ⭐
+
+**Purpose:** Stops IHS and rewrites `httpd.conf` to a clean baseline with no plugin directives.
+Use this to recover from a broken IHS/plugin-cfg configuration without touching Liberty.
+
+Steps performed:
+1. Stops IHS if running
+2. Overwrites `httpd.conf` with a minimal clean config (loads `mod_was_ap24_http.so`, no `WebSpherePluginConfig`)
+3. Removes any stale `plugin-cfg.xml` from `$IHS_ROOT/conf/`
+
+**Usage:**
+```bash
+scripts/reset-ihs.sh
+```
+
+> **Note:** Always run this before `step1-was-plugin.sh` when troubleshooting IHS plugin issues.
+> Safe to run at any time — does not affect Liberty instances.
+
+---
+
+### `scripts/step1-was-plugin.sh`  ⭐
+
+**Purpose:** Configures the IHS WAS plugin for static Round Robin routing to Liberty member servers.
+
+Steps performed:
+1. Writes a clean `plugin-cfg.xml` to `$IHS_ROOT/conf/` pointing at member1:9081 and member2:9082 using HTTP only (no SSL/GSKit required)
+2. Adds `WebSpherePluginConfig` directive to `httpd.conf` (idempotent)
+3. Runs `apachectl configtest`
+4. Stops and starts IHS cleanly
+
+**Usage:**
+```bash
+scripts/step1-was-plugin.sh
+```
+
+**Prerequisite:** `scripts/reset-ihs.sh` should be run first to ensure a clean baseline.
+Member servers must be running on ports 9081 and 9082.
+
+**Verify:**
+```bash
+# Should alternate between port 9081 and 9082
+for i in 1 2 3 4; do
+  curl -s http://localhost:8080/server-info/ | grep -o "PORT.*[0-9]\{4\}"
+done
+```
+
+---
+
+### `scripts/step2-dynamic-routing.sh`  ⭐
+
+**Purpose:** Enables Liberty `dynamicRouting-1.0` on the controller and reconfigures the WAS plugin to use the controller as the single routing entry point.
+
+After this step, members joining or leaving the collective are automatically added to or
+removed from the routing table — no manual `plugin-cfg.xml` or IHS config changes needed.
+
+Steps performed:
+1. Validates controller and at least one member are running
+2. Adds `dynamic-routing.xml` dropin to `configDropins/overrides/` on the controller
+3. Restarts the controller and waits for `dynamicRouting-1.0` to load
+4. Rewrites `plugin-cfg.xml` to point at the controller (HTTP, port 9080) as the dynamic router
+5. Updates `WebSpherePluginConfig` in `httpd.conf`
+6. Restarts IHS and verifies `GET /server-info/` returns `200`
+
+**Usage:**
+```bash
+scripts/step2-dynamic-routing.sh
+```
+
+**Prerequisite:** `scripts/step1-was-plugin.sh` must have run successfully (IHS must be up
+and plugin configured). Controller and at least one member must be running.
+
+---
+
 ### `scripts/reset-environment.sh`  ⭐
 
 **Purpose:** Completely resets the lab back to a clean Phase 1 baseline in a single command.
@@ -707,15 +803,16 @@ be running.
 ### Legacy Build Scripts (04–06, 08)
 
 These scripts were used during initial lab construction and are retained for reference.
-Use the operational scripts above (`install-controller.sh`, `add-member-26.sh`, etc.) for
-day-to-day use.
+Use the operational scripts above for day-to-day use.
 
 | Script | Purpose |
 |--------|---------|
 | `04-deploy-instances.sh` | Batch deploy of controller + member1 + member2 from package |
 | `05-create-collective.sh` | Full collective setup (create + join + start all) |
 | `06-configure-apache.sh` | Prints IHS include instructions (informational) |
-| `08-enable-apache-routing.sh` | Original IHS setup script (superseded by `start-apache.sh`) |
+| `08-enable-apache-routing.sh` | Original IHS setup script (superseded by `reset-ihs.sh` + `step1-was-plugin.sh`) |
+| `start-apache.sh` | Legacy IHS start script (superseded by `reset-ihs.sh` + `step1-was-plugin.sh`) |
+| `enable-dynamic-routing.sh` | Legacy dynamic routing script (superseded by `step2-dynamic-routing.sh`) |
 
 ---
 
