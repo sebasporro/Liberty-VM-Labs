@@ -609,18 +609,19 @@ done
 
 ### `scripts/step2-dynamic-routing.sh`  ⭐
 
-**Purpose:** Enables Liberty `dynamicRouting-1.0` on the controller and reconfigures the WAS plugin to use the controller as the single routing entry point.
+**Purpose:** Enables Liberty `dynamicRouting-1.0` on the Collective Controller.
 
-After this step, members joining or leaving the collective are automatically added to or
-removed from the routing table — no manual `plugin-cfg.xml` or IHS config changes needed.
+How it works: the controller monitors collective membership and **rewrites `plugin-cfg.xml`**
+with the current live member list. The WAS plugin in IHS re-reads the file every
+`RefreshInterval` (60s). IHS still routes traffic directly to members — the controller
+manages the file, not the traffic.
 
 Steps performed:
 1. Validates controller and at least one member are running
 2. Adds `dynamic-routing.xml` dropin to `configDropins/overrides/` on the controller
 3. Restarts the controller and waits for `dynamicRouting-1.0` to load
-4. Rewrites `plugin-cfg.xml` to point at the controller (HTTP, port 9080) as the dynamic router
-5. Updates `WebSpherePluginConfig` in `httpd.conf`
-6. Restarts IHS and verifies `GET /server-info/` returns `200`
+4. Verifies `plugin-cfg.xml` is still pointing at members (does **not** overwrite it)
+5. Verifies `GET /server-info/` via IHS still returns `200`
 
 **Usage:**
 ```bash

@@ -1,21 +1,24 @@
 #!/bin/bash
 # =============================================================================
 # step2-dynamic-routing.sh
-# Enables Liberty Dynamic Routing on the Collective Controller and updates
-# plugin-cfg.xml so the controller handles all routing decisions automatically.
+# Enables Liberty Dynamic Routing on the Collective Controller.
 #
-# Architecture after this step:
-#   Browser → IHS:8080 → WAS plugin → controller:9080 (dynamicRouting-1.0)
-#                                           ↓  routes dynamically
-#                                    member1 / member2 / memberN
+# How Liberty dynamic routing works:
+#   - dynamicRouting-1.0 on the controller monitors collective membership
+#   - It periodically rewrites plugin-cfg.xml with the current live member list
+#   - The WAS plugin in IHS reads the updated file every RefreshInterval seconds
+#   - IHS still talks directly to members — the controller manages the file,
+#     not the traffic
+#
+# Architecture (unchanged from Step 1 — plugin still routes to members):
+#   Browser → IHS:8080 → mod_was_ap24_http.so → member1:9081 / member2:9082
+#                                ↑
+#               plugin-cfg.xml kept current by controller (dynamicRouting-1.0)
 #
 # What this script does:
 #   1. Adds dynamicRouting-1.0 feature to the controller via configDropins
 #   2. Restarts the controller and waits for it to be ready
-#   3. Rewrites plugin-cfg.xml to point at the controller as dynamic router
-#   4. Updates WebSpherePluginConfig in httpd.conf to the new file
-#   5. Restarts IHS
-#   6. Verifies end-to-end routing
+#   3. Verifies end-to-end routing still works (plugin-cfg.xml unchanged)
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -122,112 +125,28 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 3. Rewrite plugin-cfg.xml — controller as dynamic router (HTTP only)
+# 3. Verify plugin-cfg.xml still points at members (do NOT overwrite it)
 # ---------------------------------------------------------------------------
-echo "[3/6] Writing plugin-cfg.xml (controller as dynamic router)..."
+echo "[3/4] Checking plugin-cfg.xml..."
 
-cat > "${PLUGIN_CFG}" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!--
-  Liberty WAS Plugin — dynamic routing
-  All requests go to the controller (${CONTROLLER_HTTP}).
-  dynamicRouting-1.0 on the controller forwards to available members.
--->
-<Config ASDisableNagle="false" AcceptAllContent="false"
-        AppServerPortPreference="HostHeader" ChunkedResponse="false"
-        FIPSEnable="false" IISDisableNagle="false" IISPluginPriority="High"
-        IgnoreDNSFailures="false" RefreshInterval="60" ResponseChunkSize="64"
-        SSLConsolidatedConfig="false" TrustedProxyEnable="false"
-        VHostMatchingCompat="false">
+if [[ ! -f "${PLUGIN_CFG}" ]]; then
+    echo "ERROR: ${PLUGIN_CFG} not found."
+    echo "       Run scripts/step1-was-plugin.sh first."
+    exit 1
+fi
 
-    <Log LogLevel="Error" Name="${IHS_ROOT}/logs/plugin.log"/>
-
-    <Property Name="ESIEnable"                   Value="false"/>
-    <Property Name="ESIMaxCacheSize"              Value="1024"/>
-    <Property Name="ESIInvalidationMonitor"       Value="false"/>
-    <Property Name="ESIEnableRecursiveInclude"    Value="false"/>
-    <Property Name="ESIMaxRecursiveIncludeDepth"  Value="10"/>
-
-    <ServerCluster CloneSeparatorChange="false" GetDWLMTable="false"
-                   IgnoreAffinityRequests="true" LoadBalance="Round Robin"
-                   Name="LibertyCluster" PostSizeLimit="-1"
-                   RemoveSpecialHeaders="true" RetryInterval="60">
-
-        <Server CloneID="controller" ConnectTimeout="5" ExtendedHandshake="false"
-                MaxConnections="-1" Name="controller_${CONTROLLER_HTTP}"
-                ServerIOTimeout="900" WaitForContinue="false">
-            <Transport Hostname="localhost" Port="${CONTROLLER_HTTP}" Protocol="http"/>
-        </Server>
-
-        <PrimaryServers>
-            <Server Name="controller_${CONTROLLER_HTTP}"/>
-        </PrimaryServers>
-
-    </ServerCluster>
-
-    <UriGroup Name="LibertyCluster_URIs">
-        <Uri AffinityCookie="JSESSIONID" AffinityURLIdentifier="jsessionid" Name="/*"/>
-    </UriGroup>
-
-    <VirtualHostGroup Name="LibertyHosts">
-        <VirtualHost Name="*:8080"/>
-    </VirtualHostGroup>
-
-    <Route ServerCluster="LibertyCluster"
-           UriGroup="LibertyCluster_URIs"
-           VirtualHostGroup="LibertyHosts"/>
-
-</Config>
-EOF
-
-echo "      Written: ${PLUGIN_CFG}"
-
-# ---------------------------------------------------------------------------
-# 4. Ensure WebSpherePluginConfig in httpd.conf points to the right file
-# ---------------------------------------------------------------------------
-echo "[4/6] Ensuring WebSpherePluginConfig in httpd.conf..."
-
-if grep -q "^WebSpherePluginConfig" "${HTTPD_CONF}"; then
-    sed -i "s|^WebSpherePluginConfig .*|WebSpherePluginConfig ${PLUGIN_CFG}|" "${HTTPD_CONF}"
-    echo "      WebSpherePluginConfig: updated"
+if grep -q "Protocol=\"http\"" "${PLUGIN_CFG}" && ! grep -q "CloneID=\"controller\"" "${PLUGIN_CFG}"; then
+    echo "      plugin-cfg.xml: OK (pointing at members)"
 else
-    echo "" >> "${HTTPD_CONF}"
-    echo "# WAS plugin routing — added by step2-dynamic-routing.sh" >> "${HTTPD_CONF}"
-    echo "WebSpherePluginConfig ${PLUGIN_CFG}" >> "${HTTPD_CONF}"
-    echo "      WebSpherePluginConfig: added"
+    echo "WARNING: plugin-cfg.xml may be pointing at the controller."
+    echo "         Run scripts/step1-was-plugin.sh to restore correct member entries."
 fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 5. Config test + restart IHS
+# 4. Verify end-to-end routing
 # ---------------------------------------------------------------------------
-echo "[5/6] Restarting IHS..."
-RESULT=$("${APACHECTL}" configtest 2>&1)
-if ! echo "${RESULT}" | grep -q "Syntax OK"; then
-    echo "ERROR: httpd.conf syntax error:"
-    echo "${RESULT}"
-    exit 1
-fi
-echo "      Syntax OK"
-
-if ss -tlnp 2>/dev/null | grep -q ":8080 "; then
-    "${APACHECTL}" stop && sleep 2
-fi
-"${APACHECTL}" start
-sleep 1
-
-if ! ss -tlnp 2>/dev/null | grep -q ":8080 "; then
-    echo "ERROR: IHS failed to start. Check: ${IHS_ROOT}/logs/error_log"
-    tail -20 "${IHS_ROOT}/logs/error_log"
-    exit 1
-fi
-echo "      IHS running on port 8080"
-echo ""
-
-# ---------------------------------------------------------------------------
-# 6. Verify end-to-end routing
-# ---------------------------------------------------------------------------
-echo "[6/6] Verifying routing..."
+echo "[4/4] Verifying routing..."
 sleep 2
 
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/server-info/ 2>/dev/null)
@@ -236,6 +155,10 @@ echo "      GET /server-info/ via IHS: HTTP ${HTTP_CODE}"
 if [[ "${HTTP_CODE}" == "200" ]]; then
     echo ""
     echo "=== Step 2 complete — Dynamic routing is active ==="
+    echo ""
+    echo "  The controller now monitors collective membership and keeps"
+    echo "  plugin-cfg.xml current. New members are picked up automatically"
+    echo "  within RefreshInterval (60s) — no IHS config changes needed."
 else
     echo ""
     echo "  HTTP ${HTTP_CODE} — check logs:"
@@ -245,9 +168,7 @@ else
 fi
 
 echo ""
-echo "  Controller: http://localhost:${CONTROLLER_HTTP}/server-info/"
-echo "  Admin Center: https://localhost:9443/adminCenter  (admin / admin)"
-echo "  Plugin log: ${IHS_ROOT}/logs/plugin.log"
-echo ""
-echo "  Members joining the collective are now routed automatically."
+echo "  Admin Center:  https://localhost:9443/adminCenter  (admin / admin)"
+echo "  Plugin config: ${PLUGIN_CFG}"
+echo "  Plugin log:    ${IHS_ROOT}/logs/plugin.log"
 echo ""
