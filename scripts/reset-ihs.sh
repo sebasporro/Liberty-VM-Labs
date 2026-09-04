@@ -1,0 +1,83 @@
+#!/bin/bash
+# =============================================================================
+# reset-ihs.sh
+# Stops IHS and rewrites httpd.conf to a clean baseline.
+# Removes all WAS plugin directives so the lab can start fresh.
+# =============================================================================
+
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
+HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
+APACHECTL="${IHS_ROOT}/bin/apachectl"
+
+echo ""
+echo "=== Reset IHS to clean baseline ==="
+echo ""
+
+# 1. Stop IHS if running
+if "${APACHECTL}" status &>/dev/null || ss -tlnp 2>/dev/null | grep -q ":8080 "; then
+    echo "[1/3] Stopping IHS..."
+    "${APACHECTL}" stop 2>/dev/null
+    sleep 2
+else
+    echo "[1/3] IHS not running — skipping stop"
+fi
+
+# 2. Overwrite httpd.conf with a clean baseline (no plugin directives)
+echo "[2/3] Writing clean httpd.conf..."
+cat > "${HTTPD_CONF}" << 'EOF'
+# =============================================================================
+# IBM HTTP Server — clean baseline
+# Reset by reset-ihs.sh
+# =============================================================================
+ServerRoot "/home/itzuser/IBM/HTTPServer"
+Listen 8080
+ServerName localhost:8080
+ServerAdmin admin@localhost
+
+LoadModule mpm_worker_module      modules/mod_mpm_worker.so
+LoadModule authz_core_module      modules/mod_authz_core.so
+LoadModule log_config_module      modules/mod_log_config.so
+LoadModule unixd_module           modules/mod_unixd.so
+LoadModule dir_module             modules/mod_dir.so
+LoadModule mime_module            modules/mod_mime.so
+
+# WAS plugin — enabled by lab scripts
+LoadModule was_ap24_module        modules/mod_was_ap24_http.so
+
+User itzuser
+Group itzuser
+
+DocumentRoot "/home/itzuser/IBM/HTTPServer/htdocs"
+<Directory "/home/itzuser/IBM/HTTPServer/htdocs">
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    Require all granted
+</Directory>
+
+ErrorLog  "logs/error_log"
+LogLevel  warn
+LogFormat "%h %l %u %t \"%r\" %>s %b" common
+CustomLog "logs/access_log" common
+
+TypesConfig conf/mime.types
+EOF
+
+echo "      Written: ${HTTPD_CONF}"
+
+# 3. Remove any stale plugin-cfg.xml from IHS conf dir
+if [[ -f "${IHS_ROOT}/conf/plugin-cfg.xml" ]]; then
+    rm -f "${IHS_ROOT}/conf/plugin-cfg.xml"
+    echo "[3/3] Removed: ${IHS_ROOT}/conf/plugin-cfg.xml"
+else
+    echo "[3/3] No plugin-cfg.xml to remove"
+fi
+
+echo ""
+echo "=== IHS reset complete ==="
+echo "    httpd.conf: ${HTTPD_CONF}"
+echo "    No WebSpherePluginConfig, no plugin-cfg.xml"
+echo ""
+echo "  Next steps:"
+echo "    Step 1 — static WAS plugin routing:  bash scripts/step1-was-plugin.sh"
+echo "    Step 2 — enable dynamic routing:     bash scripts/step2-dynamic-routing.sh"
+echo ""
