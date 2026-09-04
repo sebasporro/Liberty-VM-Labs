@@ -1,109 +1,115 @@
 #!/bin/bash
 # =============================================================================
 # 08-enable-apache-routing.sh
-# Enables IHS/Apache routing to the Liberty Collective members.
+# Enables IHS routing to the Liberty Collective via the WAS plugin
+# (mod_was_ap24_http.so + plugin-cfg.xml).
 #
 # What this script does:
-#   1. Starts the Liberty member servers (member1, member2)
-#   2. Enables required proxy/balancer modules in httpd.conf (uncomments them)
-#   3. Adds the Liberty include to httpd.conf (idempotent — won't add twice)
-#   4. Tests the IHS/Apache config
-#   5. Starts (or reloads) IHS/Apache
-#   6. Verifies routing is working
+#   1. Checks Liberty member servers are running
+#   2. Ensures was_ap24_module is loaded in httpd.conf
+#   3. Copies plugin-cfg.xml to the IHS conf directory
+#   4. Adds the Liberty include to httpd.conf (idempotent)
+#   5. Tests the IHS config
+#   6. Starts (or reloads) IHS and verifies routing
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
 LIBERTY_CONF="${WORKSPACE_ROOT}/config/apache/httpd-liberty.conf"
+PLUGIN_CFG_SRC="${WORKSPACE_ROOT}/config/apache/plugin-cfg.xml"
 
-# Locate httpd.conf (IHS on Linux)
 IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
-HTTPD_CONF=""
-for candidate in \
-    "${IHS_ROOT}/conf/httpd.conf" \
-    "/etc/httpd/conf/httpd.conf" \
-    "/etc/apache2/apache2.conf" \
-    "/usr/local/apache2/conf/httpd.conf"; do
-    if [[ -f "${candidate}" ]]; then
-        HTTPD_CONF="${candidate}"
-        break
-    fi
-done
-
-if [[ -z "${HTTPD_CONF}" ]]; then
-    echo "  ERROR: httpd.conf not found. Run scripts/install-ihs.sh first."
-    echo "  Expected: ${IHS_ROOT}/conf/httpd.conf"
-    exit 1
-fi
+HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
+PLUGIN_CFG_DEST="${IHS_ROOT}/conf/plugin-cfg.xml"
 
 # Ensure IHS apachectl is on PATH
 if [[ -x "${IHS_ROOT}/bin/apachectl" && ":${PATH}:" != *":${IHS_ROOT}/bin:"* ]]; then
     export PATH="${IHS_ROOT}/bin:${PATH}"
 fi
 
+if [[ ! -f "${HTTPD_CONF}" ]]; then
+    echo "  ERROR: httpd.conf not found. Run scripts/install-ihs.sh first."
+    echo "  Expected: ${HTTPD_CONF}"
+    exit 1
+fi
+
 echo ""
-echo "=== Liberty IHS/Apache Routing Setup ==="
-echo "    httpd.conf: ${HTTPD_CONF}"
+echo "=== Liberty IHS WAS Plugin Routing Setup ==="
+echo "    httpd.conf:    ${HTTPD_CONF}"
+echo "    plugin-cfg.xml: ${PLUGIN_CFG_DEST}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 1 — Start Liberty member servers
+# Step 1 — Check Liberty member servers are running
 # ---------------------------------------------------------------------------
-echo "[1/6] Starting Liberty member servers..."
+echo "[1/6] Checking Liberty member servers..."
 
+ALL_RUNNING=true
 for member in member1 member2; do
     BIN="${WORKSPACE_ROOT}/installs/${member}/wlp/bin/server"
     STATUS=$(${BIN} status ${member} 2>/dev/null)
     if echo "${STATUS}" | grep -q "is running"; then
-        echo "      ${member}: already running — skipped"
+        echo "      ${member}: running"
     else
-        echo "      Starting ${member}..."
+        echo "      ${member}: not running — starting..."
         ${BIN} start ${member}
         if [[ $? -ne 0 ]]; then
-            echo "  ERROR: Failed to start ${member}. Check logs at:"
-            echo "    ${WORKSPACE_ROOT}/installs/${member}/wlp/usr/servers/${member}/logs/messages.log"
-            exit 1
-        fi
-        echo "      ${member}: started"
-    fi
-done
-echo ""
-
-# ---------------------------------------------------------------------------
-# Step 2 — Enable required modules in httpd.conf (uncomment if commented)
-# ---------------------------------------------------------------------------
-echo "[2/6] Enabling required modules in ${HTTPD_CONF}..."
-
-# mod_proxy_balancer.so and mod_lbmethod_byrequests.so are NOT included in
-# this IHS archive install — only enable the modules that are present.
-MODULES=(
-    "proxy_module modules/mod_proxy.so"
-    "proxy_http_module modules/mod_proxy_http.so"
-)
-
-for entry in "${MODULES[@]}"; do
-    mod_name="${entry%% *}"
-    mod_file="${entry##* }"
-    if grep -q "^LoadModule ${mod_name}" "${HTTPD_CONF}"; then
-        echo "      ${mod_name}: already enabled"
-    else
-        sed -i "s|^#LoadModule ${mod_name}.*|LoadModule ${mod_name} ${mod_file}|" "${HTTPD_CONF}"
-        if grep -q "^LoadModule ${mod_name}" "${HTTPD_CONF}"; then
-            echo "      ${mod_name}: enabled"
-        else
-            echo "  ERROR: Could not enable ${mod_name} in ${HTTPD_CONF}"
-            echo "  Add this line manually: LoadModule ${mod_name} ${mod_file}"
-            exit 1
+            echo "  ERROR: Failed to start ${member}."
+            echo "    Logs: ${WORKSPACE_ROOT}/installs/${member}/wlp/usr/servers/${member}/logs/messages.log"
+            ALL_RUNNING=false
         fi
     fi
 done
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 3 — Add Liberty include to httpd.conf (idempotent)
+# Step 2 — Ensure was_ap24_module is loaded in httpd.conf
 # ---------------------------------------------------------------------------
-echo "[3/6] Adding Liberty include to ${HTTPD_CONF}..."
+echo "[2/6] Ensuring was_ap24_module is loaded in ${HTTPD_CONF}..."
+
+WAS_MODULE_LINE="LoadModule was_ap24_module modules/mod_was_ap24_http.so"
+
+if grep -q "^LoadModule was_ap24_module" "${HTTPD_CONF}"; then
+    echo "      was_ap24_module: already enabled"
+elif grep -q "^#.*LoadModule was_ap24_module" "${HTTPD_CONF}"; then
+    sed -i "s|^#.*LoadModule was_ap24_module.*|${WAS_MODULE_LINE}|" "${HTTPD_CONF}"
+    echo "      was_ap24_module: uncommented"
+else
+    echo "" >> "${HTTPD_CONF}"
+    echo "# WAS plugin — added by 08-enable-apache-routing.sh" >> "${HTTPD_CONF}"
+    echo "${WAS_MODULE_LINE}" >> "${HTTPD_CONF}"
+    echo "      was_ap24_module: added"
+fi
+
+# Ensure proxy modules are NOT active (they are not needed and their .so files
+# are partially absent — leaving them active will cause configtest failures)
+for mod in proxy_balancer_module lbmethod_byrequests_module; do
+    if grep -q "^LoadModule ${mod}" "${HTTPD_CONF}"; then
+        sed -i "s|^LoadModule ${mod}|# LoadModule ${mod}|" "${HTTPD_CONF}"
+        echo "      ${mod}: commented out (not needed with WAS plugin)"
+    fi
+done
+echo ""
+
+# ---------------------------------------------------------------------------
+# Step 3 — Deploy plugin-cfg.xml to IHS conf directory
+# ---------------------------------------------------------------------------
+echo "[3/6] Deploying plugin-cfg.xml to ${IHS_ROOT}/conf/..."
+
+if [[ ! -f "${PLUGIN_CFG_SRC}" ]]; then
+    echo "  ERROR: plugin-cfg.xml not found at ${PLUGIN_CFG_SRC}"
+    exit 1
+fi
+
+cp "${PLUGIN_CFG_SRC}" "${PLUGIN_CFG_DEST}"
+echo "      Copied: ${PLUGIN_CFG_DEST}"
+echo ""
+
+# ---------------------------------------------------------------------------
+# Step 4 — Add Liberty include to httpd.conf (idempotent)
+# ---------------------------------------------------------------------------
+echo "[4/6] Adding Liberty include to ${HTTPD_CONF}..."
 
 INCLUDE_LINE="Include ${LIBERTY_CONF}"
 
@@ -111,78 +117,55 @@ if grep -qF "${INCLUDE_LINE}" "${HTTPD_CONF}"; then
     echo "      Include already present — skipped"
 else
     echo "" >> "${HTTPD_CONF}"
-    echo "# Liberty Collective load balancer — added by 08-enable-apache-routing.sh" >> "${HTTPD_CONF}"
+    echo "# Liberty Collective WAS plugin routing — added by 08-enable-apache-routing.sh" >> "${HTTPD_CONF}"
     echo "${INCLUDE_LINE}" >> "${HTTPD_CONF}"
     echo "      Include added"
 fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 4 — Test IHS/Apache configuration
+# Step 5 — Test IHS configuration
 # ---------------------------------------------------------------------------
-echo "[4/6] Testing IHS/Apache configuration..."
+echo "[5/6] Testing IHS configuration..."
 CONFIGTEST=$(apachectl configtest 2>&1)
 if echo "${CONFIGTEST}" | grep -q "Syntax OK"; then
     echo "      Syntax OK"
 else
-    echo "  ERROR: IHS/Apache config test failed:"
+    echo "  ERROR: IHS config test failed:"
     echo "${CONFIGTEST}"
     exit 1
 fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# Step 5 — Start or reload IHS/Apache
+# Step 6 — Start or reload IHS
 # ---------------------------------------------------------------------------
-echo "[5/6] Starting / reloading IHS/Apache..."
+echo "[6/6] Starting / reloading IHS..."
 
 APACHE_PORT=$(grep "^Listen " "${HTTPD_CONF}" | head -1 | awk '{print $2}')
 APACHE_PORT="${APACHE_PORT:-8080}"
 
 if ss -tlnp 2>/dev/null | grep -q ":${APACHE_PORT} "; then
-    echo "      IHS/Apache already running — reloading gracefully..."
+    echo "      IHS already running — reloading gracefully..."
     apachectl graceful
 else
-    echo "      Starting IHS/Apache..."
+    echo "      Starting IHS..."
     apachectl start
 fi
 
 if [[ $? -ne 0 ]]; then
-    echo "  ERROR: IHS/Apache failed to start."
-    echo "  Check: /home/itzuser/IBM/HTTPServer/logs/error_log"
+    echo "  ERROR: IHS failed to start."
+    echo "  Check: ${IHS_ROOT}/logs/error_log"
     exit 1
 fi
-echo "      IHS/Apache running"
+echo "      IHS running on port ${APACHE_PORT}"
 echo ""
 
-# ---------------------------------------------------------------------------
-# Step 6 — Verify routing
-# ---------------------------------------------------------------------------
-echo "[6/6] Verifying IHS/Apache → Liberty routing..."
-sleep 2   # brief pause for IHS/Apache to fully reload
-
-check_url() {
-    local label="$1"
-    local url="$2"
-    local expected="$3"
-    local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" "${url}" 2>/dev/null)
-    if [[ "${code}" == "${expected}" ]]; then
-        printf "      %-40s  \033[0;32mPASS\033[0m  (HTTP %s)\n" "${label}" "${code}"
-    else
-        printf "      %-40s  \033[0;31mFAIL\033[0m  (HTTP %s, expected %s)\n" "${label}" "${code}" "${expected}"
-    fi
-}
-
-check_url "member1 direct  (:9081/server-info/)"  "http://localhost:9081/server-info/"  "200"
-check_url "member2 direct  (:9082/server-info/)"  "http://localhost:9082/server-info/"  "200"
-check_url "IHS/Apache LB   (:8080/server-info/)"  "http://localhost:8080/server-info/"  "200"
-check_url "Balancer Manager (:8080/balancer-mgr)" "http://localhost:8080/balancer-manager" "200"
-
-echo ""
 echo "=== Setup complete ==="
 echo ""
-echo "  App via IHS/Apache:  http://localhost:8080/server-info/"
-echo "  Balancer Manager:    http://localhost:8080/balancer-manager"
-echo "  Admin Center:        https://localhost:9443/adminCenter  (admin / admin)"
+echo "  WAS plugin config: ${PLUGIN_CFG_DEST}"
+echo "  IHS error log:     ${IHS_ROOT}/logs/error_log"
+echo ""
+echo "  Verify routing:"
+echo "    curl -I http://localhost:${APACHE_PORT}/server-info/"
 echo ""

@@ -10,7 +10,7 @@
         IISPluginPriority="High" IgnoreDNSFailures="false" RefreshInterval="60"
         ResponseChunkSize="64" SSLConsolidatedConfig="false" TrustedProxyEnable="false"
         VHostMatchingCompat="false">
-    <Log LogLevel="Error" Name="/Users/sebastianporro/Documents/2026/ITZ/Liberty-VM-Labs/config/apache/plugin.log"/>
+    <Log LogLevel="Error" Name="/home/itzuser/Liberty-VM-Labs/config/apache/plugin.log"/>
     <Property Name="ESIEnable" Value="false"/>
     <Property Name="ESIMaxCacheSize" Value="1024"/>
     <Property Name="ESIInvalidationMonitor" Value="false"/>
@@ -24,8 +24,8 @@
                 MaxConnections="-1" Name="controller_localhost_9443"
                 ServerIOTimeout="900" WaitForContinue="false">
             <Transport Hostname="localhost" Port="9443" Protocol="https">
-                <Property Name="keyring" Value="/Users/sebastianporro/Documents/2026/ITZ/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/resources/security/key.p12"/>
-                <Property Name="stashfile" Value="/Users/sebastianporro/Documents/2026/ITZ/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/resources/security/key.p12"/>
+                <Property Name="keyring" Value="/home/itzuser/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/resources/security/key.p12"/>
+                <Property Name="stashfile" Value="/home/itzuser/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/resources/security/key.p12"/>
             </Transport>
         </Server>
         <PrimaryServers>
