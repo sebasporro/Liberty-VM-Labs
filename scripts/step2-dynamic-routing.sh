@@ -421,14 +421,19 @@ IHS_HTTP_PORT=8080
 # wrong ports, then inject correct ones. We do this unconditionally so that
 # re-runs always produce a consistent result regardless of what was injected
 # in a previous run.
-python3 - "${GENERATED_CFG}" "${IHS_HTTP_PORT}" <<'PYEOF'
+python3 - "${GENERATED_CFG}" "${IHS_HTTP_PORT}" "${IHS_ROOT}" <<'PYEOF'
 import sys, re
 
-cfg_path = sys.argv[1]
-port     = sys.argv[2]
+cfg_path  = sys.argv[1]
+port      = sys.argv[2]
+ihs_root  = sys.argv[3]
 
 with open(cfg_path) as f:
     xml = f.read()
+
+# Set LogLevel="Stats" so plugin.log captures every backend connection
+# attempt — essential for diagnosing transport/protocol mismatches.
+xml = re.sub(r'(<Log\b[^>]*\bLogLevel=")[^"]*(")', r'\1Stats\2', xml)
 
 # Remove any previously injected or generated VirtualHostGroup / UriGroup /
 # Route blocks so we can replace them cleanly.
@@ -455,7 +460,7 @@ xml = xml.replace('</Config>', injection + '</Config>')
 with open(cfg_path, 'w') as f:
     f.write(xml)
 
-print(f"  Patched plugin-cfg.xml: VirtualHostGroup *:{port}, UriGroup /*, Route IntelligentManagement=true")
+print(f"  Patched plugin-cfg.xml: VirtualHostGroup *:{port}, UriGroup /*, Route IntelligentManagement=true, LogLevel=Stats")
 PYEOF
 
 if [[ $? -ne 0 ]]; then
@@ -531,8 +536,8 @@ done
 
 echo "  GET /server-info/ via IHS → HTTP ${HTTP_CODE}"
 echo ""
-echo "  Last 20 lines of plugin log:"
-tail -20 "${IHS_ROOT}/logs/plugin.log" 2>/dev/null | sed 's/^/    /' || echo "    (plugin.log not found)"
+echo "  Last 50 lines of plugin log (LogLevel=Stats):"
+tail -50 "${IHS_ROOT}/logs/plugin.log" 2>/dev/null | sed 's/^/    /' || echo "    (plugin.log not found)"
 echo ""
 
 if [[ "${HTTP_CODE}" == "200" ]]; then
