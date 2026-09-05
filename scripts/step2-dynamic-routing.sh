@@ -349,8 +349,22 @@ echo ""
 
 # ---------------------------------------------------------------------------
 # 5. Install plugin-cfg.xml, set WebSpherePluginConfig, restart IHS
+#
+# dynamicRouting setup generates plugin-cfg.xml without a <VirtualHostGroup>
+# when the web server ports default to 80/443. IHS in this lab listens on
+# 8080. Without a VirtualHostGroup for *:8080 the WAS plugin does not bind
+# Intelligent Management routing to that port.
+# Inject the missing stanza before </Config>.
 # ---------------------------------------------------------------------------
 echo "[5/5] Installing plugin-cfg.xml and restarting IHS..."
+
+IHS_HTTP_PORT=8080
+
+# Inject VirtualHostGroup + Route for port 8080 if not already present
+if ! grep -q "VirtualHostGroup" "${GENERATED_CFG}" 2>/dev/null; then
+    sed -i "s|</Config>|<VirtualHostGroup Name=\"default_vhosts\">\n  <VirtualHost Name=\"*:${IHS_HTTP_PORT}\"/>\n</VirtualHostGroup>\n<Route VirtualHostGroup=\"default_vhosts\"/>\n</Config>|" "${GENERATED_CFG}"
+    echo "  Injected VirtualHostGroup *:${IHS_HTTP_PORT} into plugin-cfg.xml"
+fi
 
 cp "${GENERATED_CFG}" "${PLUGIN_CFG}"
 echo "  Installed: ${PLUGIN_CFG}"

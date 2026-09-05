@@ -116,11 +116,14 @@ scripts/install-ihs.sh
 
 This script:
 1. Removes any previous IHS install at `/home/itzuser/IBM/HTTPServer`
-2. Extracts the IHS archive ZIP from `/home/itzuser/software/IHS/` → moves it into place
-3. Installs the WAS plugin (`mod_was_ap24_http.so`) into `modules/`
-4. Writes a baseline `httpd.conf`, `logs/`, and `htdocs/` (the ARCHIVE ZIP ships none of these)
-5. Generates an `apachectl` wrapper (the ARCHIVE format ships `httpd` only — no `apachectl`)
-6. Appends `/home/itzuser/IBM/HTTPServer/bin` to `~/.bashrc`
+2. Extracts `9.0.5-WS-IHS-ARCHIVE-linux-x86_64-FP025.zip` from `/home/itzuser/software/IHS/` → moves it into place
+3. Patches `@@SERVERROOT@@` and `@@SHLIBPATH_ENVAR@@` tokens in `bin/` scripts (the ARCHIVE ZIP ships these unresolved; IBM IM substitutes them — we replicate that here)
+4. Creates `gsk8 → .gsk8` symlink (GSKit binaries are stored in a hidden `.gsk8/` directory in the ARCHIVE but wrapper scripts reference `gsk8/`)
+5. Sets execute permission on GSKit binaries (shipped as `644` in the ARCHIVE)
+6. Installs the WAS plugin (`mod_was_ap24_http.so`) into `modules/`
+7. Writes a baseline `httpd.conf`, `logs/`, and `htdocs/` (the ARCHIVE ZIP ships none of these)
+8. Generates an `apachectl` wrapper (the ARCHIVE format ships `httpd` only — no `apachectl`)
+9. Appends `/home/itzuser/IBM/HTTPServer/bin` to `~/.bashrc`
 
 Then reload PATH in your current terminal and verify:
 
@@ -134,6 +137,11 @@ apachectl -v
 > ```bash
 > export IHS_INSTALLER_DIR=/path/to/dir/containing/ihs-zip
 > scripts/install-ihs.sh
+> ```
+
+> **Already have IHS installed from a previous ZIP?** Run the patch script instead of reinstalling:
+> ```bash
+> scripts/patch-ihs-serverroot.sh
 > ```
 
 > **To stop IHS** at any point: `apachectl stop`
@@ -604,22 +612,24 @@ done
 
 ### `scripts/step2-dynamic-routing.sh`  ⭐
 
-**Purpose:** Enables Liberty Dynamic Routing — `mod_was_ap24_http.so` polls the controller's
-live `/wr` endpoint (HTTP port 9080) to get the current member list instead of reading a
-static `plugin-cfg.xml`. All collective members are routed automatically.
+**Purpose:** Enables native Liberty **Intelligent Management** dynamic routing.
+`mod_was_ap24_http.so` connects to the controller's `/ibm/api/dynamicRouting` endpoint
+(HTTPS 9443) and continuously receives the live member routing table — no static
+`plugin-cfg.xml` regeneration needed when members join or leave.
 
 How it works:
-- `dynamicRouting-1.0` activates the `/wr` routing endpoint on the controller HTTP port
-- `dynamicRouting setup` connects to the controller via **HTTPS (9443)** to generate a `plugin-cfg.xml` pointing at `controller:9080/wr`; requires `--keystorePassword` (matches `keystore.password` in `bootstrap.properties`) and `--webServerNames` (web server registration name, default `webserver1`)
-- The plugin calls `/wr` every `RefreshInterval` (60 s) to get the live member routing table
-- No GSKit keystore required — `/wr` is served over plain HTTP
+- `dynamicRouting-1.0` + `restConnector-2.0` are enabled on the controller
+- `dynamicRouting setup` (Liberty CLI) connects via HTTPS and generates `plugin-cfg.xml` with an `<IntelligentManagement>` stanza and `plugin-key.p12` (PKCS12 keystore)
+- `gskcapicmd` converts `plugin-key.p12` → CMS `plugin-key.kdb` (required format for the WAS plugin)
+- `plugin-key.kdb` + `.sth` are placed at `$IHS_ROOT/config/webserver1/` — the exact path Liberty embeds as `Keyfile` in `plugin-cfg.xml`
+- `plugin-cfg.xml` is installed to `$IHS_ROOT/conf/`; IHS is restarted
 
 Steps performed:
-1. Pre-flight: verifies controller (HTTP 9080), at least one member, `mod_was_ap24_http.so`; **removes any stale `collective-join.xml` from the controller's `configDropins/overrides/`** — if present it loads `collectiveMember-1.0` alongside `collectiveController-1.0`, which prevents the `DynamicRouting` MBean from registering and causes `CWWKX0217E`
-2. Always (re)writes `dynamic-routing.xml` dropin with `dynamicRouting-1.0` + `restConnector-2.0`
-3. Restarts controller; waits for `CWWKF0011I`; confirms both features via `CWWKF0012I` (authoritative activation message); waits 5 s for MBean registration before calling setup
-4. Runs `dynamicRouting setup --port=9443 --keystorePassword=<pass> --webServerNames=webserver1` → generates `plugin-cfg.xml` under `<pluginInstallRoot>/config/webserver1/`
-5. Copies `plugin-cfg.xml` to `$IHS_ROOT/conf/`; sets `WebSpherePluginConfig`; starts IHS
+1. Pre-flight: verifies `dynamicRouting` binary, `gskcapicmd` functional, controller running, no stale `collective-join.xml` on the controller
+2. Writes `dynamic-routing.xml` dropin; restarts controller; hard-fails if `dynamicRouting-1.0` or `restConnector-2.0` don't confirm via `CWWKF0012I`; waits 5 s for MBean registration
+3. Runs `dynamicRouting setup --port=9443 --pluginInstallRoot=$IHS_ROOT --targetPath=<scratch> --webServerNames=webserver1`
+4. Runs `gskcapicmd -keydb -convert` (PKCS12 → CMS) + `-cert -setdefault`; places `.kdb`/`.sth`/`.rdb` at `$IHS_ROOT/config/webserver1/`
+5. Installs `plugin-cfg.xml`, sets `WebSpherePluginConfig`, restarts IHS, verifies HTTP 200
 
 **Usage:**
 ```bash
@@ -627,8 +637,8 @@ scripts/step2-dynamic-routing.sh
 ```
 
 **Prerequisites:**
-- `scripts/install-ihs.sh` completed (`mod_was_ap24_http.so` present)
-- Controller running on HTTP 9080 (`scripts/install-controller.sh`)
+- `scripts/install-ihs.sh` + `scripts/patch-ihs-serverroot.sh` completed (`gskcapicmd` functional)
+- Controller running on HTTPS 9443 (`scripts/install-controller.sh`)
 - At least one member joined to the collective (`scripts/add-member-26.sh`)
 
 ---
@@ -687,41 +697,11 @@ scripts/07-validate.sh
 
 ---
 
-### `scripts/enable-dynamic-routing.sh`  ⭐
+### `scripts/enable-dynamic-routing.sh`
 
-**Purpose:** Enables Liberty Dynamic Routing on the Collective Controller.
-
-Liberty Dynamic Routing (`dynamicRouting-1.0`) allows the collective controller to
-automatically manage request routing across registered members based on live health
-and collective membership — without manually updating IHS config when members
-are added or removed.
-
-Steps performed:
-1. Validates controller and at least one member are running
-2. Adds `dynamic-routing.xml` dropin to controller's `configDropins/overrides/`
-   (enables `dynamicRouting-1.0` feature)
-3. Restarts the controller to load the new feature
-4. Attempts to retrieve `plugin-cfg.xml` from the controller's routing API;
-   generates a static version if the API is not yet available
-5. Generates `config/apache/httpd-liberty-dynamic.conf` — an IHS config that
-   routes through the controller instead of directly to members
-6. Verifies the controller dynamic routing endpoint
-
-**Usage:**
-```bash
-scripts/enable-dynamic-routing.sh
-```
-
-After running, switch IHS from static to dynamic routing by updating `httpd.conf`:
-```
-# Change this:
-Include /path/to/config/apache/httpd-liberty.conf
-# To this:
-Include /path/to/config/apache/httpd-liberty-dynamic.conf
-```
-Then: `apachectl graceful`
-
-**Prerequisite:** Controller and at least one member must be running.
+> ⚠️ **Legacy script — superseded by `scripts/step2-dynamic-routing.sh`.**
+> This script used an older approach (mod_proxy routing through the controller HTTP port).
+> Use `step2-dynamic-routing.sh` for native Liberty Intelligent Management dynamic routing.
 
 ---
 
@@ -857,6 +837,15 @@ guidance covering:
 4. IHS routing failures (including `CWWKX0217E` DynamicRouting MBean not found, and `collectiveMember-1.0` accidentally loaded on the controller)
 5. SSL / keystore issues
 6. Collective communication failures
+
+**IHS ZIP patching issues** — if `gskcapicmd` fails after `install-ihs.sh`:
+```bash
+# The ARCHIVE ZIP ships with unresolved tokens and wrong permissions.
+# This script fixes all of them in-place (idempotent):
+scripts/patch-ihs-serverroot.sh
+```
+Fixes applied: `@@SHLIBPATH_ENVAR@@` → `LD_LIBRARY_PATH` in `gsk_envvars`;
+`gsk8 → .gsk8` symlink; `chmod +x gsk8/bin/gsk8capicmd_64`.
 
 **Quick diagnostics:**
 ```bash
