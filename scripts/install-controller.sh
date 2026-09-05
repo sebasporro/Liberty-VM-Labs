@@ -113,8 +113,8 @@ echo "[7/9] Initialising collective PKI (collective create)..."
     --keystorePassword="${KEYSTORE_PASS}" \
     --hostName=localhost \
     --createConfigFile="${OVERRIDES_DIR}/collective-create.xml" 2>&1 | tail -5
-
-if [[ $? -ne 0 ]]; then
+# PIPESTATUS[0] = exit code of 'collective create'; $? would capture 'tail' (always 0)
+if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     echo "  ERROR: collective create failed."
     echo "  Check: ${SERVER_DIR}/logs/messages.log"
     exit 1

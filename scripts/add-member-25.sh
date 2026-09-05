@@ -205,9 +205,10 @@ echo "[7/10] Joining collective (collective join)..."
     --createConfigFile="${OVERRIDES_DIR}/collective-join.xml" \
     --autoAcceptCertificates \
     --disableHostnameVerification 2>&1 | tail -5
-
-if [[ $? -ne 0 ]]; then
+# PIPESTATUS[0] = exit code of 'collective join'; $? would capture 'tail' (always 0)
+if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     echo "  ERROR: collective join failed."
+    echo "  Check: ${SERVER_DIR}/logs/messages.log"
     exit 1
 fi
 echo "      Joined (controllerHost=localhost)"
