@@ -48,13 +48,15 @@ DYNAMIC_ROUTING_BIN="${CTRL_WLP}/bin/dynamicRouting"
 OVERRIDES_DIR="${SERVER_DIR}/configDropins/overrides"
 MESSAGES_LOG="${SERVER_DIR}/logs/messages.log"
 
-# dynamicRouting setup writes output here
+# dynamicRouting setup writes output here (via --targetPath)
 SETUP_OUTPUT_DIR="${SERVER_DIR}/resources/security/plugin-setup"
 
 IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
 HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
 APACHECTL="${IHS_ROOT}/bin/apachectl"
 PLUGIN_CFG="${IHS_ROOT}/conf/plugin-cfg.xml"
+# gskcmd (IHS key management CLI) is needed to convert plugin-key.p12 → CMS .kdb
+GSKCMD="${IHS_ROOT}/bin/gskcapicmd"
 
 # Controller coordinates
 # NOTE: dynamicRouting setup connects on the HTTPS port (9443) — it uses the
@@ -248,6 +250,11 @@ echo "[4/5] Running dynamicRouting setup..."
 rm -rf "${SETUP_OUTPUT_DIR}"
 mkdir -p "${SETUP_OUTPUT_DIR}"
 
+# --pluginInstallRoot  : path embedded inside the generated plugin-cfg.xml so IHS
+#                        knows where its plugin root is at runtime. Per the docs this
+#                        is the IHS plugin root dir — we use IHS_ROOT here.
+# --targetPath         : controls where the command actually writes the output files.
+#                        Without this the files land in the current working directory.
 "${DYNAMIC_ROUTING_BIN}" setup \
     --host="${CONTROLLER_HOST}" \
     --port="${CONTROLLER_HTTPS}" \
@@ -255,7 +262,8 @@ mkdir -p "${SETUP_OUTPUT_DIR}"
     --password="${ADMIN_PASS}" \
     --keystorePassword="${KEYSTORE_PASS}" \
     --webServerNames="${WEB_SERVER_NAME}" \
-    --pluginInstallRoot="${SETUP_OUTPUT_DIR}" \
+    --pluginInstallRoot="${IHS_ROOT}" \
+    --targetPath="${SETUP_OUTPUT_DIR}" \
     --autoAcceptCertificates
 
 SETUP_RC=$?
@@ -266,15 +274,11 @@ if [[ ${SETUP_RC} -ne 0 ]]; then
 fi
 
 # Locate the generated plugin-cfg.xml.
-# Per the docs, dynamicRouting setup writes output to:
-#   ${pluginInstallRoot}/config/${webServerName}/plugin-cfg.xml
-# The exact name is plugin-cfg.xml when --webServerNames has one entry.
-# We check the expected path first, then fall back to a broader search.
-EXPECTED_CFG="${SETUP_OUTPUT_DIR}/config/${WEB_SERVER_NAME}/plugin-cfg.xml"
-echo "  Expected output: ${EXPECTED_CFG}"
-if [[ -f "${EXPECTED_CFG}" ]]; then
-    GENERATED_CFG="${EXPECTED_CFG}"
-else
+# --targetPath was set to ${SETUP_OUTPUT_DIR} so the file lands there directly.
+# With a single --webServerNames entry the filename is plugin-cfg.xml.
+GENERATED_CFG="${SETUP_OUTPUT_DIR}/plugin-cfg.xml"
+echo "  Expected output: ${GENERATED_CFG}"
+if [[ ! -f "${GENERATED_CFG}" ]]; then
     # Fall back: search the whole output dir tree
     GENERATED_CFG=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-cfg.xml" 2>/dev/null | head -1)
 fi
@@ -286,12 +290,16 @@ if [[ -z "${GENERATED_CFG}" || ! -f "${GENERATED_CFG}" ]]; then
 fi
 echo "  Generated: ${GENERATED_CFG}"
 
-# Also locate plugin-key.p12 — lives alongside plugin-cfg.xml
+# Locate plugin-key.p12 — written to the same directory as plugin-cfg.xml
 GENERATED_KEY=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-key.p12" 2>/dev/null | head -1)
 echo ""
 
 # ---------------------------------------------------------------------------
-# 5. Install plugin-cfg.xml into IHS, set WebSpherePluginConfig, restart IHS
+# 5. Install plugin-cfg.xml + keystore into IHS, restart IHS
+#
+# The WAS plugin requires the keystore in CMS (.kdb) format, NOT PKCS12.
+# dynamicRouting setup emits a PKCS12 plugin-key.p12; we convert it to CMS
+# using gskcmd (ships with IHS) before copying to the IHS conf directory.
 # ---------------------------------------------------------------------------
 echo "[5/5] Installing plugin-cfg.xml and restarting IHS..."
 
@@ -299,16 +307,37 @@ echo "[5/5] Installing plugin-cfg.xml and restarting IHS..."
 cp "${GENERATED_CFG}" "${PLUGIN_CFG}"
 echo "  Installed: ${PLUGIN_CFG}"
 
-# Install plugin-key.p12 alongside plugin-cfg.xml.
-# dynamicRouting setup generates a PKCS12 keystore that the WAS plugin uses to
-# authenticate to the controller's /wr endpoint.  The plugin reads it from the
-# same directory as plugin-cfg.xml.
-PLUGIN_KEY="${IHS_ROOT}/conf/plugin-key.p12"
-if [[ -n "${GENERATED_KEY}" && -f "${GENERATED_KEY}" ]]; then
-    cp "${GENERATED_KEY}" "${PLUGIN_KEY}"
-    echo "  Installed: ${PLUGIN_KEY}"
+# Convert plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS) required by the WAS plugin.
+PLUGIN_KEY_KDB="${IHS_ROOT}/conf/plugin-key.kdb"
+if [[ -n "${GENERATED_KEY}" && -f "${GENERATED_KEY}" && -x "${GSKCMD}" ]]; then
+    # Remove any leftover CMS files from a previous run
+    rm -f "${IHS_ROOT}/conf/plugin-key.kdb" \
+          "${IHS_ROOT}/conf/plugin-key.sth" \
+          "${IHS_ROOT}/conf/plugin-key.rdb"
+
+    "${GSKCMD}" -keydb -convert \
+        -pw "${KEYSTORE_PASS}" \
+        -db "${GENERATED_KEY}" \
+        -old_format pkcs12 \
+        -target "${PLUGIN_KEY_KDB}" \
+        -new_format cms \
+        -stash
+    CONV_RC=$?
+    if [[ ${CONV_RC} -ne 0 ]]; then
+        echo "  ERROR: gskcapicmd keydb convert failed (exit ${CONV_RC})"
+        exit 1
+    fi
+
+    "${GSKCMD}" -cert -setdefault \
+        -pw "${KEYSTORE_PASS}" \
+        -db "${PLUGIN_KEY_KDB}" \
+        -label default
+    echo "  Keystore: ${PLUGIN_KEY_KDB} (CMS, with .sth stash)"
+elif [[ -z "${GENERATED_KEY}" || ! -f "${GENERATED_KEY}" ]]; then
+    echo "  WARNING: plugin-key.p12 not found — skipping keystore conversion."
 else
-    echo "  WARNING: plugin-key.p12 not found — /wr polling may fail if SSL is required."
+    echo "  WARNING: gskcapicmd not found at ${GSKCMD} — skipping keystore conversion."
+    echo "           The WAS plugin may fail to authenticate to the /wr endpoint."
 fi
 
 # Ensure WebSpherePluginConfig directive is in httpd.conf (idempotent)
