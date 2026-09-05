@@ -113,7 +113,8 @@ This script:
 1. Removes any previous IHS install at `/home/itzuser/IBM/HTTPServer`
 2. Extracts the IHS archive ZIP from `/home/itzuser/software/IHS/` → moves it into place
 3. Installs the WAS plugin (`mod_was_ap24_http.so`) into `modules/`
-4. Appends `/home/itzuser/IBM/HTTPServer/bin` to `~/.bashrc`
+4. Generates an `apachectl` wrapper script (the ARCHIVE format ships `httpd` only)
+5. Appends `/home/itzuser/IBM/HTTPServer/bin` to `~/.bashrc`
 
 Then reload PATH in your current terminal and verify:
 
