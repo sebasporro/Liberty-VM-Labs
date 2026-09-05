@@ -266,27 +266,23 @@ if [[ ${SETUP_RC} -ne 0 ]]; then
 fi
 
 # Locate the generated plugin-cfg.xml.
-# The CLI writes it to <pluginInstallRoot>/config/<webServerName>/plugin-cfg.xml,
-# but some Liberty releases write it directly under <pluginInstallRoot>/ or to
-# a peer directory.  Search broadly from the server resources tree so we find it
-# regardless of the exact subdirectory chosen by this Liberty version.
-echo "  Searching for plugin-cfg.xml under ${SERVER_DIR}/resources/..."
-GENERATED_CFG=$(find "${SERVER_DIR}/resources" -name "plugin-cfg.xml" 2>/dev/null | head -1)
-if [[ -z "${GENERATED_CFG}" || ! -f "${GENERATED_CFG}" ]]; then
-    # Last resort: search the entire controller server directory
-    GENERATED_CFG=$(find "${SERVER_DIR}" -name "plugin-cfg.xml" 2>/dev/null | head -1)
-fi
+# Liberty 26 writes it to <SERVER_DIR>/logs/state/plugin-cfg.xml (not resources/).
+# Search the entire server directory tree so we find it regardless of Liberty version.
+echo "  Searching for plugin-cfg.xml under ${SERVER_DIR}/..."
+GENERATED_CFG=$(find "${SERVER_DIR}" -name "plugin-cfg.xml" 2>/dev/null \
+    | grep -v "${IHS_ROOT}" | head -1)
 if [[ -z "${GENERATED_CFG}" || ! -f "${GENERATED_CFG}" ]]; then
     echo "  ERROR: plugin-cfg.xml not found after dynamicRouting setup."
-    echo "         Files written by the CLI:"
-    find "${SERVER_DIR}/resources" -type f 2>/dev/null | sort | sed 's/^/    /'
+    echo "         All files under ${SERVER_DIR}:"
+    find "${SERVER_DIR}" -type f -name "*.xml" -o -name "*.p12" 2>/dev/null \
+        | sort | sed 's/^/    /'
     exit 1
 fi
 echo "  Generated: ${GENERATED_CFG}"
 
-# Also locate plugin-key.p12 — needed alongside plugin-cfg.xml for the plugin
-# to authenticate to the controller's /wr endpoint.
-GENERATED_KEY=$(find "${SERVER_DIR}/resources" -name "plugin-key.p12" 2>/dev/null | head -1)
+# Also locate plugin-key.p12 — search same tree
+GENERATED_KEY=$(find "${SERVER_DIR}" -name "plugin-key.p12" 2>/dev/null \
+    | grep -v "${IHS_ROOT}" | head -1)
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -344,10 +340,29 @@ if ! ss -tlnp 2>/dev/null | grep -q ":8080 "; then
 fi
 echo "  IHS: running on port 8080"
 
-# Wait for the plugin to fetch the first routing table from /wr
-sleep 3
+# Show which URI groups and server clusters are in the installed plugin-cfg.xml.
+# If the app is not registered in the collective, the plugin will have no
+# matching URI entries and all requests will return 404.
+echo ""
+echo "  URI groups registered in plugin-cfg.xml:"
+grep -oE 'Name="[^"]*"' "${PLUGIN_CFG}" | head -20 | sed 's/^/    /'
 
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/server-info/ 2>/dev/null)
+# Poll for the first successful response — up to 90 s (one full /wr refresh interval).
+# The plugin fetches the routing table from /wr on its first request; 404 immediately
+# after start is normal and resolves within the RefreshInterval (default 60 s).
+echo ""
+echo "  Waiting for first successful response from /wr (up to 90 s)..."
+POLL_WAITED=0
+HTTP_CODE="000"
+while [[ ${POLL_WAITED} -lt 90 ]]; do
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/server-info/ 2>/dev/null)
+    if [[ "${HTTP_CODE}" == "200" ]]; then
+        break
+    fi
+    sleep 5; (( POLL_WAITED += 5 ))
+    echo "    ${POLL_WAITED}s — HTTP ${HTTP_CODE} (waiting for /wr routing table)..."
+done
+
 echo "  GET /server-info/ via IHS → HTTP ${HTTP_CODE}"
 echo ""
 
@@ -366,15 +381,17 @@ if [[ "${HTTP_CODE}" == "200" ]]; then
     echo "  Plugin config: ${PLUGIN_CFG}"
     echo "  Admin Center : https://localhost:${CONTROLLER_HTTPS}/adminCenter"
 else
-    echo "=== Setup complete but routing returned HTTP ${HTTP_CODE} ==="
+    echo "=== Setup complete but routing returned HTTP ${HTTP_CODE} after 90 s ==="
     echo ""
-    echo "  The plugin may still be fetching the first routing table from /wr."
-    echo "  Wait 10–15 seconds and retry:"
+    echo "  If the plugin-cfg.xml above shows no URI entries, the app is not yet"
+    echo "  registered in the collective. Ensure all members are running and"
+    echo "  visible in Admin Center, then wait one RefreshInterval (60 s) and retry:"
     echo "    curl http://localhost:8080/server-info/"
     echo ""
     echo "  Diagnose:"
     echo "    tail -50 ${IHS_ROOT}/logs/plugin.log"
     echo "    tail -50 ${IHS_ROOT}/logs/error_log"
     echo "    tail -50 ${MESSAGES_LOG}"
+    echo "    curl -s http://localhost:${CONTROLLER_HTTP}/wr | head -40"
 fi
 echo ""
