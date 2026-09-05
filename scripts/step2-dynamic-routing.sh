@@ -55,23 +55,11 @@ IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
 HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
 APACHECTL="${IHS_ROOT}/bin/apachectl"
 PLUGIN_CFG="${IHS_ROOT}/conf/plugin-cfg.xml"
-# Locate the real GSKit CLI for PKCS12 → CMS keystore conversion.
-# gskcapicmd in IHS is a wrapper that requires @@SERVERROOT@@ substitution at
-# install time and is often broken. The actual GSKit binary is gsk8capicmd_64
-# (or gsk8capicmd on 32-bit). Search the IHS bin dir and common system paths.
-GSKCMD=""
-for _candidate in \
-    "${IHS_ROOT}/bin/gsk8capicmd_64" \
-    "${IHS_ROOT}/bin/gsk8capicmd" \
-    "/usr/bin/gsk8capicmd_64" \
-    "/usr/bin/gsk8capicmd" \
-    "/opt/ibm/gsk8/bin/gsk8capicmd_64" \
-    "/opt/ibm/gsk8/bin/gsk8capicmd"; do
-    if [[ -x "${_candidate}" ]]; then
-        GSKCMD="${_candidate}"
-        break
-    fi
-done
+# The WAS plugin keystore must live at pluginInstallRoot/config/webServerName/.
+# We create that directory under IHS_ROOT (which is --pluginInstallRoot).
+# Using --keystoreType=JKS avoids the need for gskcmd/gsk8capicmd_64 to convert
+# a PKCS12 into CMS format — JKS is directly usable by the WAS plugin.
+PLUGIN_KEYSTORE_DIR="${IHS_ROOT}/config/${WEB_SERVER_NAME}"
 
 # Controller coordinates
 # NOTE: dynamicRouting setup connects on the HTTPS port (9443) — it uses the
@@ -265,11 +253,14 @@ echo "[4/5] Running dynamicRouting setup..."
 rm -rf "${SETUP_OUTPUT_DIR}"
 mkdir -p "${SETUP_OUTPUT_DIR}"
 
-# --pluginInstallRoot  : path embedded inside the generated plugin-cfg.xml so IHS
-#                        knows where its plugin root is at runtime. Per the docs this
-#                        is the IHS plugin root dir — we use IHS_ROOT here.
-# --targetPath         : controls where the command actually writes the output files.
-#                        Without this the files land in the current working directory.
+# --pluginInstallRoot  : embedded in plugin-cfg.xml as the IHS plugin root at runtime.
+#                        Must be IHS_ROOT; Liberty derives the Keyfile path from it as
+#                        pluginInstallRoot/config/webServerName/plugin-key.jks.
+# --targetPath         : where the command actually writes its output files.
+#                        Without this the files land in $PWD.
+# --keystoreType=JKS   : generate a JKS keystore instead of PKCS12. JKS is used
+#                        directly by the WAS plugin with no gskcmd/CMS conversion.
+mkdir -p "${PLUGIN_KEYSTORE_DIR}"
 "${DYNAMIC_ROUTING_BIN}" setup \
     --host="${CONTROLLER_HOST}" \
     --port="${CONTROLLER_HTTPS}" \
@@ -279,6 +270,7 @@ mkdir -p "${SETUP_OUTPUT_DIR}"
     --webServerNames="${WEB_SERVER_NAME}" \
     --pluginInstallRoot="${IHS_ROOT}" \
     --targetPath="${SETUP_OUTPUT_DIR}" \
+    --keystoreType=JKS \
     --autoAcceptCertificates
 
 SETUP_RC=$?
@@ -305,16 +297,17 @@ if [[ -z "${GENERATED_CFG}" || ! -f "${GENERATED_CFG}" ]]; then
 fi
 echo "  Generated: ${GENERATED_CFG}"
 
-# Locate plugin-key.p12 — written to the same directory as plugin-cfg.xml
-GENERATED_KEY=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-key.p12" 2>/dev/null | head -1)
+# Locate plugin-key.jks — written to the same directory as plugin-cfg.xml
+GENERATED_KEY=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-key.jks" 2>/dev/null | head -1)
 echo ""
 
 # ---------------------------------------------------------------------------
 # 5. Install plugin-cfg.xml + keystore into IHS, restart IHS
 #
-# The WAS plugin requires the keystore in CMS (.kdb) format, NOT PKCS12.
-# dynamicRouting setup emits a PKCS12 plugin-key.p12; we convert it to CMS
-# using gskcmd (ships with IHS) before copying to the IHS conf directory.
+# With --keystoreType=JKS the command generates plugin-key.jks, which the
+# WAS plugin reads directly — no gskcmd/CMS conversion needed.
+# The keystore must be placed at pluginInstallRoot/config/webServerName/
+# (the path Liberty embeds as Keyfile in plugin-cfg.xml).
 # ---------------------------------------------------------------------------
 echo "[5/5] Installing plugin-cfg.xml and restarting IHS..."
 
@@ -322,38 +315,15 @@ echo "[5/5] Installing plugin-cfg.xml and restarting IHS..."
 cp "${GENERATED_CFG}" "${PLUGIN_CFG}"
 echo "  Installed: ${PLUGIN_CFG}"
 
-# Convert plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS) required by the WAS plugin.
-PLUGIN_KEY_KDB="${IHS_ROOT}/conf/plugin-key.kdb"
-if [[ -n "${GENERATED_KEY}" && -f "${GENERATED_KEY}" && -n "${GSKCMD}" ]]; then
-    echo "  Using GSKit CLI: ${GSKCMD}"
-    # Remove any leftover CMS files from a previous run
-    rm -f "${IHS_ROOT}/conf/plugin-key.kdb" \
-          "${IHS_ROOT}/conf/plugin-key.sth" \
-          "${IHS_ROOT}/conf/plugin-key.rdb"
-
-    "${GSKCMD}" -keydb -convert \
-        -pw "${KEYSTORE_PASS}" \
-        -db "${GENERATED_KEY}" \
-        -old_format pkcs12 \
-        -target "${PLUGIN_KEY_KDB}" \
-        -new_format cms \
-        -stash
-    CONV_RC=$?
-    if [[ ${CONV_RC} -ne 0 ]]; then
-        echo "  ERROR: gskcapicmd keydb convert failed (exit ${CONV_RC})"
-        exit 1
-    fi
-
-    "${GSKCMD}" -cert -setdefault \
-        -pw "${KEYSTORE_PASS}" \
-        -db "${PLUGIN_KEY_KDB}" \
-        -label default
-    echo "  Keystore: ${PLUGIN_KEY_KDB} (CMS, with .sth stash)"
-elif [[ -z "${GENERATED_KEY}" || ! -f "${GENERATED_KEY}" ]]; then
-    echo "  WARNING: plugin-key.p12 not found — skipping keystore conversion."
+# Install plugin-key.jks to the directory Liberty encoded in the Keyfile stanza.
+# pluginInstallRoot/config/webServerName/ is the canonical location per the docs.
+DEST_KEY="${PLUGIN_KEYSTORE_DIR}/plugin-key.jks"
+if [[ -n "${GENERATED_KEY}" && -f "${GENERATED_KEY}" ]]; then
+    mkdir -p "${PLUGIN_KEYSTORE_DIR}"
+    cp "${GENERATED_KEY}" "${DEST_KEY}"
+    echo "  Keystore: ${DEST_KEY} (JKS)"
 else
-    echo "  WARNING: gskcapicmd not found at ${GSKCMD} — skipping keystore conversion."
-    echo "           The WAS plugin may fail to authenticate to the /wr endpoint."
+    echo "  WARNING: plugin-key.jks not found — the WAS plugin may fail to authenticate."
 fi
 
 # Ensure WebSpherePluginConfig directive is in httpd.conf (idempotent)
