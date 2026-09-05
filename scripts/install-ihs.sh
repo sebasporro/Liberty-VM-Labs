@@ -91,6 +91,17 @@ else
 fi
 echo "      ${IHS_INSTALL_ROOT}/modules/mod_was_ap24_http.so"
 
+# ---------------------------------------------------------------------------
+# 4. Add IHS to PATH
+# ---------------------------------------------------------------------------
+IHS_PATH_LINE="export PATH=\"${IHS_INSTALL_ROOT}/bin:\$PATH\""
+if ! grep -qF "${IHS_INSTALL_ROOT}/bin" ~/.bashrc; then
+    echo "${IHS_PATH_LINE}" >> ~/.bashrc
+    echo "      Added IHS bin to ~/.bashrc"
+fi
+# shellcheck disable=SC1090
+source ~/.bashrc
+
 echo ""
 echo "=== Done. IHS installed at ${IHS_INSTALL_ROOT} ==="
 echo ""
