@@ -211,48 +211,52 @@ for i in 1 2 3 4; do
 done
 ```
 
-#### Step 3b — Dynamic routing via controller `/wr`
+#### Step 3b — Dynamic routing (all collective members)
 
-Enables `dynamicRouting-1.0` on the controller. The IHS plugin polls the controller's live
-`/wr` endpoint over **HTTP** (port 9080) to get the current member routing table — no static
-member list, no `plugin-cfg.xml` regeneration when members are added or removed.
+Enables `dynamicRouting-1.0` on the controller and regenerates `plugin-cfg.xml` to include
+**all currently running members** automatically.
 
-> **Port note:** `dynamicRouting setup` connects to the controller over **HTTPS (9443)** to
-> generate the plugin config — the same secure JMX/REST channel used by `collective join`.
-> The `/wr` endpoint that the IHS plugin polls *at runtime* is served over plain HTTP (9080).
-> These are two different ports for two different things.
+> **Implementation note:** IBM's full Intelligent Management mode (where `mod_was_ap24_http.so`
+> polls `/ibm/api/dynamicRouting` on the controller and self-updates its routing table) requires
+> the **Web Server Plug-ins for WebSphere Application Server 9.0.0.3+** product installed via
+> IBM Installation Manager — a separate product from IHS itself. This lab uses IHS installed
+> from a ZIP archive, which does not include the full WAS Plugins product or a functional
+> `gskcapicmd`. The script therefore uses the standard `<ServerCluster>` plugin format
+> (identical to Step 3a) but discovers **all** running members automatically.
+> Re-run `step2-dynamic-routing.sh` whenever members are added or removed.
 
 ```
-Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9080/wr
-                                                     │
-                                      live route table (all members)
-                                                     │
-                    ┌────────────────┬───────────────┼───────────────┐
-                    ▼                ▼               ▼               ▼
-               member1:9081    member2:9082    member3:9083    member4:9084
+Browser → IHS:8080 ──(mod_was_ap24_http.so)──► member1:9081
+                                              ► member2:9082
+                                              ► member3:9083  (auto-added when running)
+                                              ► member4:9084  (auto-added when running)
 ```
 
 The script:
-1. Writes `dynamic-routing.xml` dropin to controller `configDropins/overrides/` enabling `dynamicRouting-1.0` **and** `restConnector-2.0` (required — the setup CLI reaches the DynamicRouting MBean via the REST JMX bridge; without it CWWKX0217E is thrown)
-2. Restarts the controller and waits for `CWWKF0011I`; hard-fails if either feature doesn't confirm in `messages.log`
-3. Runs `dynamicRouting setup --port=9443 --keystorePassword=<pass> --webServerNames=webserver1` — generates `plugin-cfg.xml` pointing at `controller:9080/wr`
-4. Installs the new `plugin-cfg.xml` into `$IHS_ROOT/conf/` and sets `WebSpherePluginConfig`
-5. Starts IHS and verifies end-to-end routing
+1. Enables `dynamicRouting-1.0` + `restConnector-2.0` on the controller via `configDropins/overrides/dynamic-routing.xml`
+2. Restarts the controller and waits for `CWWKF0011I`
+3. Detects all members currently listening on ports 9081–9084
+4. Generates a `<ServerCluster>` `plugin-cfg.xml` covering every discovered member
+5. Installs `plugin-cfg.xml`, sets `WebSpherePluginConfig`, restarts IHS, verifies HTTP 200
 
 ```bash
 scripts/step2-dynamic-routing.sh
 ```
 
 **Expected state:** `http://localhost:8080/server-info/` returns `200` and round-robins across
-**all** members in the collective. The plugin polls `/wr` every 60 s — members joining,
-leaving, starting, or stopping are reflected automatically with no script re-run.
+all running members. When you add members later, re-run this script to include them.
+
+```bash
+# Verify round-robin across all members
+for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
+```
 
 ---
 
 ### Step 4 — Add 25.0.0.1 Members
 
-With dynamic routing active, member3 and member4 are automatically added to the routing
-table as soon as they join — no IHS config changes required.
+Deploy member3 and member4, then re-run `step2-dynamic-routing.sh` to add them to the
+routing table.
 
 ```bash
 scripts/add-member-25.sh member3   # Deploy member3 (25.0.0.1), join collective
