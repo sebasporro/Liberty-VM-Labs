@@ -95,6 +95,16 @@ else
     echo "  WARNING: Neither gsk8/ nor .gsk8/ found under ${IHS_ROOT}"
     echo "           gskcapicmd will not be able to locate GSKit binaries."
 fi
+
+# Fix execute permissions on GSKit binaries — the ARCHIVE ZIP ships them
+# as non-executable (644). chmod +x the bin/ directory.
+GSK8_BIN="${IHS_ROOT}/gsk8/bin"
+if [[ -d "${GSK8_BIN}" ]]; then
+    chmod +x "${GSK8_BIN}"/gsk8capicmd_64 \
+              "${GSK8_BIN}"/gsk8ver_64 \
+              "${GSK8_BIN}"/private_verifyinstall_64 2>/dev/null || true
+    echo "  chmod +x : ${GSK8_BIN}/gsk8capicmd_64"
+fi
 echo ""
 
 # ---------------------------------------------------------------------------

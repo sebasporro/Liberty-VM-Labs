@@ -101,6 +101,15 @@ if [[ -d "${IHS_INSTALL_ROOT}/.gsk8" && ! -e "${IHS_INSTALL_ROOT}/gsk8" ]]; then
     echo "      Created symlink: gsk8 → .gsk8"
 fi
 
+# The ARCHIVE ZIP ships GSKit binaries without execute permission (644).
+# chmod +x so gskcapicmd can exec them.
+if [[ -d "${IHS_INSTALL_ROOT}/gsk8/bin" ]]; then
+    chmod +x "${IHS_INSTALL_ROOT}/gsk8/bin"/gsk8capicmd_64 \
+              "${IHS_INSTALL_ROOT}/gsk8/bin"/gsk8ver_64 \
+              "${IHS_INSTALL_ROOT}/gsk8/bin"/private_verifyinstall_64 2>/dev/null || true
+    echo "      chmod +x: gsk8/bin/gsk8capicmd_64"
+fi
+
 # ---------------------------------------------------------------------------
 # 3. Install WAS plugin (mod_was_ap24_http.so)
 # ---------------------------------------------------------------------------
