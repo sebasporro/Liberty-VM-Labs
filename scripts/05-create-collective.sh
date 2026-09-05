@@ -103,6 +103,7 @@ rm -rf "installs/member1/wlp/usr/servers/member1/resources/collective"
   --user="${ADMIN_USER}" \
   --password="${ADMIN_PASS}" \
   --keystorePassword="${MBR1_KS_PASS}" \
+  --serverHost=localhost \
   --createConfigFile="${MBR1_OVERRIDES}/collective-join.xml" \
   --autoAcceptCertificates \
   --disableHostnameVerification
@@ -118,6 +119,7 @@ rm -rf "installs/member2/wlp/usr/servers/member2/resources/collective"
   --user="${ADMIN_USER}" \
   --password="${ADMIN_PASS}" \
   --keystorePassword="${MBR2_KS_PASS}" \
+  --serverHost=localhost \
   --createConfigFile="${MBR2_OVERRIDES}/collective-join.xml" \
   --autoAcceptCertificates \
   --disableHostnameVerification

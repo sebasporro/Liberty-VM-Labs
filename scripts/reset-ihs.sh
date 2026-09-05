@@ -68,13 +68,21 @@ CONF_EOF
 
 echo "      Written: ${HTTPD_CONF}"
 
-# 3. Remove any stale plugin-cfg.xml from IHS conf dir
-if [[ -f "${IHS_ROOT}/conf/plugin-cfg.xml" ]]; then
-    rm -f "${IHS_ROOT}/conf/plugin-cfg.xml"
-    echo "[3/3] Removed: ${IHS_ROOT}/conf/plugin-cfg.xml"
-else
-    echo "[3/3] No plugin-cfg.xml to remove"
-fi
+# 3. Remove stale WAS plugin files from IHS conf dir
+echo "[3/3] Removing stale WAS plugin files..."
+REMOVED=0
+for f in \
+    "${IHS_ROOT}/conf/plugin-cfg.xml" \
+    "${IHS_ROOT}/conf/plugin-key.p12" \
+    "${IHS_ROOT}/conf/plugin-key.kdb" \
+    "${IHS_ROOT}/conf/plugin-key.sth"; do
+    if [[ -f "${f}" ]]; then
+        rm -f "${f}"
+        echo "      Removed: ${f}"
+        (( REMOVED++ ))
+    fi
+done
+[[ ${REMOVED} -eq 0 ]] && echo "      Nothing to remove"
 
 echo ""
 echo "=== IHS reset complete ==="

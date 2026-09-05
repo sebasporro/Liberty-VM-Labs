@@ -50,7 +50,8 @@ run_check() {
 # ---------------------------------------------------------------------------
 
 check_java17() {
-    java -version 2>&1 | grep -q "17\."
+    # Accept Java 17 or 21 — the lab requires 17+ (Eclipse OpenJ9 21 is present on the VM)
+    java -version 2>&1 | grep -qE "version \"(17|21)\."
 }
 
 check_runtime_26() {
@@ -116,8 +117,8 @@ echo "Running Liberty Collective Lab validation checks..."
 echo ""
 
 # --- Environment ---
-run_check "Java 17 available" \
-    "Fix: export JAVA_HOME=<path-to-java17>  e.g. /usr/lib/jvm/java-17" \
+run_check "Java 17+ available" \
+    "Fix: export JAVA_HOME=<path-to-java17+>  e.g. sdk use java 17.x.x-sem" \
     check_java17
 
 run_check "Liberty 26.0.0.8 runtime installed (wlp/)" \
