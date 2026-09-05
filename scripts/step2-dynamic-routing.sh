@@ -68,7 +68,6 @@ ADMIN_USER="admin"
 ADMIN_PASS="admin"
 KEYSTORE_PASS="Liberty26ctrl!"   # must match keystore.password in bootstrap.properties
 WEB_SERVER_NAME="webserver1"     # name registered with the collective controller
-IHS_HTTP_PORT=8080               # port IHS listens on — written into plugin-cfg.xml VirtualHost
 
 echo ""
 echo "=== Step 3b: Liberty Dynamic Routing ==="
@@ -256,7 +255,6 @@ mkdir -p "${SETUP_OUTPUT_DIR}"
     --password="${ADMIN_PASS}" \
     --keystorePassword="${KEYSTORE_PASS}" \
     --webServerNames="${WEB_SERVER_NAME}" \
-    --webServerPort="${IHS_HTTP_PORT}" \
     --pluginInstallRoot="${SETUP_OUTPUT_DIR}" \
     --autoAcceptCertificates
 
@@ -268,23 +266,28 @@ if [[ ${SETUP_RC} -ne 0 ]]; then
 fi
 
 # Locate the generated plugin-cfg.xml.
-# Liberty 26 writes it to <SERVER_DIR>/logs/state/plugin-cfg.xml (not resources/).
-# Search the entire server directory tree so we find it regardless of Liberty version.
-echo "  Searching for plugin-cfg.xml under ${SERVER_DIR}/..."
-GENERATED_CFG=$(find "${SERVER_DIR}" -name "plugin-cfg.xml" 2>/dev/null \
-    | grep -v "${IHS_ROOT}" | head -1)
+# Per the docs, dynamicRouting setup writes output to:
+#   ${pluginInstallRoot}/config/${webServerName}/plugin-cfg.xml
+# The exact name is plugin-cfg.xml when --webServerNames has one entry.
+# We check the expected path first, then fall back to a broader search.
+EXPECTED_CFG="${SETUP_OUTPUT_DIR}/config/${WEB_SERVER_NAME}/plugin-cfg.xml"
+echo "  Expected output: ${EXPECTED_CFG}"
+if [[ -f "${EXPECTED_CFG}" ]]; then
+    GENERATED_CFG="${EXPECTED_CFG}"
+else
+    # Fall back: search the whole output dir tree
+    GENERATED_CFG=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-cfg.xml" 2>/dev/null | head -1)
+fi
 if [[ -z "${GENERATED_CFG}" || ! -f "${GENERATED_CFG}" ]]; then
     echo "  ERROR: plugin-cfg.xml not found after dynamicRouting setup."
-    echo "         All files under ${SERVER_DIR}:"
-    find "${SERVER_DIR}" -type f -name "*.xml" -o -name "*.p12" 2>/dev/null \
-        | sort | sed 's/^/    /'
+    echo "         All files under ${SETUP_OUTPUT_DIR}:"
+    find "${SETUP_OUTPUT_DIR}" -type f 2>/dev/null | sort | sed 's/^/    /'
     exit 1
 fi
 echo "  Generated: ${GENERATED_CFG}"
 
-# Also locate plugin-key.p12 — search same tree
-GENERATED_KEY=$(find "${SERVER_DIR}" -name "plugin-key.p12" 2>/dev/null \
-    | grep -v "${IHS_ROOT}" | head -1)
+# Also locate plugin-key.p12 — lives alongside plugin-cfg.xml
+GENERATED_KEY=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-key.p12" 2>/dev/null | head -1)
 echo ""
 
 # ---------------------------------------------------------------------------
