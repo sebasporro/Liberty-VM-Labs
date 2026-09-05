@@ -43,7 +43,7 @@ with highest precedence. The golden package is never modified.
 | Requirement | Version | Notes |
 |-------------|---------|-------|
 | Java | 17 | Pre-installed on lab VM (IBM Semeru recommended) |
-| IBM HTTP Server (IHS) | 2.4+ | Installer ZIP pre-provisioned at `/home/itzuser/software/IHS/` |
+| IBM HTTP Server (IHS) + WAS Plugins | 9.0+ | Full IHS ZIP (including WAS Plugins) pre-provisioned at `/home/itzuser/software/IHS/`. Must include a working `gskcapicmd` and the Intelligent Management-capable `mod_was_ap24_http.so`. |
 | Shell | bash | All scripts use `#!/bin/bash` |
 | Liberty installer | 26.0.0.8 ND | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` |
 | Liberty installer | 25.0.0.1 Base | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar` |
@@ -51,6 +51,11 @@ with highest precedence. The golden package is never modified.
 
 > **Note:** Installer binaries are pre-provisioned on the lab VM at fixed paths and are not
 > committed to git. No manual download is required before running the scripts.
+>
+> **IHS requirement:** Native Liberty dynamic routing (Step 3b) requires the full IHS package
+> that includes the **Web Server Plug-ins for WebSphere Application Server** product. This
+> provides a working `gskcapicmd` (for keystore conversion) and the Intelligent Management-
+> capable `mod_was_ap24_http.so`. A plain Apache-only ZIP is not sufficient.
 
 ---
 
@@ -211,43 +216,39 @@ for i in 1 2 3 4; do
 done
 ```
 
-#### Step 3b — Dynamic routing (all collective members)
+#### Step 3b — Dynamic routing (Intelligent Management)
 
-Enables `dynamicRouting-1.0` on the controller and regenerates `plugin-cfg.xml` to include
-**all currently running members** automatically.
-
-> **Implementation note:** IBM's full Intelligent Management mode (where `mod_was_ap24_http.so`
-> polls `/ibm/api/dynamicRouting` on the controller and self-updates its routing table) requires
-> the **Web Server Plug-ins for WebSphere Application Server 9.0.0.3+** product installed via
-> IBM Installation Manager — a separate product from IHS itself. This lab uses IHS installed
-> from a ZIP archive, which does not include the full WAS Plugins product or a functional
-> `gskcapicmd`. The script therefore uses the standard `<ServerCluster>` plugin format
-> (identical to Step 3a) but discovers **all** running members automatically.
-> Re-run `step2-dynamic-routing.sh` whenever members are added or removed.
+Enables native Liberty **Intelligent Management** dynamic routing. The controller continuously
+delivers the live member routing table to the IHS plugin — members joining, leaving, starting,
+or stopping are reflected automatically with no script re-run or config regeneration.
 
 ```
-Browser → IHS:8080 ──(mod_was_ap24_http.so)──► member1:9081
-                                              ► member2:9082
-                                              ► member3:9083  (auto-added when running)
-                                              ► member4:9084  (auto-added when running)
+Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9443/ibm/api/dynamicRouting
+                                                       │
+                                         live route table (all members)
+                                                       │
+                       ┌──────────────┬───────────────┼───────────────┐
+                       ▼              ▼               ▼               ▼
+                  member1:9081  member2:9082  member3:9083  member4:9084
 ```
 
-The script:
-1. Enables `dynamicRouting-1.0` + `restConnector-2.0` on the controller via `configDropins/overrides/dynamic-routing.xml`
-2. Restarts the controller and waits for `CWWKF0011I`
-3. Detects all members currently listening on ports 9081–9084
-4. Generates a `<ServerCluster>` `plugin-cfg.xml` covering every discovered member
-5. Installs `plugin-cfg.xml`, sets `WebSpherePluginConfig`, restarts IHS, verifies HTTP 200
+The script follows the IBM documentation procedure exactly:
+1. Writes `dynamic-routing.xml` dropin enabling `dynamicRouting-1.0` + `restConnector-2.0` on the controller
+2. Restarts the controller; hard-fails if either feature does not confirm in `messages.log`
+3. Runs `dynamicRouting setup` — generates `plugin-cfg.xml` (`<IntelligentManagement>` stanza) and `plugin-key.p12`
+4. Runs `gskcapicmd` to convert `plugin-key.p12` → CMS `plugin-key.kdb` (required format for the WAS plugin)
+5. Places `plugin-key.kdb` + `.sth` at `$IHS_ROOT/config/webserver1/` (the path Liberty embeds in `plugin-cfg.xml`)
+6. Installs `plugin-cfg.xml`, sets `WebSpherePluginConfig`, restarts IHS, verifies HTTP 200
 
 ```bash
 scripts/step2-dynamic-routing.sh
 ```
 
 **Expected state:** `http://localhost:8080/server-info/` returns `200` and round-robins across
-all running members. When you add members later, re-run this script to include them.
+all collective members. Members added later are discovered automatically — no re-run needed.
 
 ```bash
-# Verify round-robin across all members
+# Verify round-robin across members
 for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
 ```
 
@@ -255,8 +256,8 @@ for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'memb
 
 ### Step 4 — Add 25.0.0.1 Members
 
-Deploy member3 and member4, then re-run `step2-dynamic-routing.sh` to add them to the
-routing table.
+With Intelligent Management active, member3 and member4 are automatically added to the routing
+table as soon as they join — no IHS config changes or script re-run required.
 
 ```bash
 scripts/add-member-25.sh member3   # Deploy member3 (25.0.0.1), join collective
