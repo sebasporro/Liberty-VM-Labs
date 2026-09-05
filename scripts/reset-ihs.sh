@@ -13,13 +13,12 @@ echo ""
 echo "=== Reset IHS to clean baseline ==="
 echo ""
 
-# 1. Stop IHS if running
-if "${APACHECTL}" status &>/dev/null || ss -tlnp 2>/dev/null | grep -q ":8080 "; then
-    echo "[1/3] Stopping IHS..."
-    "${APACHECTL}" stop 2>/dev/null
-    sleep 2
-else
-    echo "[1/3] IHS not running — skipping stop"
+# 1. Stop IHS reliably regardless of PID file state
+echo "[1/3] Stopping IHS..."
+"${APACHECTL}" stop 2>/dev/null; sleep 2
+pkill -9 -f "${IHS_ROOT}/bin/httpd" 2>/dev/null; sleep 1
+if ss -tlnp 2>/dev/null | grep -q ":8080 "; then
+    echo "  WARNING: port 8080 still in use after stop — proceeding anyway"
 fi
 
 # 2. Overwrite httpd.conf with a clean baseline (no plugin directives)

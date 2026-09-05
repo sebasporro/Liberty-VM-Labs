@@ -435,6 +435,22 @@ with open(cfg_path) as f:
 # attempt — essential for diagnosing transport/protocol mismatches.
 xml = re.sub(r'(<Log\b[^>]*\bLogLevel=")[^"]*(")', r'\1Stats\2', xml)
 
+# The <Connector> inside <IntelligentManagement> must have a stashfile
+# property alongside the keyring so the plugin can unlock the CMS keystore
+# for TLS to the controller. dynamicRouting setup emits keyring but omits
+# stashfile — without it the TLS handshake fails and the plugin returns 400.
+def inject_stashfile(m):
+    connector_xml = m.group(0)
+    # Derive stashfile path: same dir/name as keyring, .sth extension
+    kr = re.search(r'<Property\s+name="keyring"\s+value="([^"]+)"', connector_xml, re.IGNORECASE)
+    if kr and '<Property name="stashfile"' not in connector_xml.lower():
+        sth = re.sub(r'\.(kdb|p12)$', '.sth', kr.group(1))
+        insert = f'\n                <Property name="stashfile" value="{sth}"/>'
+        connector_xml = connector_xml.replace('</Connector>', insert + '\n            </Connector>')
+    return connector_xml
+
+xml = re.sub(r'<Connector\b[^>]*>.*?</Connector>', inject_stashfile, xml, flags=re.DOTALL)
+
 # Remove any previously injected or generated VirtualHostGroup / UriGroup /
 # Route blocks so we can replace them cleanly.
 xml = re.sub(r'\s*<UriGroup[^>]*>.*?</UriGroup>', '', xml, flags=re.DOTALL)
@@ -556,9 +572,10 @@ if [[ "${HTTP_CODE}" == "200" ]]; then
     echo "  Plugin cfg  : ${PLUGIN_CFG}"
     echo "  Admin Center: https://localhost:${CONTROLLER_HTTPS}/adminCenter"
 else
-    echo "  WARNING: Routing returned HTTP ${HTTP_CODE} after 30 s."
-    echo "           The plugin may still be connecting to /ibm/api/dynamicRouting."
-    echo "           Wait 60 s and retry: curl http://localhost:8080/server-info/"
+    echo "  WARNING: Routing returned HTTP ${HTTP_CODE} after 60 s."
+    echo ""
+    echo "  To restore working static routing immediately:"
+    echo "    scripts/reset-ihs.sh && scripts/step1-was-plugin.sh"
     echo ""
     echo "  Diagnose:"
     echo "    tail -50 ${IHS_ROOT}/logs/plugin.log"
