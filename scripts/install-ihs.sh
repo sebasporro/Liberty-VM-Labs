@@ -4,7 +4,11 @@
 # Cleans any previous IHS install, installs IBM HTTP Server from the
 # pre-provisioned ARCHIVE ZIP, and installs the WAS plugin.
 #
-# Usage:  scripts/install-ihs.sh
+# Usage:
+#   scripts/install-ihs.sh
+#
+#   After install, reload PATH in your current terminal:
+#   source ~/.bashrc
 #
 # Overrides:
 #   IHS_INSTALLER_DIR   directory that contains the IHS ZIP  (default below)
@@ -92,7 +96,7 @@ fi
 echo "      ${IHS_INSTALL_ROOT}/modules/mod_was_ap24_http.so"
 
 # ---------------------------------------------------------------------------
-# 4. Add IHS to PATH
+# 4. Add IHS bin to PATH (persisted in ~/.bashrc)
 # ---------------------------------------------------------------------------
 if ! grep -qF "${IHS_INSTALL_ROOT}/bin" ~/.bashrc; then
     echo "export PATH=\"${IHS_INSTALL_ROOT}/bin:\$PATH\"" >> ~/.bashrc
@@ -102,11 +106,9 @@ fi
 echo ""
 echo "=== Done. IHS installed at ${IHS_INSTALL_ROOT} ==="
 echo ""
-echo "  Run this to make apachectl available in your current terminal:"
-echo ""
+echo "  Reload PATH in your current terminal:"
 echo "    source ~/.bashrc"
 echo ""
-echo "  Or use the full path directly:"
-echo ""
-echo "    ${IHS_INSTALL_ROOT}/bin/apachectl -v"
+echo "  Then verify:"
+echo "    apachectl -v"
 echo ""
