@@ -238,6 +238,100 @@ http://localhost:9081/server-info/
 
 ## 4. Apache Routing Failures
 
+### `collectiveMember-1.0` loaded on the controller — DynamicRouting MBean does not register
+
+**Symptom:** `dynamicRouting setup` fails with `CWWKX0217E` and the controller's `CWWKF0012I` log line lists both `collectiveController-1.0` **and** `collectiveMember-1.0`.
+
+**Cause:** A `collective join` command was accidentally targeted at `localhost:9443` (the controller's own HTTPS port) instead of at a member. The `collective join` command writes a `collective-join.xml` dropin into the server's `configDropins/overrides/`. When that file lands on the controller, it loads `collectiveMember-1.0` alongside `collectiveController-1.0`. A Liberty server cannot correctly operate as both controller and member — the `dynamicRouting-1.0` MBean does not register in this dual-role state, causing `CWWKX0217E`.
+
+**Diagnosis:**
+```zsh
+# Check whether the controller has a collective-join.xml dropin
+ls installs/controller/wlp/usr/servers/controller/configDropins/overrides/
+
+# Confirm collectiveMember-1.0 is in the CWWKF0012I feature list
+grep "CWWKF0012I" installs/controller/wlp/usr/servers/controller/logs/messages.log | tail -3
+```
+
+**Resolution:**
+```zsh
+# 1. Remove the stale dropin
+rm installs/controller/wlp/usr/servers/controller/configDropins/overrides/collective-join.xml
+
+# 2. Restart the controller — collectiveMember-1.0 will no longer load
+installs/controller/wlp/bin/server stop controller
+installs/controller/wlp/bin/server start controller
+
+# 3. Verify — collectiveMember-1.0 must NOT appear in the feature list
+grep "CWWKF0012I" installs/controller/wlp/usr/servers/controller/logs/messages.log | tail -3
+
+# 4. Re-run dynamic routing setup
+bash scripts/step2-dynamic-routing.sh
+```
+
+The `step2-dynamic-routing.sh` script now detects and removes `collective-join.xml` from the controller's overrides automatically (pre-flight step 1), so this is self-healing on the next script run.
+
+---
+
+### `CWWKX0217E: No MBean is currently registered` — dynamicRouting setup fails
+
+**Symptom:** `scripts/step2-dynamic-routing.sh` (step 4) fails with:
+```
+Error: CWWKX0217E: No MBean is currently registered with the given ObjectName
+'WebSphere:feature=dynamicRouting,type=DynamicRouting,name=DynamicRouting'
+Unable to complete the MBean operation.
+exit 255
+```
+
+**Cause:** One or more of the following:
+
+1. **Feature not actually active** — the previous script checked for the feature name string in the log, which can match config-read lines rather than the `CWWKF0012I` activation message. The fix in `step2-dynamic-routing.sh` now requires `CWWKF0012I.*dynamicRouting-1.0`.
+2. **MBean registration race** — Liberty emits `CWWKF0011I` (server ready) before all feature MBeans are fully registered. Calling `dynamicRouting setup` immediately after the ready message could arrive before the DynamicRouting MBean is bound. The script now waits an additional 5 s after feature confirmation.
+3. **Wrong Liberty edition** — `dynamicRouting-1.0` is only available in Liberty ND (`wlp-nd-all-*.jar`). It is not in Liberty Base or Liberty Core. If the feature isn't installed, you get `CWWKF0001E` instead of `CWWKF0012I`.
+
+**Diagnostic commands** (run these on the VM before retrying):
+
+```zsh
+# 1. Confirm dynamicRouting-1.0 is available in the installed Liberty edition
+ls installs/controller/wlp/lib/features/ \
+  | grep -iE "dynamicRout|restConn|collective" | head -20
+
+# 2. Check the controller log for the authoritative activation message
+grep "CWWKF0012I\|CWWKF0001E\|dynamicRouting\|restConnector" \
+  installs/controller/wlp/usr/servers/controller/logs/messages.log | tail -20
+
+# 3. Confirm the DynamicRouting MBean is registered via the REST JMX API
+curl -k -s -u admin:admin \
+  "https://localhost:9443/IBMJMXConnectorREST/mbeans?objectName=WebSphere:feature%3DdynamicRouting*"
+
+# 4. List all registered MBeans (see what IS available)
+curl -k -s -u admin:admin \
+  "https://localhost:9443/IBMJMXConnectorREST/mbeans" \
+  | python3 -m json.tool 2>/dev/null | grep '"objectName"' | head -40
+
+# 5. Check the dropin was written correctly
+cat installs/controller/wlp/usr/servers/controller/configDropins/overrides/dynamic-routing.xml
+```
+
+**Resolution:**
+
+If step 3 above shows an empty result (no DynamicRouting MBean) but `CWWKF0012I.*dynamicRouting-1.0` is in the log, the MBean registered late — wait 10 s and re-run the curl check. Then re-run the script.
+
+If `CWWKF0001E.*dynamicRouting-1.0` appears in the log, the feature is not installed in this Liberty edition:
+```zsh
+# Verify you have the ND package (not Base or Core)
+installs/controller/wlp/bin/server version
+# Expected: WebSphere Application Server 26.x.x.x (wlp-nd)
+```
+If it shows `wlp` (Base) instead of `wlp-nd`, reinstall from the ND JAR:
+```zsh
+java -jar /home/itzuser/software/Liberty/wlp-nd-all-26.0.0.8.jar --acceptLicense \
+  --installLocation installs/controller/wlp
+```
+
+---
+
+
 ### Required module not loaded
 
 **Symptom:** Apache fails to start with `Invalid command 'ProxyPass'`.

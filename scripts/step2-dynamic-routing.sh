@@ -111,6 +111,21 @@ if ! ss -tlnp 2>/dev/null | grep -q ":${CONTROLLER_HTTP} "; then
 fi
 echo "  Controller HTTP : running on ${CONTROLLER_HTTP}"
 
+# Guard: the controller must NOT have a collective-join.xml dropin.
+# collective join, when accidentally targeted at the controller host/port,
+# writes a collective-join.xml that loads collectiveMember-1.0 on the controller.
+# A node cannot be both collectiveController and collectiveMember.
+# When both are loaded, the dynamicRouting-1.0 MBean does not register correctly
+# and dynamicRouting setup fails with CWWKX0217E.
+STALE_JOIN="${OVERRIDES_DIR}/collective-join.xml"
+if [[ -f "${STALE_JOIN}" ]]; then
+    echo "  WARNING: Found collective-join.xml on the controller — removing it."
+    echo "           This file causes collectiveMember-1.0 to load on the controller,"
+    echo "           which prevents the DynamicRouting MBean from registering."
+    rm -f "${STALE_JOIN}"
+    echo "  Removed: ${STALE_JOIN}"
+fi
+
 # Report which members are up
 MEMBERS_UP=0
 for port in 9081 9082 9083 9084; do
@@ -164,6 +179,9 @@ echo "  Written: ${DYNAMIC_XML}"
 # ---------------------------------------------------------------------------
 echo "[3/5] Restarting controller to activate dynamicRouting-1.0 + restConnector-2.0..."
 
+# Truncate log so we only match messages from this startup, not prior runs.
+# Ensure the log directory exists before truncating.
+mkdir -p "$(dirname "${MESSAGES_LOG}")"
 > "${MESSAGES_LOG}" 2>/dev/null || true
 "${WLP_BIN}" stop controller 2>/dev/null || true
 sleep 3
@@ -180,21 +198,40 @@ if [[ ${WAITED} -ge 90 ]]; then
     exit 1
 fi
 
-# Verify both features actually installed (CWWKF0012I = feature installed)
-if grep -q "dynamicRouting-1.0" "${MESSAGES_LOG}" 2>/dev/null; then
+# Verify both features actually installed.
+# CWWKF0012I = "The feature <name> has been installed."
+# Matching the feature name alone would also match config-read log lines;
+# CWWKF0012I is the authoritative activation message.
+# Also check for CWWKF0001E (feature not found) to surface install errors early.
+if grep -q "CWWKF0012I.*dynamicRouting-1.0" "${MESSAGES_LOG}" 2>/dev/null; then
     echo "  dynamicRouting-1.0  : active ✓"
+elif grep -q "CWWKF0001E.*dynamicRouting" "${MESSAGES_LOG}" 2>/dev/null; then
+    echo "  ERROR: dynamicRouting-1.0 not available in this Liberty edition."
+    echo "         Ensure you are using Liberty ND (wlp-nd) with collectiveController-1.0."
+    grep "CWWKF0001E\|CWWKF0002E\|dynamicRouting" "${MESSAGES_LOG}" 2>/dev/null | tail -10
+    exit 1
 else
     echo "  ERROR: dynamicRouting-1.0 did not load — check ${MESSAGES_LOG}"
-    grep -i "dynamicRouting\|CWWKF\|error" "${MESSAGES_LOG}" 2>/dev/null | tail -10
+    grep -iE "CWWKF|dynamicRouting|error" "${MESSAGES_LOG}" 2>/dev/null | tail -15
     exit 1
 fi
-if grep -q "restConnector-2.0" "${MESSAGES_LOG}" 2>/dev/null; then
+if grep -q "CWWKF0012I.*restConnector-2.0" "${MESSAGES_LOG}" 2>/dev/null; then
     echo "  restConnector-2.0   : active ✓"
+elif grep -q "CWWKF0001E.*restConnector" "${MESSAGES_LOG}" 2>/dev/null; then
+    echo "  ERROR: restConnector-2.0 not available — check Liberty edition."
+    grep "CWWKF0001E.*restConnector" "${MESSAGES_LOG}" 2>/dev/null | tail -5
+    exit 1
 else
     echo "  ERROR: restConnector-2.0 did not load — check ${MESSAGES_LOG}"
-    grep -i "restConnector\|CWWKF\|error" "${MESSAGES_LOG}" 2>/dev/null | tail -10
+    grep -iE "CWWKF|restConnector|error" "${MESSAGES_LOG}" 2>/dev/null | tail -15
     exit 1
 fi
+
+# Wait briefly after server-ready to allow the DynamicRouting MBean to register.
+# Liberty reports CWWKF0011I (server ready) before all MBeans are fully bound;
+# the dynamicRouting-1.0 MBean is registered asynchronously shortly after.
+echo "  Waiting 5 s for DynamicRouting MBean registration..."
+sleep 5
 echo ""
 
 # ---------------------------------------------------------------------------
