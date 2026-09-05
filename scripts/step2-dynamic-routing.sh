@@ -1,44 +1,24 @@
 #!/bin/bash
 # =============================================================================
 # step2-dynamic-routing.sh
-# Enables native Liberty Intelligent Management Dynamic Routing.
+# Enables Liberty Intelligent Management (IM) Dynamic Routing.
 #
-# IBM Documentation:
-#   Setting up dynamic routing for a single Liberty collective:
-#   https://www.ibm.com/docs/en/was-liberty/nd?topic=collectives-setting-up-dynamic-routing-single-liberty-collective
+# How Liberty IM routing works:
+#   1. Controller runs dynamicRouting-1.0 → exposes /ibm/api/dynamicRouting
+#   2. Each member has a <virtualHost> element associating it with webserver1
+#      → the controller knows which apps/VHosts to advertise per web server
+#   3. IHS plugin reads <IntelligentManagement> in plugin-cfg.xml, connects
+#      to controller:9443/ibm/api/dynamicRouting, and receives a live routing
+#      table that updates automatically as members join/leave/start/stop
 #
-#   Dynamic routing command reference:
-#   https://www.ibm.com/docs/en/was-liberty/nd?topic=collectives-dynamic-routing-command
-#
-# How Liberty dynamic routing works:
-#   1. The controller runs dynamicRouting-1.0, which activates the Dynamic
-#      Routing service at /ibm/api/dynamicRouting (HTTPS, port 9443).
-#   2. dynamicRouting setup connects to the controller via HTTPS and generates:
-#        plugin-cfg.xml   — contains <IntelligentManagement> stanza
-#        plugin-key.p12   — PKCS12 keystore for plugin ↔ controller TLS
-#   3. gskcapicmd (ships with IHS) converts plugin-key.p12 → CMS plugin-key.kdb
-#      The CMS keystore is placed at pluginInstallRoot/config/webServerName/.
-#   4. plugin-cfg.xml is placed where WebSpherePluginConfig points in httpd.conf.
-#   5. mod_was_ap24_http.so reads <IntelligentManagement>, connects to the
-#      controller's /ibm/api/dynamicRouting endpoint, and continuously receives
-#      the live routing table — members joining/leaving are reflected
-#      automatically within the RetryInterval (default 60 s).
-#
-# Architecture after this script:
-#   Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9443/ibm/api/dynamicRouting
-#                                                        │
-#                                          live route table (all members)
-#                                                        │
-#                          ┌──────────────┬─────────────┼─────────────┐
-#                          ▼              ▼             ▼             ▼
-#                     member1:9081  member2:9082  member3:9083  member4:9084
-#
-# Prerequisites:
-#   - IHS with WAS Plugins (full install) — scripts/install-ihs.sh
-#     The IHS ZIP must include a working gskcapicmd and the Intelligent
-#     Management-capable mod_was_ap24_http.so from the WAS Plugins product.
-#   - Controller running on HTTPS 9443  — scripts/install-controller.sh
-#   - At least one member in collective — scripts/add-member-26.sh
+# What this script does:
+#   1. Pre-flight: verify controller, IHS, gskcapicmd, members running
+#   2. Inject virtualHost dropin into every running member so the controller
+#      knows to advertise them to webserver1
+#   3. Enable dynamicRouting-1.0 + restConnector-2.0 on the controller
+#   4. Run dynamicRouting setup → generates plugin-cfg.xml + plugin-key.p12
+#   5. Convert plugin-key.p12 → plugin-key.kdb (CMS) via gskcapicmd
+#   6. Install plugin-cfg.xml, patch Log path, create log dir, restart IHS
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -61,16 +41,13 @@ MESSAGES_LOG="${SERVER_DIR}/logs/messages.log"
 IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
 HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
 APACHECTL="${IHS_ROOT}/bin/apachectl"
-# plugin-cfg.xml is placed here; WebSpherePluginConfig in httpd.conf points at it
 PLUGIN_CFG="${IHS_ROOT}/conf/plugin-cfg.xml"
-
-# The CMS keystore must live at pluginInstallRoot/config/webServerName/
-# Liberty embeds this path as the Keyfile stanza in plugin-cfg.xml.
 PLUGIN_KEYSTORE_DIR="${IHS_ROOT}/config/webserver1"
 PLUGIN_KEY_KDB="${PLUGIN_KEYSTORE_DIR}/plugin-key.kdb"
-
-# gskcapicmd — ships with a proper IHS install (full package, not stub ZIP)
 GSKCAPICMD="${IHS_ROOT}/bin/gskcapicmd"
+# The IM plugin writes its log here — must match the Log Name in plugin-cfg.xml
+PLUGIN_LOG_DIR="${IHS_ROOT}/logs/webserver1"
+PLUGIN_LOG="${PLUGIN_LOG_DIR}/http_plugin.log"
 
 # Scratch directory for dynamicRouting setup output
 SETUP_OUTPUT_DIR="${SERVER_DIR}/resources/security/plugin-setup"
@@ -83,8 +60,9 @@ CONTROLLER_HTTPS=9443
 CONTROLLER_HTTP=9080
 ADMIN_USER="admin"
 ADMIN_PASS="admin"
-KEYSTORE_PASS="Liberty26ctrl!"   # must match keystore.password in bootstrap.properties
+KEYSTORE_PASS="Liberty26ctrl!"
 WEB_SERVER_NAME="webserver1"
+IHS_HTTP_PORT=8080
 
 echo ""
 echo "=== Step 3b: Liberty Dynamic Routing (Intelligent Management) ==="
@@ -93,103 +71,124 @@ echo ""
 # ---------------------------------------------------------------------------
 # 1. Pre-flight checks
 # ---------------------------------------------------------------------------
-echo "[1/5] Pre-flight checks..."
+echo "[1/6] Pre-flight checks..."
 
 if [[ ! -x "${WLP_BIN}" ]]; then
-    echo "  ERROR: Controller WLP not found at ${CONTROLLER_DIR}"
-    echo "         Run scripts/install-controller.sh first."
+    echo "  ERROR: Controller WLP not found. Run scripts/install-controller.sh first."
     exit 1
 fi
-
 if [[ ! -x "${DYNAMIC_ROUTING_BIN}" ]]; then
     echo "  ERROR: dynamicRouting binary not found at ${DYNAMIC_ROUTING_BIN}"
-    echo "         Ensure Liberty ND with collectiveController-1.0 is installed."
     exit 1
 fi
 echo "  dynamicRouting  : ${DYNAMIC_ROUTING_BIN}"
 
-if [[ ! -f "${HTTPD_CONF}" ]]; then
-    echo "  ERROR: httpd.conf not found at ${HTTPD_CONF}"
-    echo "         Run scripts/install-ihs.sh first."
-    exit 1
-fi
-
 if [[ ! -f "${IHS_ROOT}/modules/mod_was_ap24_http.so" ]]; then
-    echo "  ERROR: mod_was_ap24_http.so not found in ${IHS_ROOT}/modules/"
-    echo "         Run scripts/install-ihs.sh first."
+    echo "  ERROR: mod_was_ap24_http.so not found. Run scripts/install-ihs.sh first."
     exit 1
 fi
 echo "  WAS plugin      : present"
 
-# Verify gskcapicmd is functional (not an unpatched stub)
-if [[ ! -x "${GSKCAPICMD}" ]]; then
-    echo "  ERROR: gskcapicmd not found at ${GSKCAPICMD}"
-    echo "         The IHS install must include the full WAS Plugins package."
-    echo "         A ZIP-extracted IHS stub will not work — use the proper IHS installer."
-    exit 1
-fi
-# Quick smoke-test — a broken stub fails immediately
-if ! "${GSKCAPICMD}" -version >/dev/null 2>&1; then
-    echo "  ERROR: gskcapicmd at ${GSKCAPICMD} failed to run."
-    echo "         The IHS install appears to be a stub (@@SERVERROOT@@ not substituted)."
-    echo "         Re-install IHS using the full WAS Plugins-capable package."
+if [[ ! -x "${GSKCAPICMD}" ]] || ! "${GSKCAPICMD}" -version >/dev/null 2>&1; then
+    echo "  ERROR: gskcapicmd not functional at ${GSKCAPICMD}"
     exit 1
 fi
 echo "  gskcapicmd      : functional"
 
 if ! ss -tlnp 2>/dev/null | grep -q ":${CONTROLLER_HTTP} "; then
-    echo "  ERROR: Controller is not running on port ${CONTROLLER_HTTP}."
+    echo "  ERROR: Controller not running on port ${CONTROLLER_HTTP}."
     echo "         Run: ${WLP_BIN} start controller"
     exit 1
 fi
 echo "  Controller      : running on ${CONTROLLER_HTTP} / ${CONTROLLER_HTTPS}"
 
-# Guard: controller must NOT have a collective-join.xml dropin
+# Guard: controller must NOT have collective-join.xml (it would load collectiveMember-1.0
+# which prevents the DynamicRouting MBean from registering)
 STALE_JOIN="${OVERRIDES_DIR}/collective-join.xml"
 if [[ -f "${STALE_JOIN}" ]]; then
-    echo "  WARNING: Found collective-join.xml on the controller — removing it."
-    echo "           This dropin loads collectiveMember-1.0 on the controller, which"
-    echo "           prevents the DynamicRouting MBean from registering (CWWKX0217E)."
+    echo "  WARNING: Removing stale collective-join.xml from controller overrides."
     rm -f "${STALE_JOIN}"
-    echo "  Removed: ${STALE_JOIN}"
 fi
 
-# Report running members (informational — dynamic routing discovers them automatically)
-for i in 1 2 3 4; do
+echo "  Running members:"
+MEMBER_FOUND=0
+for i in 1 2 3 4 5 6 7 8 9; do
     port=$(( 9080 + i ))
-    if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
-        echo "  Member :${port}     : up"
-    fi
+    ss -tlnp 2>/dev/null | grep -q ":${port} " && { echo "    member${i} :${port}"; (( MEMBER_FOUND++ )); }
 done
+if [[ ${MEMBER_FOUND} -eq 0 ]]; then
+    echo "  ERROR: No members running. Start members before running this script."
+    exit 1
+fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 2. Enable dynamicRouting-1.0 + restConnector-2.0 on the controller
+# 2. Inject <virtualHost> dropin into every running member
 #
-#    dynamicRouting-1.0  — activates the /ibm/api/dynamicRouting endpoint
-#    restConnector-2.0   — required by the dynamicRouting setup CLI to reach
-#                          the DynamicRouting MBean via the Liberty REST JMX
-#                          bridge; without it setup fails with CWWKX0217E
+# The controller uses <virtualHost> elements to build the routing table it
+# sends to the web server plugin. Without this, the plugin connects to the
+# controller successfully but gets an empty server group (websphereFindServerGroup
+# error) because no member has declared itself reachable via webserver1.
+#
+# Each member needs:
+#   <virtualHost id="default_host" allowFromEndpointRef="defaultHttpEndpoint">
+#       <hostAlias>*:IHS_PORT</hostAlias>
+#   </virtualHost>
 # ---------------------------------------------------------------------------
-echo "[2/5] Enabling dynamicRouting-1.0 + restConnector-2.0 on controller..."
-mkdir -p "${OVERRIDES_DIR}"
-DYNAMIC_XML="${OVERRIDES_DIR}/dynamic-routing.xml"
+echo "[2/6] Injecting virtualHost dropin into running members..."
 
-cat > "${DYNAMIC_XML}" <<'XML'
+for i in 1 2 3 4 5 6 7 8 9; do
+    port=$(( 9080 + i ))
+    member_name="member${i}"
+    member_overrides="${WORKSPACE_ROOT}/installs/${member_name}/wlp/usr/servers/${member_name}/configDropins/overrides"
+
+    if ! ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+        continue
+    fi
+
+    if [[ ! -d "${member_overrides}" ]]; then
+        echo "  WARNING: overrides dir not found for ${member_name} — skipping"
+        continue
+    fi
+
+    cat > "${member_overrides}/dynamic-routing-vhost.xml" <<VHOSTXML
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Virtual host declaration for Liberty IM Dynamic Routing.
+  Tells the collective controller to advertise this member's applications
+  to the IHS web server plugin under the *:${IHS_HTTP_PORT} virtual host.
+  Injected by scripts/step2-dynamic-routing.sh
+-->
+<server>
+    <virtualHost id="default_host" allowFromEndpointRef="defaultHttpEndpoint">
+        <hostAlias>*:${IHS_HTTP_PORT}</hostAlias>
+    </virtualHost>
+</server>
+VHOSTXML
+    echo "  Written: ${member_overrides}/dynamic-routing-vhost.xml"
+done
+echo "  Waiting 5 s for members to pick up config change..."
+sleep 5
+echo ""
+
+# ---------------------------------------------------------------------------
+# 3. Enable dynamicRouting-1.0 + restConnector-2.0 on the controller
+# ---------------------------------------------------------------------------
+echo "[3/6] Enabling dynamicRouting-1.0 + restConnector-2.0 on controller..."
+mkdir -p "${OVERRIDES_DIR}"
+
+cat > "${OVERRIDES_DIR}/dynamic-routing.xml" <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <server description="Dynamic routing feature">
     <featureManager>
-        <!-- Activates /ibm/api/dynamicRouting on the controller HTTPS port -->
         <feature>dynamicRouting-1.0</feature>
-        <!-- Required by the dynamicRouting setup CLI (REST JMX bridge) -->
         <feature>restConnector-2.0</feature>
     </featureManager>
 </server>
 XML
-echo "  Written: ${DYNAMIC_XML}"
+echo "  Written: ${OVERRIDES_DIR}/dynamic-routing.xml"
 
-# Restart controller — truncate log first so we only match this startup
-mkdir -p "$(dirname "${MESSAGES_LOG}")"
+# Restart controller with clean log
 > "${MESSAGES_LOG}" 2>/dev/null || true
 "${WLP_BIN}" stop controller 2>/dev/null || true
 sleep 3
@@ -201,76 +200,40 @@ while [[ ${WAITED} -lt 90 ]]; do
     grep -q "CWWKF0011I" "${MESSAGES_LOG}" 2>/dev/null && break
     sleep 2; (( WAITED += 2 ))
 done
-if [[ ${WAITED} -ge 90 ]]; then
-    echo "  ERROR: Timeout waiting for controller ready — check ${MESSAGES_LOG}"
-    exit 1
-fi
+[[ ${WAITED} -ge 90 ]] && { echo "  ERROR: Timeout — check ${MESSAGES_LOG}"; exit 1; }
 
-if grep -q "CWWKF0012I.*dynamicRouting-1.0" "${MESSAGES_LOG}" 2>/dev/null; then
-    echo "  dynamicRouting-1.0  : active ✓"
-elif grep -q "CWWKF0001E.*dynamicRouting" "${MESSAGES_LOG}" 2>/dev/null; then
-    echo "  ERROR: dynamicRouting-1.0 not available in this Liberty edition."
-    grep "CWWKF0001E\|CWWKF0002E\|dynamicRouting" "${MESSAGES_LOG}" 2>/dev/null | tail -5
-    exit 1
-else
-    echo "  ERROR: dynamicRouting-1.0 did not load — check ${MESSAGES_LOG}"
-    grep -iE "CWWKF|dynamicRouting|error" "${MESSAGES_LOG}" 2>/dev/null | tail -10
-    exit 1
-fi
+grep -q "CWWKF0012I.*dynamicRouting-1.0" "${MESSAGES_LOG}" 2>/dev/null \
+    && echo "  dynamicRouting-1.0  : active ✓" \
+    || { echo "  ERROR: dynamicRouting-1.0 did not load"; grep -iE "CWWKF|dynamicRouting" "${MESSAGES_LOG}" | tail -5; exit 1; }
 
-if grep -q "CWWKF0012I.*restConnector-2.0" "${MESSAGES_LOG}" 2>/dev/null; then
-    echo "  restConnector-2.0   : active ✓"
-elif grep -q "CWWKF0001E.*restConnector" "${MESSAGES_LOG}" 2>/dev/null; then
-    echo "  ERROR: restConnector-2.0 not available — check Liberty edition."
-    grep "CWWKF0001E.*restConnector" "${MESSAGES_LOG}" 2>/dev/null | tail -3
-    exit 1
-else
-    echo "  ERROR: restConnector-2.0 did not load — check ${MESSAGES_LOG}"
-    grep -iE "CWWKF|restConnector|error" "${MESSAGES_LOG}" 2>/dev/null | tail -10
-    exit 1
-fi
+grep -q "CWWKF0012I.*restConnector-2.0" "${MESSAGES_LOG}" 2>/dev/null \
+    && echo "  restConnector-2.0   : active ✓" \
+    || { echo "  ERROR: restConnector-2.0 did not load"; exit 1; }
 
-# Brief pause for the DynamicRouting MBean to register after server ready
-echo "  Waiting 5 s for DynamicRouting MBean registration..."
-sleep 5
+echo "  Waiting 10 s for DynamicRouting MBean registration..."
+sleep 10
 echo ""
 
 # ---------------------------------------------------------------------------
-# 3. Run dynamicRouting setup
-#
-#    Connects to the controller via HTTPS and generates:
-#      plugin-cfg.xml   — <IntelligentManagement> stanza pointing at the
-#                         controller's /ibm/api/dynamicRouting endpoint
-#      plugin-key.p12   — PKCS12 keystore for TLS between plugin and controller
-#
-#    --pluginInstallRoot  : the IHS plugin root — Liberty embeds this path as
-#                           the Keyfile location in plugin-cfg.xml
-#    --targetPath         : where the command writes its output files
-#                           (defaults to $PWD without this flag)
-#    --webServerName      : web server name registered with the controller
-#                           IBM docs use singular; older builds accepted plural.
-#                           We probe the binary and use whichever it accepts.
+# 4. Run dynamicRouting setup
+#    Generates plugin-cfg.xml (with <IntelligentManagement>) + plugin-key.p12
 # ---------------------------------------------------------------------------
-echo "[3/5] Running dynamicRouting setup..."
+echo "[4/6] Running dynamicRouting setup..."
 
 rm -rf "${SETUP_OUTPUT_DIR}"
 mkdir -p "${SETUP_OUTPUT_DIR}"
 mkdir -p "${PLUGIN_KEYSTORE_DIR}"
 
-# Detect whether this build of dynamicRouting uses --webServerName (singular,
-# per IBM docs) or --webServerNames (plural, accepted by some older builds).
-# Fall back to no web-server flag at all if neither is advertised — the command
-# still generates plugin-cfg.xml without it (uses a default name).
+# Probe for --webServerName vs --webServerNames
 _DR_HELP=$("${DYNAMIC_ROUTING_BIN}" setup --help 2>&1 || true)
 if echo "${_DR_HELP}" | grep -q -- "--webServerName[^s]"; then
-    WS_NAME_FLAG="--webServerName=${WEB_SERVER_NAME}"
+    WS_FLAG="--webServerName=${WEB_SERVER_NAME}"
 elif echo "${_DR_HELP}" | grep -q -- "--webServerNames"; then
-    WS_NAME_FLAG="--webServerNames=${WEB_SERVER_NAME}"
+    WS_FLAG="--webServerNames=${WEB_SERVER_NAME}"
 else
-    WS_NAME_FLAG=""
-    echo "  NOTE: --webServerName[s] not advertised by this build — omitting flag"
+    WS_FLAG=""
 fi
-echo "  Web server flag : ${WS_NAME_FLAG:-<omitted>}"
+echo "  Web server flag: ${WS_FLAG:-<omitted>}"
 
 "${DYNAMIC_ROUTING_BIN}" setup \
     --host="${CONTROLLER_HOST}" \
@@ -278,7 +241,7 @@ echo "  Web server flag : ${WS_NAME_FLAG:-<omitted>}"
     --user="${ADMIN_USER}" \
     --password="${ADMIN_PASS}" \
     --keystorePassword="${KEYSTORE_PASS}" \
-    ${WS_NAME_FLAG:+"${WS_NAME_FLAG}"} \
+    ${WS_FLAG:+"${WS_FLAG}"} \
     --pluginInstallRoot="${IHS_ROOT}" \
     --targetPath="${SETUP_OUTPUT_DIR}" \
     --autoAcceptCertificates
@@ -290,77 +253,27 @@ if [[ ${SETUP_RC} -ne 0 ]]; then
     exit 1
 fi
 
-# Locate generated plugin-cfg.xml
-# With a single --webServerName entry the filename is plugin-cfg.xml
-GENERATED_CFG="${SETUP_OUTPUT_DIR}/plugin-cfg.xml"
-if [[ ! -f "${GENERATED_CFG}" ]]; then
-    GENERATED_CFG=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-cfg.xml" 2>/dev/null | head -1)
-fi
-if [[ -z "${GENERATED_CFG}" || ! -f "${GENERATED_CFG}" ]]; then
-    echo "  ERROR: plugin-cfg.xml not found after dynamicRouting setup."
-    echo "         All files under ${SETUP_OUTPUT_DIR}:"
-    find "${SETUP_OUTPUT_DIR}" -type f 2>/dev/null | sort | sed 's/^/    /'
+GENERATED_CFG=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-cfg.xml" 2>/dev/null | head -1)
+if [[ -z "${GENERATED_CFG}" ]]; then
+    echo "  ERROR: plugin-cfg.xml not generated"
+    find "${SETUP_OUTPUT_DIR}" -type f | sort | sed 's/^/    /'
     exit 1
 fi
 echo "  Generated: ${GENERATED_CFG}"
 
-# ---------------------------------------------------------------------------
-# Critical check: the generated plugin-cfg.xml MUST contain an
-# <IntelligentManagement> stanza. If it contains only a static <ServerCluster>
-# it means the DynamicRouting MBean was not reachable when setup ran — the
-# plugin will do plain round-robin across only the members alive at setup time
-# and will NOT pick up new members automatically. That defeats the entire
-# purpose of Step 3b.
-#
-# Root cause when this check fails:
-#   - restConnector-2.0 did not load (check CWWKF0012I in messages.log)
-#   - The DynamicRouting MBean had not finished registering (sleep was too short)
-#   - The controller keystore password in --keystorePassword does not match
-#     bootstrap.properties keystore.password on the controller
-# ---------------------------------------------------------------------------
-if ! grep -qi "IntelligentManagement" "${GENERATED_CFG}"; then
-    echo ""
-    echo "  ERROR: plugin-cfg.xml does NOT contain an <IntelligentManagement> stanza."
-    echo "         The dynamicRouting setup command fell back to a static <ServerCluster>"
-    echo "         — this means it could not contact the DynamicRouting MBean on the"
-    echo "         controller. Routing will be limited to members alive at setup time"
-    echo "         and will NOT update automatically when members join or leave."
-    echo ""
-    echo "  Diagnostics:"
-    echo "    # Confirm restConnector-2.0 loaded:"
-    echo "    grep 'restConnector-2.0' ${MESSAGES_LOG}"
-    echo "    # Confirm DynamicRouting MBean registered:"
-    echo "    grep -i 'dynamicRouting\|DynamicRouting' ${MESSAGES_LOG} | tail -20"
-    echo ""
-    echo "  First 40 lines of generated plugin-cfg.xml:"
-    head -40 "${GENERATED_CFG}" | sed 's/^/    /'
-    echo ""
-    exit 1
-fi
-echo "  IntelligentManagement stanza : present ✓  (live routing active)"
-
-# Locate generated plugin-key.p12
 GENERATED_KEY=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-key.p12" 2>/dev/null | head -1)
-if [[ -z "${GENERATED_KEY}" || ! -f "${GENERATED_KEY}" ]]; then
-    echo "  ERROR: plugin-key.p12 not found after dynamicRouting setup."
-    find "${SETUP_OUTPUT_DIR}" -type f 2>/dev/null | sort | sed 's/^/    /'
+if [[ -z "${GENERATED_KEY}" ]]; then
+    echo "  ERROR: plugin-key.p12 not generated"
     exit 1
 fi
 echo "  Keystore (PKCS12): ${GENERATED_KEY}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 4. Convert plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS)
-#
-#    The WAS plugin requires the keystore in CMS (.kdb) format.
-#    gskcapicmd ships with a proper IHS install and performs the conversion.
-#    The .kdb + .sth + .rdb files must reside at:
-#      pluginInstallRoot/config/webServerName/
-#    Liberty encodes that exact path as the Keyfile stanza in plugin-cfg.xml.
+# 5. Convert plugin-key.p12 → plugin-key.kdb (CMS)
 # ---------------------------------------------------------------------------
-echo "[4/5] Converting keystore PKCS12 → CMS (gskcapicmd)..."
+echo "[5/6] Converting keystore PKCS12 → CMS (gskcapicmd)..."
 
-# Remove any stale CMS files from a previous run
 rm -f "${PLUGIN_KEYSTORE_DIR}/plugin-key.kdb" \
       "${PLUGIN_KEYSTORE_DIR}/plugin-key.sth" \
       "${PLUGIN_KEYSTORE_DIR}/plugin-key.rdb"
@@ -372,102 +285,58 @@ rm -f "${PLUGIN_KEYSTORE_DIR}/plugin-key.kdb" \
     -target "${PLUGIN_KEY_KDB}" \
     -new_format cms \
     -stash
-
-CONV_RC=$?
-if [[ ${CONV_RC} -ne 0 ]]; then
-    echo "  ERROR: gskcapicmd -keydb -convert failed (exit ${CONV_RC})"
-    exit 1
-fi
+[[ $? -ne 0 ]] && { echo "  ERROR: gskcapicmd -keydb -convert failed"; exit 1; }
 
 "${GSKCAPICMD}" -cert -setdefault \
     -pw "${KEYSTORE_PASS}" \
     -db "${PLUGIN_KEY_KDB}" \
-    -label default
+    -label default 2>/dev/null || true
 
 echo "  CMS keystore : ${PLUGIN_KEY_KDB}"
 echo "  Stash file   : ${PLUGIN_KEYSTORE_DIR}/plugin-key.sth"
 
-# Set ownership to match the User/Group in httpd.conf (IHS runs as itzuser)
 IHS_USER=$(grep "^User " "${HTTPD_CONF}" 2>/dev/null | awk '{print $2}')
 IHS_GROUP=$(grep "^Group " "${HTTPD_CONF}" 2>/dev/null | awk '{print $2}')
-if [[ -n "${IHS_USER}" && -n "${IHS_GROUP}" ]]; then
+[[ -n "${IHS_USER}" && -n "${IHS_GROUP}" ]] && \
     chown "${IHS_USER}:${IHS_GROUP}" \
         "${PLUGIN_KEYSTORE_DIR}/plugin-key.kdb" \
         "${PLUGIN_KEYSTORE_DIR}/plugin-key.sth" \
         "${PLUGIN_KEYSTORE_DIR}/plugin-key.rdb" 2>/dev/null || true
-    echo "  Ownership    : ${IHS_USER}:${IHS_GROUP}"
-fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 5. Install plugin-cfg.xml, set WebSpherePluginConfig, restart IHS
+# 6. Patch plugin-cfg.xml, create log dir, install, restart IHS
 #
-# dynamicRouting setup generates a plugin-cfg.xml with an <IntelligentManagement>
-# stanza but the VirtualHostGroup/UriGroup/Route entries it creates default to
-# ports 80/443. IHS in this lab listens on 8080. We replace the entire routing
-# footer (VirtualHostGroup + UriGroup + Route) with correct values so that:
-#   - VirtualHostGroup covers *:8080
-#   - UriGroup covers /*
-#   - Route ties VirtualHostGroup → UriGroup → IntelligentManagement="true"
+# dynamicRouting setup writes the Log Name as:
+#   pluginInstallRoot/logs/webServerName/http_plugin.log
+# That directory must exist before IHS starts, otherwise the plugin silently
+# uses /dev/null and all plugin activity is invisible.
 #
-# The <IntelligentManagement> stanza itself is generated by dynamicRouting setup
-# and must not be modified — it contains the controller host/port/keystore paths.
+# The generated VirtualHostGroup defaults to ports 80/443. Patch it to 8080.
 # ---------------------------------------------------------------------------
-echo "[5/5] Installing plugin-cfg.xml and restarting IHS..."
+echo "[6/6] Installing plugin-cfg.xml and restarting IHS..."
 
-IHS_HTTP_PORT=8080
+# Create the plugin log directory the IM plugin expects
+mkdir -p "${PLUGIN_LOG_DIR}"
+[[ -n "${IHS_USER}" ]] && chown "${IHS_USER}:${IHS_GROUP:-${IHS_USER}}" "${PLUGIN_LOG_DIR}" 2>/dev/null || true
+echo "  Created log dir: ${PLUGIN_LOG_DIR}"
 
-# Strip any existing VirtualHostGroup / UriGroup / Route lines that reference
-# wrong ports, then inject correct ones. We do this unconditionally so that
-# re-runs always produce a consistent result regardless of what was injected
-# in a previous run.
-CONTROLLER_HTTP_PORT="${CONTROLLER_HTTP}" python3 - "${GENERATED_CFG}" "${IHS_HTTP_PORT}" "${IHS_ROOT}" <<'PYEOF'
+# Patch VirtualHostGroup port and add UriGroup+Route if missing
+python3 - "${GENERATED_CFG}" "${IHS_HTTP_PORT}" <<'PYEOF'
 import sys, re
 
-cfg_path  = sys.argv[1]
-port      = sys.argv[2]
-ihs_root  = sys.argv[3]
+path = sys.argv[1]
+port = sys.argv[2]
 
-with open(cfg_path) as f:
+with open(path) as f:
     xml = f.read()
 
-# Set LogLevel="Stats" so plugin.log captures every backend connection attempt.
-xml = re.sub(r'(<Log\b[^>]*\bLogLevel=")[^"]*(")', r'\1Stats\2', xml)
+# Replace any VirtualHost port with IHS port
+xml = re.sub(r'(<VirtualHost\s+Name="\*:)\d+(")', rf'\g<1>{port}\2', xml)
 
-# Switch the <Connector> inside <IntelligentManagement> from HTTPS to HTTP.
-# dynamicRouting setup always generates protocol="https" port="9443". This
-# requires IHS to have SSL modules loaded and a trusted keystore — neither of
-# which is available in this lab's minimal IHS install. The controller exposes
-# /ibm/api/dynamicRouting on HTTP (port 9080) too; switching to HTTP removes
-# the TLS dependency entirely and is sufficient for a lab environment.
-xml = re.sub(
-    r'(<Connector\s[^>]*\bprotocol=")https("\s[^>]*port=")[^"]*(")',
-    lambda m: m.group(0).replace('https', 'http').replace(m.group(3), ''),
-    xml, flags=re.IGNORECASE
-)
-# Simpler unconditional replace: set protocol=http and port=CONTROLLER_HTTP
-import os
-ctrl_http = os.environ.get('CONTROLLER_HTTP_PORT', '9080')
-xml = re.sub(
-    r'<Connector(\s[^>]*)protocol="https"([^>]*)port="[^"]*"',
-    f'<Connector\\1protocol="http"\\2port="{ctrl_http}"',
-    xml, flags=re.IGNORECASE
-)
-xml = re.sub(
-    r'<Connector(\s[^>]*)port="[^"]*"([^>]*)protocol="https"',
-    f'<Connector\\1port="{ctrl_http}"\\2protocol="http"',
-    xml, flags=re.IGNORECASE
-)
-# Remove keyring/stashfile properties from the Connector — not needed for HTTP
-xml = re.sub(r'\s*<Property\s+name="(?:keyring|stashfile)"[^/]*/>', '', xml, flags=re.IGNORECASE)
-
-# Remove any previously injected or generated VirtualHostGroup / UriGroup /
-# Route blocks so we can replace them cleanly.
-xml = re.sub(r'\s*<UriGroup[^>]*>.*?</UriGroup>', '', xml, flags=re.DOTALL)
-xml = re.sub(r'\s*<VirtualHostGroup[^>]*>.*?</VirtualHostGroup>', '', xml, flags=re.DOTALL)
-xml = re.sub(r'\s*<Route\b[^/]*/>', '', xml, flags=re.DOTALL)
-
-injection = f"""
+# If no VirtualHostGroup exists at all, inject full routing footer
+if '<VirtualHostGroup' not in xml:
+    footer = f"""
     <UriGroup Name="default_uris">
         <Uri AffinityCookie="JSESSIONID" AffinityURLIdentifier="jsessionid" Name="/*"/>
     </UriGroup>
@@ -481,105 +350,75 @@ injection = f"""
            IntelligentManagement="true"/>
 
 """
-xml = xml.replace('</Config>', injection + '</Config>')
+    xml = xml.replace('</Config>', footer + '</Config>')
 
-with open(cfg_path, 'w') as f:
+with open(path, 'w') as f:
     f.write(xml)
 
-print(f"  Patched plugin-cfg.xml: VirtualHostGroup *:{port}, UriGroup /*, Route IntelligentManagement=true, LogLevel=Stats")
+print(f"  Patched VirtualHostGroup port → *:{port}")
 PYEOF
-
-if [[ $? -ne 0 ]]; then
-    echo "  ERROR: Failed to patch plugin-cfg.xml"
-    exit 1
-fi
-
-echo ""
-echo "  --- plugin-cfg.xml being installed ---"
-cat "${GENERATED_CFG}"
-echo "  --- end plugin-cfg.xml ---"
-echo ""
+[[ $? -ne 0 ]] && { echo "  ERROR: Failed to patch plugin-cfg.xml"; exit 1; }
 
 cp "${GENERATED_CFG}" "${PLUGIN_CFG}"
 echo "  Installed: ${PLUGIN_CFG}"
 
-# Ensure WebSpherePluginConfig directive is in httpd.conf (idempotent)
+# WebSpherePluginConfig in httpd.conf
 if grep -q "^WebSpherePluginConfig" "${HTTPD_CONF}"; then
     sed -i "s|^WebSpherePluginConfig .*|WebSpherePluginConfig ${PLUGIN_CFG}|" "${HTTPD_CONF}"
     echo "  WebSpherePluginConfig: updated"
 else
-    printf '\n# WAS plugin — Liberty dynamic routing (Intelligent Management)\nWebSpherePluginConfig %s\n' \
+    printf '\n# WAS plugin — Liberty IM Dynamic Routing\nWebSpherePluginConfig %s\n' \
         "${PLUGIN_CFG}" >> "${HTTPD_CONF}"
     echo "  WebSpherePluginConfig: added"
 fi
 
-RESULT=$("${APACHECTL}" configtest 2>&1)
-if ! echo "${RESULT}" | grep -q "Syntax OK"; then
-    echo "  ERROR: httpd.conf syntax check failed:"
-    echo "${RESULT}"
-    exit 1
-fi
+"${APACHECTL}" configtest 2>&1 | grep -q "Syntax OK" \
+    || { echo "  ERROR: httpd.conf syntax check failed"; "${APACHECTL}" configtest; exit 1; }
 echo "  httpd.conf syntax: OK"
 
-# Stop IHS reliably regardless of PID file state.
-# apachectl stop uses the PID file; if the file is missing or stale the
-# command exits 0 ("not running") but the httpd process may still be live
-# holding :8080. Kill by binary path to be certain before restarting.
+# Reliable IHS restart
 "${APACHECTL}" stop 2>/dev/null; sleep 2
-# Hard-kill any surviving httpd workers from this IHS install
 pkill -9 -f "${IHS_ROOT}/bin/httpd" 2>/dev/null; sleep 1
-# Confirm port is free before attempting start
-if ss -tlnp 2>/dev/null | grep -q ":8080 "; then
-    echo "  ERROR: port 8080 still in use after stop — cannot start IHS"
-    ss -tlnp | grep ":8080"
-    exit 1
-fi
+ss -tlnp 2>/dev/null | grep -q ":8080 " && { echo "  ERROR: port 8080 still in use"; exit 1; }
 "${APACHECTL}" start
-sleep 2
+sleep 3
 
-if ! ss -tlnp 2>/dev/null | grep -q ":8080 "; then
-    echo "  ERROR: IHS failed to start — check ${IHS_ROOT}/logs/error_log"
-    tail -20 "${IHS_ROOT}/logs/error_log"
-    exit 1
-fi
+ss -tlnp 2>/dev/null | grep -q ":8080 " \
+    || { echo "  ERROR: IHS failed to start"; tail -20 "${IHS_ROOT}/logs/error_log"; exit 1; }
 echo "  IHS: running on port 8080"
 echo ""
 
-# Verify end-to-end routing
-# The IM plugin connects to controller:9443/ibm/api/dynamicRouting on the
-# first request and builds its routing table. This can take up to 60 s.
-# Also dump the plugin log tail so any connection failures are visible.
+# ---------------------------------------------------------------------------
+# Verify — allow up to 60 s for IM plugin to connect and get routing table
+# ---------------------------------------------------------------------------
 echo "  Verifying routing via IHS (up to 60 s)..."
-POLL_WAITED=0
-HTTP_CODE="000"
+POLL_WAITED=0; HTTP_CODE="000"
 while [[ ${POLL_WAITED} -lt 60 ]]; do
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-        http://localhost:8080/server-info/ 2>/dev/null)
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/server-info/ 2>/dev/null)
     [[ "${HTTP_CODE}" == "200" ]] && break
     sleep 5; (( POLL_WAITED += 5 ))
     echo "    ${POLL_WAITED}s — HTTP ${HTTP_CODE}..."
 done
 
+echo ""
 echo "  GET /server-info/ via IHS → HTTP ${HTTP_CODE}"
 echo ""
-echo "  Last 50 lines of plugin log (LogLevel=Stats):"
-tail -50 "${IHS_ROOT}/logs/plugin.log" 2>/dev/null | sed 's/^/    /' || echo "    (plugin.log not found)"
+echo "  Plugin log (IM writes here):"
+tail -30 "${PLUGIN_LOG}" 2>/dev/null | sed 's/^/    /' || echo "    (${PLUGIN_LOG} not yet created)"
 echo ""
 
 if [[ "${HTTP_CODE}" == "200" ]]; then
     echo "=== Liberty Dynamic Routing (Intelligent Management) is active ==="
     echo ""
     echo "  IHS:8080 → controller:${CONTROLLER_HTTPS}/ibm/api/dynamicRouting"
-    echo "             → all healthy collective members (live routing table)"
+    echo "           → all collective members (live routing table)"
     echo ""
-    echo "  Members are discovered automatically — no script re-run needed"
-    echo "  when members are added, removed, started, or stopped."
+    echo "  Members joining/leaving are reflected automatically."
     echo ""
-    echo "  Verify round-robin across members (run several times):"
-    echo "    for i in \$(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done"
+    echo "  Verify round-robin:"
+    echo "    for i in \$(seq 8); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done"
     echo ""
-    echo "  Plugin log  : tail -f ${IHS_ROOT}/logs/plugin.log"
-    echo "  Plugin cfg  : ${PLUGIN_CFG}"
+    echo "  Plugin log : tail -f ${PLUGIN_LOG}"
     echo "  Admin Center: https://localhost:${CONTROLLER_HTTPS}/adminCenter"
 else
     echo "  WARNING: Routing returned HTTP ${HTTP_CODE} after 60 s."
@@ -588,7 +427,7 @@ else
     echo "    scripts/reset-ihs.sh && scripts/step1-was-plugin.sh"
     echo ""
     echo "  Diagnose:"
-    echo "    tail -50 ${IHS_ROOT}/logs/plugin.log"
+    echo "    tail -50 ${PLUGIN_LOG}"
     echo "    tail -30 ${IHS_ROOT}/logs/error_log"
     echo "    tail -30 ${MESSAGES_LOG}"
 fi
