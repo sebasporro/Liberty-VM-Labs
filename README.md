@@ -204,24 +204,26 @@ There are two sub-steps: static routing first, then dynamic routing.
 
 #### Step 3a — Static WAS plugin routing (Round Robin)
 
-Reset IHS to a clean baseline, then wire the plugin directly to the two members.
+Reset IHS to a clean baseline, then wire the plugin to all running members.
+The script **auto-discovers** every member listening on ports 9081–9089 at
+run time and writes one `<Server>` entry per member — no hardcoded list.
 
 ```bash
 # Reset httpd.conf to clean baseline, remove any stale plugin-cfg.xml
 scripts/reset-ihs.sh
 
-# Write plugin-cfg.xml (member1:9081 + member2:9082), add WebSpherePluginConfig, start IHS
+# Discover all running members, write plugin-cfg.xml, add WebSpherePluginConfig, start IHS
 scripts/step1-was-plugin.sh
 ```
 
-**Expected state:** `http://localhost:8080/server-info/` returns `200` and alternates
-between member1 (port 9081) and member2 (port 9082) on successive requests.
+**Expected state:** `http://localhost:8080/server-info/` returns `200` and
+round-robins across **all members that were running when the script executed**.
+Members added or removed after the script runs are NOT reflected — rerun the
+script to regenerate the static config. That limitation is what step 3b solves.
 
 ```bash
-# Verify round robin
-for i in 1 2 3 4; do
-  curl -s http://localhost:8080/server-info/ | grep -o "PORT.*[0-9]\{4\}"
-done
+# Verify round robin across all members
+for i in $(seq 8); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
 ```
 
 #### Step 3b — Dynamic routing (Intelligent Management)
