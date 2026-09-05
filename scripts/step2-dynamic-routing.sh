@@ -247,7 +247,9 @@ echo ""
 #                           the Keyfile location in plugin-cfg.xml
 #    --targetPath         : where the command writes its output files
 #                           (defaults to $PWD without this flag)
-#    --webServerNames     : web server name registered with the controller
+#    --webServerName      : web server name registered with the controller
+#                           IBM docs use singular; older builds accepted plural.
+#                           We probe the binary and use whichever it accepts.
 # ---------------------------------------------------------------------------
 echo "[3/5] Running dynamicRouting setup..."
 
@@ -255,13 +257,28 @@ rm -rf "${SETUP_OUTPUT_DIR}"
 mkdir -p "${SETUP_OUTPUT_DIR}"
 mkdir -p "${PLUGIN_KEYSTORE_DIR}"
 
+# Detect whether this build of dynamicRouting uses --webServerName (singular,
+# per IBM docs) or --webServerNames (plural, accepted by some older builds).
+# Fall back to no web-server flag at all if neither is advertised — the command
+# still generates plugin-cfg.xml without it (uses a default name).
+_DR_HELP=$("${DYNAMIC_ROUTING_BIN}" setup --help 2>&1 || true)
+if echo "${_DR_HELP}" | grep -q -- "--webServerName[^s]"; then
+    WS_NAME_FLAG="--webServerName=${WEB_SERVER_NAME}"
+elif echo "${_DR_HELP}" | grep -q -- "--webServerNames"; then
+    WS_NAME_FLAG="--webServerNames=${WEB_SERVER_NAME}"
+else
+    WS_NAME_FLAG=""
+    echo "  NOTE: --webServerName[s] not advertised by this build — omitting flag"
+fi
+echo "  Web server flag : ${WS_NAME_FLAG:-<omitted>}"
+
 "${DYNAMIC_ROUTING_BIN}" setup \
     --host="${CONTROLLER_HOST}" \
     --port="${CONTROLLER_HTTPS}" \
     --user="${ADMIN_USER}" \
     --password="${ADMIN_PASS}" \
     --keystorePassword="${KEYSTORE_PASS}" \
-    --webServerNames="${WEB_SERVER_NAME}" \
+    ${WS_NAME_FLAG:+"${WS_NAME_FLAG}"} \
     --pluginInstallRoot="${IHS_ROOT}" \
     --targetPath="${SETUP_OUTPUT_DIR}" \
     --autoAcceptCertificates
@@ -274,7 +291,7 @@ if [[ ${SETUP_RC} -ne 0 ]]; then
 fi
 
 # Locate generated plugin-cfg.xml
-# With a single --webServerNames entry the filename is plugin-cfg.xml
+# With a single --webServerName entry the filename is plugin-cfg.xml
 GENERATED_CFG="${SETUP_OUTPUT_DIR}/plugin-cfg.xml"
 if [[ ! -f "${GENERATED_CFG}" ]]; then
     GENERATED_CFG=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-cfg.xml" 2>/dev/null | head -1)
