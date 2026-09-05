@@ -98,12 +98,15 @@ if ! grep -qF "${IHS_INSTALL_ROOT}/bin" ~/.bashrc; then
     echo "export PATH=\"${IHS_INSTALL_ROOT}/bin:\$PATH\"" >> ~/.bashrc
     echo "      Added IHS bin to ~/.bashrc"
 fi
-# Make apachectl available in the current session immediately
-export PATH="${IHS_INSTALL_ROOT}/bin:${PATH}"
 
 echo ""
 echo "=== Done. IHS installed at ${IHS_INSTALL_ROOT} ==="
 echo ""
-echo "  NOTE: If you opened a new terminal after running this script,"
-echo "        run: source ~/.bashrc"
+echo "  Run this to make apachectl available in your current terminal:"
+echo ""
+echo "    source ~/.bashrc"
+echo ""
+echo "  Or use the full path directly:"
+echo ""
+echo "    ${IHS_INSTALL_ROOT}/bin/apachectl -v"
 echo ""
