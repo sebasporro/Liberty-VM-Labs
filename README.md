@@ -74,7 +74,7 @@ Open a terminal on the lab VM. All commands in this lab are run from
 `/home/itzuser/Liberty-VM-Labs` unless noted otherwise.
 
 ```bash
-cd /home/itz
+cd /home/itzuser
 git clone https://github.com/sebasporro/Liberty-VM-Labs.git
 cd Liberty-VM-Labs
 ```
