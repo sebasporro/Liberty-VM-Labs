@@ -431,6 +431,12 @@ elif ! grep -q "VirtualHostGroup" "${GENERATED_CFG}" 2>/dev/null; then
     echo "  Injected VirtualHostGroup *:${IHS_HTTP_PORT} into plugin-cfg.xml"
 fi
 
+echo ""
+echo "  --- plugin-cfg.xml being installed ---"
+cat "${GENERATED_CFG}"
+echo "  --- end plugin-cfg.xml ---"
+echo ""
+
 cp "${GENERATED_CFG}" "${PLUGIN_CFG}"
 echo "  Installed: ${PLUGIN_CFG}"
 
@@ -477,12 +483,13 @@ echo "  IHS: running on port 8080"
 echo ""
 
 # Verify end-to-end routing
-# The plugin fetches the routing table from the controller on first request;
-# allow up to 30 s for the initial connection to /ibm/api/dynamicRouting.
-echo "  Verifying routing via IHS (up to 30 s)..."
+# The IM plugin connects to controller:9443/ibm/api/dynamicRouting on the
+# first request and builds its routing table. This can take up to 60 s.
+# Also dump the plugin log tail so any connection failures are visible.
+echo "  Verifying routing via IHS (up to 60 s)..."
 POLL_WAITED=0
 HTTP_CODE="000"
-while [[ ${POLL_WAITED} -lt 30 ]]; do
+while [[ ${POLL_WAITED} -lt 60 ]]; do
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
         http://localhost:8080/server-info/ 2>/dev/null)
     [[ "${HTTP_CODE}" == "200" ]] && break
@@ -491,6 +498,9 @@ while [[ ${POLL_WAITED} -lt 30 ]]; do
 done
 
 echo "  GET /server-info/ via IHS → HTTP ${HTTP_CODE}"
+echo ""
+echo "  Last 20 lines of plugin log:"
+tail -20 "${IHS_ROOT}/logs/plugin.log" 2>/dev/null | sed 's/^/    /' || echo "    (plugin.log not found)"
 echo ""
 
 if [[ "${HTTP_CODE}" == "200" ]]; then
