@@ -304,6 +304,41 @@ if [[ -z "${GENERATED_CFG}" || ! -f "${GENERATED_CFG}" ]]; then
 fi
 echo "  Generated: ${GENERATED_CFG}"
 
+# ---------------------------------------------------------------------------
+# Critical check: the generated plugin-cfg.xml MUST contain an
+# <IntelligentManagement> stanza. If it contains only a static <ServerCluster>
+# it means the DynamicRouting MBean was not reachable when setup ran — the
+# plugin will do plain round-robin across only the members alive at setup time
+# and will NOT pick up new members automatically. That defeats the entire
+# purpose of Step 3b.
+#
+# Root cause when this check fails:
+#   - restConnector-2.0 did not load (check CWWKF0012I in messages.log)
+#   - The DynamicRouting MBean had not finished registering (sleep was too short)
+#   - The controller keystore password in --keystorePassword does not match
+#     bootstrap.properties keystore.password on the controller
+# ---------------------------------------------------------------------------
+if ! grep -qi "IntelligentManagement" "${GENERATED_CFG}"; then
+    echo ""
+    echo "  ERROR: plugin-cfg.xml does NOT contain an <IntelligentManagement> stanza."
+    echo "         The dynamicRouting setup command fell back to a static <ServerCluster>"
+    echo "         — this means it could not contact the DynamicRouting MBean on the"
+    echo "         controller. Routing will be limited to members alive at setup time"
+    echo "         and will NOT update automatically when members join or leave."
+    echo ""
+    echo "  Diagnostics:"
+    echo "    # Confirm restConnector-2.0 loaded:"
+    echo "    grep 'restConnector-2.0' ${MESSAGES_LOG}"
+    echo "    # Confirm DynamicRouting MBean registered:"
+    echo "    grep -i 'dynamicRouting\|DynamicRouting' ${MESSAGES_LOG} | tail -20"
+    echo ""
+    echo "  First 40 lines of generated plugin-cfg.xml:"
+    head -40 "${GENERATED_CFG}" | sed 's/^/    /'
+    echo ""
+    exit 1
+fi
+echo "  IntelligentManagement stanza : present ✓  (live routing active)"
+
 # Locate generated plugin-key.p12
 GENERATED_KEY=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-key.p12" 2>/dev/null | head -1)
 if [[ -z "${GENERATED_KEY}" || ! -f "${GENERATED_KEY}" ]]; then
@@ -377,8 +412,21 @@ echo "[5/5] Installing plugin-cfg.xml and restarting IHS..."
 
 IHS_HTTP_PORT=8080
 
-# Inject VirtualHostGroup + Route for port 8080 if not already present
-if ! grep -q "VirtualHostGroup" "${GENERATED_CFG}" 2>/dev/null; then
+# Inject VirtualHostGroup + Route for port 8080 if not already present.
+# IntelligentManagement-based configs omit VirtualHostGroup/Route by default
+# (they use the IM stanza for routing) but they still need at least one
+# VirtualHostGroup so that mod_was_ap24_http.so binds to the correct port.
+# Without this, requests on :8080 are not matched and the plugin passes them
+# through without dynamic routing.
+if grep -q "VirtualHostGroup.*default_vhosts" "${GENERATED_CFG}" 2>/dev/null; then
+    # Already present — make sure the port is correct
+    if ! grep -q "VirtualHost Name=\"\*:${IHS_HTTP_PORT}\"" "${GENERATED_CFG}" 2>/dev/null; then
+        sed -i "s|VirtualHostGroup Name=\"default_vhosts\"|VirtualHostGroup Name=\"default_vhosts\"><VirtualHost Name=\"*:${IHS_HTTP_PORT}\"/|" "${GENERATED_CFG}" 2>/dev/null || true
+        echo "  Patched VirtualHostGroup to add *:${IHS_HTTP_PORT}"
+    else
+        echo "  VirtualHostGroup *:${IHS_HTTP_PORT} : already present"
+    fi
+elif ! grep -q "VirtualHostGroup" "${GENERATED_CFG}" 2>/dev/null; then
     sed -i "s|</Config>|<VirtualHostGroup Name=\"default_vhosts\">\n  <VirtualHost Name=\"*:${IHS_HTTP_PORT}\"/>\n</VirtualHostGroup>\n<Route VirtualHostGroup=\"default_vhosts\"/>\n</Config>|" "${GENERATED_CFG}"
     echo "  Injected VirtualHostGroup *:${IHS_HTTP_PORT} into plugin-cfg.xml"
 fi
