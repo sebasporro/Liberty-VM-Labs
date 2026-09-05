@@ -233,8 +233,8 @@ Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9080/wr
 ```
 
 The script:
-1. Adds `dynamicRouting-1.0` to the controller via `configDropins/overrides/`
-2. Restarts the controller and waits for `CWWKF0011I`
+1. Writes `dynamic-routing.xml` dropin to controller `configDropins/overrides/` enabling `dynamicRouting-1.0` **and** `restConnector-2.0` (required — the setup CLI reaches the DynamicRouting MBean via the REST JMX bridge; without it CWWKX0217E is thrown)
+2. Restarts the controller and waits for `CWWKF0011I`; hard-fails if either feature doesn't confirm in `messages.log`
 3. Runs `dynamicRouting setup --port=9443 --keystorePassword=<pass> --webServerNames=webserver1` — generates `plugin-cfg.xml` pointing at `controller:9080/wr`
 4. Installs the new `plugin-cfg.xml` into `$IHS_ROOT/conf/` and sets `WebSpherePluginConfig`
 5. Starts IHS and verifies end-to-end routing
@@ -633,9 +633,9 @@ How it works:
 
 Steps performed:
 1. Pre-flight: verifies controller (HTTP 9080), at least one member, `mod_was_ap24_http.so`
-2. Adds `dynamic-routing.xml` dropin to controller `configDropins/overrides/`
-3. Restarts controller; waits for `CWWKF0011I` (server ready)
-4. Runs `dynamicRouting setup --port=${CONTROLLER_HTTPS} --keystorePassword=<pass> --webServerNames=webserver1` → generates `plugin-cfg.xml` under `<pluginInstallRoot>/config/webserver1/`
+2. Always (re)writes `dynamic-routing.xml` dropin with `dynamicRouting-1.0` + `restConnector-2.0`
+3. Restarts controller; waits for `CWWKF0011I`; hard-fails if either feature doesn't confirm
+4. Runs `dynamicRouting setup --port=9443 --keystorePassword=<pass> --webServerNames=webserver1` → generates `plugin-cfg.xml` under `<pluginInstallRoot>/config/webserver1/`
 5. Copies `plugin-cfg.xml` to `$IHS_ROOT/conf/`; sets `WebSpherePluginConfig`; starts IHS
 
 **Usage:**

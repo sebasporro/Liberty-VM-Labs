@@ -126,30 +126,43 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 2. Add dynamicRouting-1.0 feature to the controller (idempotent)
+# 2. Add dynamicRouting-1.0 + restConnector-2.0 to the controller.
+#
+#    dynamicRouting-1.0  — activates the /wr routing endpoint
+#    restConnector-2.0   — required: the dynamicRouting setup CLI reaches the
+#                          DynamicRouting MBean via the REST JMX bridge.
+#                          Without it, CWWKX0217E is thrown even when
+#                          dynamicRouting-1.0 itself loads successfully.
+#
+#    Always (re)write the dropin so a stale file from a previous failed run
+#    cannot silently suppress a required feature.
 # ---------------------------------------------------------------------------
-echo "[2/5] Enabling dynamicRouting-1.0 on controller..."
+echo "[2/5] Enabling dynamicRouting-1.0 + restConnector-2.0 on controller..."
 mkdir -p "${OVERRIDES_DIR}"
 DYNAMIC_XML="${OVERRIDES_DIR}/dynamic-routing.xml"
 
-if [[ -f "${DYNAMIC_XML}" ]]; then
-    echo "  Already present — skipped"
-else
-    cat > "${DYNAMIC_XML}" <<'XML'
+cat > "${DYNAMIC_XML}" <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <server description="Dynamic routing feature">
     <featureManager>
+        <!-- Activates the /wr routing endpoint on the controller HTTP port -->
         <feature>dynamicRouting-1.0</feature>
+        <!--
+          Required by the dynamicRouting setup CLI.
+          The command reaches the DynamicRouting MBean via the Liberty REST
+          JMX connector.  Without this feature the MBean is unreachable and
+          the setup command fails with CWWKX0217E.
+        -->
+        <feature>restConnector-2.0</feature>
     </featureManager>
 </server>
 XML
-    echo "  Written: ${DYNAMIC_XML}"
-fi
+echo "  Written: ${DYNAMIC_XML}"
 
 # ---------------------------------------------------------------------------
 # 3. Restart controller and wait for dynamicRouting-1.0 to load
 # ---------------------------------------------------------------------------
-echo "[3/5] Restarting controller to activate dynamicRouting-1.0..."
+echo "[3/5] Restarting controller to activate dynamicRouting-1.0 + restConnector-2.0..."
 
 > "${MESSAGES_LOG}" 2>/dev/null || true
 "${WLP_BIN}" stop controller 2>/dev/null || true
@@ -162,12 +175,25 @@ while [[ ${WAITED} -lt 90 ]]; do
     grep -q "CWWKF0011I" "${MESSAGES_LOG}" 2>/dev/null && break
     sleep 2; (( WAITED += 2 ))
 done
-[[ ${WAITED} -ge 90 ]] && echo "  WARNING: Timeout — check ${MESSAGES_LOG}"
+if [[ ${WAITED} -ge 90 ]]; then
+    echo "  ERROR: Timeout waiting for controller ready — check ${MESSAGES_LOG}"
+    exit 1
+fi
 
+# Verify both features actually installed (CWWKF0012I = feature installed)
 if grep -q "dynamicRouting-1.0" "${MESSAGES_LOG}" 2>/dev/null; then
-    echo "  dynamicRouting-1.0 : active ✓"
+    echo "  dynamicRouting-1.0  : active ✓"
 else
-    echo "  WARNING: dynamicRouting-1.0 not confirmed in messages.log — continuing."
+    echo "  ERROR: dynamicRouting-1.0 did not load — check ${MESSAGES_LOG}"
+    grep -i "dynamicRouting\|CWWKF\|error" "${MESSAGES_LOG}" 2>/dev/null | tail -10
+    exit 1
+fi
+if grep -q "restConnector-2.0" "${MESSAGES_LOG}" 2>/dev/null; then
+    echo "  restConnector-2.0   : active ✓"
+else
+    echo "  ERROR: restConnector-2.0 did not load — check ${MESSAGES_LOG}"
+    grep -i "restConnector\|CWWKF\|error" "${MESSAGES_LOG}" 2>/dev/null | tail -10
+    exit 1
 fi
 echo ""
 
