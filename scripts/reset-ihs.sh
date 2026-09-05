@@ -45,7 +45,7 @@ LoadModule dir_module             modules/mod_dir.so
 LoadModule mime_module            modules/mod_mime.so
 
 # WAS plugin — enabled by lab scripts
-LoadModule was_ap24_http_module   modules/mod_was_ap24_http.so
+LoadModule was_ap24_module        modules/mod_was_ap24_http.so
 
 User itzuser
 Group itzuser

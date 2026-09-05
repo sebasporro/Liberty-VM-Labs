@@ -421,7 +421,7 @@ IHS_HTTP_PORT=8080
 # wrong ports, then inject correct ones. We do this unconditionally so that
 # re-runs always produce a consistent result regardless of what was injected
 # in a previous run.
-python3 - "${GENERATED_CFG}" "${IHS_HTTP_PORT}" "${IHS_ROOT}" <<'PYEOF'
+CONTROLLER_HTTP_PORT="${CONTROLLER_HTTP}" python3 - "${GENERATED_CFG}" "${IHS_HTTP_PORT}" "${IHS_ROOT}" <<'PYEOF'
 import sys, re
 
 cfg_path  = sys.argv[1]
@@ -431,25 +431,35 @@ ihs_root  = sys.argv[3]
 with open(cfg_path) as f:
     xml = f.read()
 
-# Set LogLevel="Stats" so plugin.log captures every backend connection
-# attempt — essential for diagnosing transport/protocol mismatches.
+# Set LogLevel="Stats" so plugin.log captures every backend connection attempt.
 xml = re.sub(r'(<Log\b[^>]*\bLogLevel=")[^"]*(")', r'\1Stats\2', xml)
 
-# The <Connector> inside <IntelligentManagement> must have a stashfile
-# property alongside the keyring so the plugin can unlock the CMS keystore
-# for TLS to the controller. dynamicRouting setup emits keyring but omits
-# stashfile — without it the TLS handshake fails and the plugin returns 400.
-def inject_stashfile(m):
-    connector_xml = m.group(0)
-    # Derive stashfile path: same dir/name as keyring, .sth extension
-    kr = re.search(r'<Property\s+name="keyring"\s+value="([^"]+)"', connector_xml, re.IGNORECASE)
-    if kr and '<Property name="stashfile"' not in connector_xml.lower():
-        sth = re.sub(r'\.(kdb|p12)$', '.sth', kr.group(1))
-        insert = f'\n                <Property name="stashfile" value="{sth}"/>'
-        connector_xml = connector_xml.replace('</Connector>', insert + '\n            </Connector>')
-    return connector_xml
-
-xml = re.sub(r'<Connector\b[^>]*>.*?</Connector>', inject_stashfile, xml, flags=re.DOTALL)
+# Switch the <Connector> inside <IntelligentManagement> from HTTPS to HTTP.
+# dynamicRouting setup always generates protocol="https" port="9443". This
+# requires IHS to have SSL modules loaded and a trusted keystore — neither of
+# which is available in this lab's minimal IHS install. The controller exposes
+# /ibm/api/dynamicRouting on HTTP (port 9080) too; switching to HTTP removes
+# the TLS dependency entirely and is sufficient for a lab environment.
+xml = re.sub(
+    r'(<Connector\s[^>]*\bprotocol=")https("\s[^>]*port=")[^"]*(")',
+    lambda m: m.group(0).replace('https', 'http').replace(m.group(3), ''),
+    xml, flags=re.IGNORECASE
+)
+# Simpler unconditional replace: set protocol=http and port=CONTROLLER_HTTP
+import os
+ctrl_http = os.environ.get('CONTROLLER_HTTP_PORT', '9080')
+xml = re.sub(
+    r'<Connector(\s[^>]*)protocol="https"([^>]*)port="[^"]*"',
+    f'<Connector\\1protocol="http"\\2port="{ctrl_http}"',
+    xml, flags=re.IGNORECASE
+)
+xml = re.sub(
+    r'<Connector(\s[^>]*)port="[^"]*"([^>]*)protocol="https"',
+    f'<Connector\\1port="{ctrl_http}"\\2protocol="http"',
+    xml, flags=re.IGNORECASE
+)
+# Remove keyring/stashfile properties from the Connector — not needed for HTTP
+xml = re.sub(r'\s*<Property\s+name="(?:keyring|stashfile)"[^/]*/>', '', xml, flags=re.IGNORECASE)
 
 # Remove any previously injected or generated VirtualHostGroup / UriGroup /
 # Route blocks so we can replace them cleanly.
