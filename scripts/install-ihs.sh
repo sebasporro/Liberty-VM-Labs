@@ -1,23 +1,14 @@
 #!/bin/bash
 # =============================================================================
 # install-ihs.sh
-# Installs IBM HTTP Server (IHS) from the pre-provisioned installer ZIP,
-# and installs the WebSphere/Liberty WAS plugin (mod_was_ap24_http.so).
+# Cleans any previous IHS install, installs IBM HTTP Server from the
+# pre-provisioned ARCHIVE ZIP, and installs the WAS plugin.
 #
 # Usage:  scripts/install-ihs.sh
 #
-# Supported ZIP format:
-#   - ARCHIVE format (e.g. 9.0.5-WS-IHS-ARCHIVE-linux-x86_64.zip)
-#     Extracts to a ready-to-use directory tree — moved into place directly.
-#     The same ZIP also contains the WAS plugin under plugin/bin/64bits/.
-#
-# Override defaults:
-#   export IHS_INSTALLER_DIR=/path/to/dir/containing/ihs-zip
-#   export IHS_INSTALL_ROOT=/home/itzuser/IBM/HTTPServer  (default)
-#
-# After install, add IHS to PATH:
-#   echo 'export PATH="/home/itzuser/IBM/HTTPServer/bin:$PATH"' >> ~/.bashrc
-#   source ~/.bashrc
+# Overrides:
+#   IHS_INSTALLER_DIR   directory that contains the IHS ZIP  (default below)
+#   IHS_INSTALL_ROOT    where IHS is installed               (default below)
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,60 +17,42 @@ source "${SCRIPT_DIR}/00-set-env.sh"
 IHS_INSTALL_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
 IHS_INSTALLER_DIR="${IHS_INSTALLER_DIR:-/home/itzuser/software/IHS}"
 IHS_STAGING="${WORKSPACE_ROOT}/_ihs_staging"
-IHS_LIB="${IHS_INSTALL_ROOT}/lib"
-HTTPD_BIN="${IHS_INSTALL_ROOT}/bin/httpd"
-APACHECTL="${IHS_INSTALL_ROOT}/bin/apachectl"
-HTTPD_CONF="${IHS_INSTALL_ROOT}/conf/httpd.conf"
 
 echo ""
 echo "=== IBM HTTP Server — Install ==="
 echo ""
 
 # ---------------------------------------------------------------------------
-# 1. Check if already installed
+# 1. Clean previous install
 # ---------------------------------------------------------------------------
-if [[ -x "${APACHECTL}" ]]; then
-    echo "[INFO] IHS already installed at ${IHS_INSTALL_ROOT}"
-    echo "       Remove ${IHS_INSTALL_ROOT} to re-install."
-    echo ""
-    "${APACHECTL}" -v 2>&1 | head -2
-    exit 0
+if [[ -d "${IHS_INSTALL_ROOT}" ]]; then
+    echo "[1/3] Removing previous install at ${IHS_INSTALL_ROOT}..."
+    rm -rf "${IHS_INSTALL_ROOT}"
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Locate the installer ZIP
+# 2. Locate and extract the installer ZIP
 # ---------------------------------------------------------------------------
-echo "[1/5] Locating IHS installer ZIP in ${IHS_INSTALLER_DIR}..."
+echo "[2/3] Installing IHS..."
 
 if [[ ! -d "${IHS_INSTALLER_DIR}" ]]; then
     echo "  ERROR: Installer directory not found: ${IHS_INSTALLER_DIR}" >&2
     echo "         Set IHS_INSTALLER_DIR to the directory containing the IHS ZIP." >&2
-    echo "         Hint: find / -name '*IHS*.zip' 2>/dev/null" >&2
     exit 1
 fi
 
 IHS_ZIP=$(find "${IHS_INSTALLER_DIR}" -maxdepth 2 -name "*.zip" | head -1)
 if [[ -z "${IHS_ZIP}" ]]; then
     echo "  ERROR: No ZIP file found in ${IHS_INSTALLER_DIR}" >&2
-    echo "         Hint: find / -name '*IHS*.zip' 2>/dev/null" >&2
     exit 1
 fi
-echo "      Found: ${IHS_ZIP}"
-echo ""
+echo "      ZIP: ${IHS_ZIP}"
 
-# ---------------------------------------------------------------------------
-# 3. Extract and move into place
-# ---------------------------------------------------------------------------
-echo "[2/5] Extracting..."
 rm -rf "${IHS_STAGING}"
 mkdir -p "${IHS_STAGING}"
 unzip -q "${IHS_ZIP}" -d "${IHS_STAGING}"
-echo "      Extracted to: ${IHS_STAGING}"
-echo ""
 
-echo "[3/5] Installing to ${IHS_INSTALL_ROOT}..."
-
-# Find the top-level subdirectory that has a bin/ — that is the IHS tree
+# Find the top-level subdirectory that contains a bin/ — that is the IHS tree
 ARCHIVE_DIR=""
 for dir in "${IHS_STAGING}"/*/; do
     if [[ -d "${dir}bin" ]]; then
@@ -90,174 +63,34 @@ done
 
 if [[ -z "${ARCHIVE_DIR}" ]]; then
     echo "  ERROR: Could not find IHS directory inside ZIP." >&2
-    echo "  Contents:" >&2
-    find "${IHS_STAGING}" -maxdepth 2 >&2
     rm -rf "${IHS_STAGING}"
     exit 1
 fi
 
-echo "      Detected: ARCHIVE format (${ARCHIVE_DIR##*/})"
 mkdir -p "$(dirname "${IHS_INSTALL_ROOT}")"
 mv "${ARCHIVE_DIR}" "${IHS_INSTALL_ROOT}"
 rm -rf "${IHS_STAGING}"
-echo "      Installed"
-echo ""
+echo "      Installed to ${IHS_INSTALL_ROOT}"
 
 # ---------------------------------------------------------------------------
-# 4. Install APR/APR-util system dependencies
-#    IHS links against libapr-1 and libaprutil-1. Install system packages
-#    so the loader can find them (IHS lib/ takes precedence via LD_LIBRARY_PATH).
+# 3. Install WAS plugin (mod_was_ap24_http.so)
 # ---------------------------------------------------------------------------
-echo "[4/5] Installing APR/APR-util system dependencies..."
-if command -v dnf &>/dev/null; then
-    sudo dnf install -y apr apr-util 2>&1 | tail -3
-elif command -v yum &>/dev/null; then
-    sudo yum install -y apr apr-util 2>&1 | tail -3
-elif command -v apt-get &>/dev/null; then
-    sudo apt-get install -y libapr1 libaprutil1 2>&1 | tail -3
-else
-    echo "  WARNING: Package manager not found — install apr and apr-util manually." >&2
-fi
-echo ""
-
-# ---------------------------------------------------------------------------
-# 5. Install WAS plugin (mod_was_ap24_http.so)
-#    The plugin SO is bundled in the same ZIP under plugin/bin/64bits/.
-#    Copy it into IHS modules/ so LoadModule can reference it.
-# ---------------------------------------------------------------------------
-echo "[5/6] Installing WAS plugin (mod_was_ap24_http.so)..."
+echo "[3/3] Installing WAS plugin..."
 
 WAS_PLUGIN_SRC=$(find "${IHS_INSTALLER_DIR}" -name "mod_was_ap24_http.so" 2>/dev/null | head -1)
 
 if [[ -n "${WAS_PLUGIN_SRC}" ]]; then
     cp "${WAS_PLUGIN_SRC}" "${IHS_INSTALL_ROOT}/modules/mod_was_ap24_http.so"
-    echo "      Installed: ${IHS_INSTALL_ROOT}/modules/mod_was_ap24_http.so"
 else
-    # Plugin may still be inside the ZIP — extract just that file
-    WAS_PLUGIN_ZIP=$(find "${IHS_INSTALLER_DIR}" -maxdepth 2 -name "*.zip" | head -1)
-    if [[ -n "${WAS_PLUGIN_ZIP}" ]]; then
-        PLUGIN_ENTRY=$(unzip -l "${WAS_PLUGIN_ZIP}" 2>/dev/null | grep "mod_was_ap24_http.so" | awk '{print $NF}' | head -1)
-        if [[ -n "${PLUGIN_ENTRY}" ]]; then
-            unzip -q -j "${WAS_PLUGIN_ZIP}" "${PLUGIN_ENTRY}" -d "${IHS_INSTALL_ROOT}/modules/"
-            echo "      Extracted from ZIP: ${IHS_INSTALL_ROOT}/modules/mod_was_ap24_http.so"
-        else
-            echo "  WARNING: mod_was_ap24_http.so not found in ZIP — plugin not installed." >&2
-        fi
+    PLUGIN_ENTRY=$(unzip -l "${IHS_ZIP}" 2>/dev/null | grep "mod_was_ap24_http.so" | awk '{print $NF}' | head -1)
+    if [[ -n "${PLUGIN_ENTRY}" ]]; then
+        unzip -q -j "${IHS_ZIP}" "${PLUGIN_ENTRY}" -d "${IHS_INSTALL_ROOT}/modules/"
     else
         echo "  WARNING: mod_was_ap24_http.so not found — plugin not installed." >&2
     fi
 fi
-echo ""
-
-# ---------------------------------------------------------------------------
-# 6. Generate httpd.conf (archive does not include one)
-# ---------------------------------------------------------------------------
-echo "[6/6] Configuring IHS..."
-
-mkdir -p "${IHS_INSTALL_ROOT}/conf" \
-         "${IHS_INSTALL_ROOT}/logs" \
-         "${IHS_INSTALL_ROOT}/htdocs"
-
-if [[ ! -f "${HTTPD_CONF}" ]]; then
-    echo "      Generating httpd.conf..."
-    cat > "${HTTPD_CONF}" <<CONF_EOF
-# IBM HTTP Server configuration — generated by install-ihs.sh
-ServerRoot "${IHS_INSTALL_ROOT}"
-Listen 8080
-ServerName localhost:8080
-ServerAdmin admin@localhost
-
-LoadModule mpm_worker_module modules/mod_mpm_worker.so
-LoadModule authz_core_module modules/mod_authz_core.so
-LoadModule log_config_module modules/mod_log_config.so
-LoadModule unixd_module modules/mod_unixd.so
-LoadModule dir_module modules/mod_dir.so
-LoadModule mime_module modules/mod_mime.so
-
-# Proxy / load-balancer modules — uncommented by scripts/start-apache.sh
-#LoadModule proxy_module modules/mod_proxy.so
-#LoadModule proxy_http_module modules/mod_proxy_http.so
-#LoadModule proxy_balancer_module modules/mod_proxy_balancer.so
-#LoadModule slotmem_shm_module modules/mod_slotmem_shm.so
-#LoadModule lbmethod_byrequests_module modules/mod_lbmethod_byrequests.so
-
-# WebSphere/Liberty WAS plugin — handles routing to Liberty collective members
-LoadModule was_ap24_module modules/mod_was_ap24_http.so
-
-User itzuser
-Group itzuser
-
-DocumentRoot "${IHS_INSTALL_ROOT}/htdocs"
-<Directory "${IHS_INSTALL_ROOT}/htdocs">
-    Options Indexes FollowSymLinks
-    AllowOverride None
-    Require all granted
-</Directory>
-
-ErrorLog "logs/error_log"
-LogLevel warn
-LogFormat "%h %l %u %t \"%r\" %>s %b" common
-CustomLog "logs/access_log" common
-
-TypesConfig conf/mime.types
-CONF_EOF
-
-    cat > "${IHS_INSTALL_ROOT}/conf/mime.types" <<'MIME_EOF'
-text/html html htm
-text/plain txt
-application/octet-stream bin
-MIME_EOF
-
-    echo "<html><body><h1>IBM HTTP Server</h1></body></html>" \
-        > "${IHS_INSTALL_ROOT}/htdocs/index.html"
-    echo "      httpd.conf generated"
-else
-    # Ensure port 8080
-    if grep -q "^Listen 80$" "${HTTPD_CONF}"; then
-        sed -i 's/^Listen 80$/Listen 8080/' "${HTTPD_CONF}"
-        echo "      Listen port changed: 80 → 8080"
-    fi
-fi
-
-# Write apachectl wrapper — sets LD_LIBRARY_PATH and translates
-# start/stop/graceful/configtest to httpd -k flags
-cat > "${APACHECTL}" <<WRAPPER_EOF
-#!/bin/bash
-# IHS apachectl — generated by install-ihs.sh
-export LD_LIBRARY_PATH="${IHS_LIB}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
-HTTPD="${HTTPD_BIN}"
-CONF="${HTTPD_CONF}"
-case "\$1" in
-    start)      exec "\${HTTPD}" -f "\${CONF}" -k start ;;
-    stop)       exec "\${HTTPD}" -f "\${CONF}" -k stop ;;
-    restart)    exec "\${HTTPD}" -f "\${CONF}" -k restart ;;
-    graceful)   exec "\${HTTPD}" -f "\${CONF}" -k graceful ;;
-    configtest) exec "\${HTTPD}" -f "\${CONF}" -t ;;
-    -v|-V)      exec "\${HTTPD}" "\$@" ;;
-    *)          exec "\${HTTPD}" -f "\${CONF}" "\$@" ;;
-esac
-WRAPPER_EOF
-chmod +x "${APACHECTL}"
-echo "      apachectl wrapper written"
-
-# Configtest
-echo ""
-echo "      Running configtest..."
-LD_LIBRARY_PATH="${IHS_LIB}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-    "${HTTPD_BIN}" -f "${HTTPD_CONF}" -t 2>&1
+echo "      ${IHS_INSTALL_ROOT}/modules/mod_was_ap24_http.so"
 
 echo ""
-echo "=== IHS install complete ==="
-echo ""
-echo "  Install root: ${IHS_INSTALL_ROOT}"
-echo "  httpd.conf:   ${HTTPD_CONF}"
-echo "  apachectl:    ${APACHECTL}"
-echo ""
-echo "  Add IHS to PATH (required for lab scripts):"
-echo "    echo 'export PATH=\"${IHS_INSTALL_ROOT}/bin:\$PATH\"' >> ~/.bashrc"
-echo "    source ~/.bashrc"
-echo ""
-echo "  Then start IHS:"
-echo "    apachectl start"
-echo "    ss -tlnp | grep 8080"
+echo "=== Done. IHS installed at ${IHS_INSTALL_ROOT} ==="
 echo ""
