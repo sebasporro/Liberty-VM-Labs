@@ -265,18 +265,28 @@ if [[ ${SETUP_RC} -ne 0 ]]; then
     exit 1
 fi
 
-# Locate the generated plugin-cfg.xml
-# dynamicRouting setup writes it to: <pluginInstallRoot>/config/webserver1/plugin-cfg.xml
-GENERATED_CFG="${SETUP_OUTPUT_DIR}/config/webserver1/plugin-cfg.xml"
-if [[ ! -f "${GENERATED_CFG}" ]]; then
-    GENERATED_CFG=$(find "${SETUP_OUTPUT_DIR}" -name "plugin-cfg.xml" 2>/dev/null | head -1)
+# Locate the generated plugin-cfg.xml.
+# The CLI writes it to <pluginInstallRoot>/config/<webServerName>/plugin-cfg.xml,
+# but some Liberty releases write it directly under <pluginInstallRoot>/ or to
+# a peer directory.  Search broadly from the server resources tree so we find it
+# regardless of the exact subdirectory chosen by this Liberty version.
+echo "  Searching for plugin-cfg.xml under ${SERVER_DIR}/resources/..."
+GENERATED_CFG=$(find "${SERVER_DIR}/resources" -name "plugin-cfg.xml" 2>/dev/null | head -1)
+if [[ -z "${GENERATED_CFG}" || ! -f "${GENERATED_CFG}" ]]; then
+    # Last resort: search the entire controller server directory
+    GENERATED_CFG=$(find "${SERVER_DIR}" -name "plugin-cfg.xml" 2>/dev/null | head -1)
 fi
 if [[ -z "${GENERATED_CFG}" || ! -f "${GENERATED_CFG}" ]]; then
     echo "  ERROR: plugin-cfg.xml not found after dynamicRouting setup."
-    echo "         Searched under: ${SETUP_OUTPUT_DIR}"
+    echo "         Files written by the CLI:"
+    find "${SERVER_DIR}/resources" -type f 2>/dev/null | sort | sed 's/^/    /'
     exit 1
 fi
 echo "  Generated: ${GENERATED_CFG}"
+
+# Also locate plugin-key.p12 — needed alongside plugin-cfg.xml for the plugin
+# to authenticate to the controller's /wr endpoint.
+GENERATED_KEY=$(find "${SERVER_DIR}/resources" -name "plugin-key.p12" 2>/dev/null | head -1)
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -284,9 +294,21 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "[5/5] Installing plugin-cfg.xml and restarting IHS..."
 
-# Install — always overwrite so any static config from step1 is replaced
+# Install plugin-cfg.xml — always overwrite so any static config from step1 is replaced
 cp "${GENERATED_CFG}" "${PLUGIN_CFG}"
 echo "  Installed: ${PLUGIN_CFG}"
+
+# Install plugin-key.p12 alongside plugin-cfg.xml.
+# dynamicRouting setup generates a PKCS12 keystore that the WAS plugin uses to
+# authenticate to the controller's /wr endpoint.  The plugin reads it from the
+# same directory as plugin-cfg.xml.
+PLUGIN_KEY="${IHS_ROOT}/conf/plugin-key.p12"
+if [[ -n "${GENERATED_KEY}" && -f "${GENERATED_KEY}" ]]; then
+    cp "${GENERATED_KEY}" "${PLUGIN_KEY}"
+    echo "  Installed: ${PLUGIN_KEY}"
+else
+    echo "  WARNING: plugin-key.p12 not found — /wr polling may fail if SSL is required."
+fi
 
 # Ensure WebSpherePluginConfig directive is in httpd.conf (idempotent)
 if grep -q "^WebSpherePluginConfig" "${HTTPD_CONF}"; then
