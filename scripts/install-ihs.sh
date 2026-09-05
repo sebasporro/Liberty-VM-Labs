@@ -82,19 +82,24 @@ rm -rf "${IHS_STAGING}"
 echo "      Installed to ${IHS_INSTALL_ROOT}"
 
 # ---------------------------------------------------------------------------
-# Post-extract patch: replace @@SERVERROOT@@ placeholder in all bin/ scripts.
-# The IHS ARCHIVE ZIP ships wrapper scripts (gskcapicmd, etc.) with the
-# literal token @@SERVERROOT@@ where the install root should be. The IBM
-# Installation Manager substitutes this at install time; we must do it here
-# since we are extracting the archive directly instead.
+# Post-extract patch: substitute unresolved IM tokens in bin/ scripts and
+# create the gsk8 → .gsk8 symlink. The IBM Installation Manager does both
+# steps automatically; we replicate them here for archive-based installs.
 # ---------------------------------------------------------------------------
-echo "      Patching @@SERVERROOT@@ → ${IHS_INSTALL_ROOT} in bin/ scripts..."
-find "${IHS_INSTALL_ROOT}/bin" -maxdepth 1 -type f | while read -r f; do
-    if grep -qF '@@SERVERROOT@@' "${f}" 2>/dev/null; then
-        sed -i "s|@@SERVERROOT@@|${IHS_INSTALL_ROOT}|g" "${f}"
-        echo "        Patched: $(basename "${f}")"
-    fi
-done
+echo "      Patching bin/ scripts (@@SERVERROOT@@, @@SHLIBPATH_ENVAR@@)..."
+while IFS= read -r -d '' f; do
+    CHANGED=0
+    grep -qF '@@SERVERROOT@@'      "${f}" 2>/dev/null && { sed -i "s|@@SERVERROOT@@|${IHS_INSTALL_ROOT}|g"   "${f}"; CHANGED=1; }
+    grep -qF '@@SHLIBPATH_ENVAR@@' "${f}" 2>/dev/null && { sed -i "s|@@SHLIBPATH_ENVAR@@|LD_LIBRARY_PATH|g" "${f}"; CHANGED=1; }
+    [[ ${CHANGED} -eq 1 ]] && echo "        Patched: $(basename "${f}")"
+done < <(find "${IHS_INSTALL_ROOT}/bin" -maxdepth 1 -type f -print0)
+
+# The ARCHIVE ZIP stores GSKit in .gsk8/ (hidden) but wrapper scripts
+# reference gsk8/ (no dot). Create a symlink to bridge the gap.
+if [[ -d "${IHS_INSTALL_ROOT}/.gsk8" && ! -e "${IHS_INSTALL_ROOT}/gsk8" ]]; then
+    ln -s "${IHS_INSTALL_ROOT}/.gsk8" "${IHS_INSTALL_ROOT}/gsk8"
+    echo "      Created symlink: gsk8 → .gsk8"
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Install WAS plugin (mod_was_ap24_http.so)
