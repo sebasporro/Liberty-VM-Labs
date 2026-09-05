@@ -642,7 +642,7 @@ Steps performed (always — there is no partial mode):
 | 4 | Removes all WAS plugin artifacts from `$IHS_ROOT/conf/`: `plugin-cfg.xml`, `plugin-key.p12`, `plugin-key.kdb`, `plugin-key.sth` |
 | 5 | Removes `wlp-26/` (extracted Liberty 26.0.0.8 runtime) |
 | 6 | Removes `wlp-25/` (extracted Liberty 25.0.0.1 runtime) |
-| 7 | Removes and recreates `packages/` (both golden ZIPs) |
+| 7 | Preserves `packages/` — golden ZIPs are kept so Step 1 rebuild can be skipped on the next deploy |
 
 **Usage:**
 ```bash

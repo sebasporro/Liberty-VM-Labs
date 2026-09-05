@@ -12,7 +12,7 @@
 #      (plugin-cfg.xml, plugin-key.p12, plugin-key.kdb, plugin-key.sth)
 #   5. Removes wlp-26/  (extracted Liberty 26.0.0.8 runtime)
 #   6. Removes wlp-25/  (extracted Liberty 25.0.0.1 runtime)
-#   7. Clears packages/  (golden package ZIPs); recreates empty dir
+#   7. Preserves packages/  (golden ZIPs kept — skip Step 1 if ZIPs already exist)
 #
 # Usage:
 #   scripts/reset-environment.sh          # full reset — ready for Phase 1
@@ -217,17 +217,22 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
-# 7. Clear packages/ (golden ZIPs)
+# 7. Preserve packages/ (golden ZIPs are kept across resets to avoid rebuilds)
 # ---------------------------------------------------------------------------
-echo "[7/7] Clearing packages/..."
-rm -rf "${WORKSPACE_ROOT}/packages"
+echo "[7/7] Preserving packages/..."
 mkdir -p "${WORKSPACE_ROOT}/packages"
-echo "      packages/ cleared"
+PKG_COUNT=$(find "${WORKSPACE_ROOT}/packages" -maxdepth 1 -name "*.zip" 2>/dev/null | wc -l | tr -d ' ')
+if [[ "${PKG_COUNT}" -gt 0 ]]; then
+    echo "      packages/ kept (${PKG_COUNT} ZIP(s) preserved — skip Step 1 rebuild)"
+    find "${WORKSPACE_ROOT}/packages" -maxdepth 1 -name "*.zip" | sort | sed 's/^/      /'
+else
+    echo "      packages/ empty — Step 1 build required"
+fi
 echo ""
 
 echo "=== Reset complete — system is at a clean Phase 1 baseline ==="
 echo ""
-echo "  Step 1 — Build both Liberty runtimes and golden packages (run once):"
+echo "  Step 1 — Build runtimes and packages (skip if ZIPs above are present):"
 echo "    scripts/01-install-runtime.sh"
 echo "    scripts/02-build-template.sh"
 echo "    scripts/03-build-package.sh"
