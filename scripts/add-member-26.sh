@@ -200,6 +200,7 @@ echo "[7/10] Joining collective (collective join)..."
     --user="${CONTROLLER_ADMIN_USER}" \
     --password="${CONTROLLER_ADMIN_PASS}" \
     --keystorePassword="${KEYSTORE_PASS}" \
+    --serverHost=localhost \
     --createConfigFile="${OVERRIDES_DIR}/collective-join.xml" \
     --autoAcceptCertificates \
     --disableHostnameVerification 2>&1 | tail -5
