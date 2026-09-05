@@ -68,6 +68,7 @@ ADMIN_USER="admin"
 ADMIN_PASS="admin"
 KEYSTORE_PASS="Liberty26ctrl!"   # must match keystore.password in bootstrap.properties
 WEB_SERVER_NAME="webserver1"     # name registered with the collective controller
+IHS_HTTP_PORT=8080               # port IHS listens on — written into plugin-cfg.xml VirtualHost
 
 echo ""
 echo "=== Step 3b: Liberty Dynamic Routing ==="
@@ -255,6 +256,7 @@ mkdir -p "${SETUP_OUTPUT_DIR}"
     --password="${ADMIN_PASS}" \
     --keystorePassword="${KEYSTORE_PASS}" \
     --webServerNames="${WEB_SERVER_NAME}" \
+    --webServerPort="${IHS_HTTP_PORT}" \
     --pluginInstallRoot="${SETUP_OUTPUT_DIR}" \
     --autoAcceptCertificates
 
