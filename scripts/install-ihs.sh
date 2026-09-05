@@ -82,6 +82,21 @@ rm -rf "${IHS_STAGING}"
 echo "      Installed to ${IHS_INSTALL_ROOT}"
 
 # ---------------------------------------------------------------------------
+# Post-extract patch: replace @@SERVERROOT@@ placeholder in all bin/ scripts.
+# The IHS ARCHIVE ZIP ships wrapper scripts (gskcapicmd, etc.) with the
+# literal token @@SERVERROOT@@ where the install root should be. The IBM
+# Installation Manager substitutes this at install time; we must do it here
+# since we are extracting the archive directly instead.
+# ---------------------------------------------------------------------------
+echo "      Patching @@SERVERROOT@@ → ${IHS_INSTALL_ROOT} in bin/ scripts..."
+find "${IHS_INSTALL_ROOT}/bin" -maxdepth 1 -type f | while read -r f; do
+    if grep -qF '@@SERVERROOT@@' "${f}" 2>/dev/null; then
+        sed -i "s|@@SERVERROOT@@|${IHS_INSTALL_ROOT}|g" "${f}"
+        echo "        Patched: $(basename "${f}")"
+    fi
+done
+
+# ---------------------------------------------------------------------------
 # 3. Install WAS plugin (mod_was_ap24_http.so)
 # ---------------------------------------------------------------------------
 echo "[3/5] Installing WAS plugin..."
