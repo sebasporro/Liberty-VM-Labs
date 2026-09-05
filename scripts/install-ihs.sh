@@ -94,14 +94,16 @@ echo "      ${IHS_INSTALL_ROOT}/modules/mod_was_ap24_http.so"
 # ---------------------------------------------------------------------------
 # 4. Add IHS to PATH
 # ---------------------------------------------------------------------------
-IHS_PATH_LINE="export PATH=\"${IHS_INSTALL_ROOT}/bin:\$PATH\""
 if ! grep -qF "${IHS_INSTALL_ROOT}/bin" ~/.bashrc; then
-    echo "${IHS_PATH_LINE}" >> ~/.bashrc
+    echo "export PATH=\"${IHS_INSTALL_ROOT}/bin:\$PATH\"" >> ~/.bashrc
     echo "      Added IHS bin to ~/.bashrc"
 fi
-# shellcheck disable=SC1090
-source ~/.bashrc
+# Make apachectl available in the current session immediately
+export PATH="${IHS_INSTALL_ROOT}/bin:${PATH}"
 
 echo ""
 echo "=== Done. IHS installed at ${IHS_INSTALL_ROOT} ==="
+echo ""
+echo "  NOTE: If you opened a new terminal after running this script,"
+echo "        run: source ~/.bashrc"
 echo ""
