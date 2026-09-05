@@ -211,36 +211,36 @@ for i in 1 2 3 4; do
 done
 ```
 
-#### Step 3b — True dynamic routing via controller `/wr`
+#### Step 3b — Dynamic routing via controller `/wr`
 
-Enables `dynamicRouting-1.0` on the controller and wires `mod_was_ap24_http.so` to poll the
-controller's live `/wr` routing endpoint instead of reading a static member list.
+Enables `dynamicRouting-1.0` on the controller. The IHS plugin polls the controller's live
+`/wr` endpoint over **HTTP** (port 9080) to get the current member routing table — no static
+member list, no `plugin-cfg.xml` regeneration when members are added or removed.
 
 ```
-Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9443/wr
+Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9080/wr
                                                      │
-                                      live route table from collective
+                                      live route table (all members)
                                                      │
-                          ┌─────────────────────────┤
-                          ▼                         ▼
-                     member3:9083             member4:9084
+                    ┌────────────────┬───────────────┼───────────────┐
+                    ▼                ▼               ▼               ▼
+               member1:9081    member2:9082    member3:9083    member4:9084
 ```
 
 The script:
 1. Adds `dynamicRouting-1.0` to the controller via `configDropins/overrides/`
 2. Restarts the controller and waits for `CWWKF0011I`
-3. Runs `dynamicRouting setup` — generates a `plugin-cfg.xml` pointing at `controller:9443/wr`
-4. Creates `plugin-key.kdb` with `gskcapicmd` (GSKit CMS keystore for plugin SSL)
-5. Installs the new `plugin-cfg.xml` into `$IHS_ROOT/conf/` and patches `WebSpherePluginConfig`
-6. Starts IHS and verifies end-to-end routing
+3. Runs `dynamicRouting setup --port=9080` — generates `plugin-cfg.xml` pointing at `controller:9080/wr`
+4. Installs the new `plugin-cfg.xml` into `$IHS_ROOT/conf/` and sets `WebSpherePluginConfig`
+5. Starts IHS and verifies end-to-end routing
 
 ```bash
 scripts/step2-dynamic-routing.sh
 ```
 
-**Expected state:** `http://localhost:8080/server-info/` returns `200`. The plugin now polls
-`/wr` every 60 s — members joining or leaving the collective are reflected automatically with
-no script re-run and no `plugin-cfg.xml` edits.
+**Expected state:** `http://localhost:8080/server-info/` returns `200` and round-robins across
+**all** members in the collective. The plugin polls `/wr` every 60 s — members joining,
+leaving, starting, or stopping are reflected automatically with no script re-run.
 
 ---
 
@@ -616,23 +616,22 @@ done
 
 ### `scripts/step2-dynamic-routing.sh`  ⭐
 
-**Purpose:** Implements TRUE Liberty Dynamic Routing — `mod_was_ap24_http.so` polls the
-controller's live `/wr` endpoint instead of reading a static member list.
+**Purpose:** Enables Liberty Dynamic Routing — `mod_was_ap24_http.so` polls the controller's
+live `/wr` endpoint (HTTP port 9080) to get the current member list instead of reading a
+static `plugin-cfg.xml`. All collective members are routed automatically.
 
 How it works:
-- `dynamicRouting-1.0` activates the `/wr` routing endpoint on the controller
-- `plugin-cfg.xml` points at `controller:9443/wr` (not individual members)
-- The plugin calls `/wr` every `RefreshInterval` (60 s) to get the live member list
-- `gskcapicmd` creates `plugin-key.kdb` — the GSKit CMS keystore required for plugin SSL
+- `dynamicRouting-1.0` activates the `/wr` routing endpoint on the controller HTTP port
+- `dynamicRouting setup --port=9080` generates a `plugin-cfg.xml` pointing at `controller:9080/wr`
+- The plugin calls `/wr` every `RefreshInterval` (60 s) to get the live member routing table
+- No GSKit keystore required — `/wr` is served over plain HTTP
 
 Steps performed:
-1. Pre-flight: verifies `dynamicRouting` binary, `gskcapicmd`, controller (9443), members (9083/9084), `mod_was_ap24_http.so`
+1. Pre-flight: verifies controller (HTTP 9080), at least one member, `mod_was_ap24_http.so`
 2. Adds `dynamic-routing.xml` dropin to controller `configDropins/overrides/`
 3. Restarts controller; waits for `CWWKF0011I` (server ready)
-4. Runs `dynamicRouting setup --pluginInstallRoot` → generates `plugin-cfg.xml` + plugin keystore
-5. Creates `plugin-key.kdb` (CMS) with `gskcapicmd`; imports collective root cert as trusted CA
-6. Copies `plugin-cfg.xml` to `$IHS_ROOT/conf/`; patches `KeyRing` path; sets `WebSpherePluginConfig`
-7. Starts IHS; verifies `GET /server-info/` via IHS returns `200`
+4. Runs `dynamicRouting setup --port=${CONTROLLER_HTTP}` → generates `plugin-cfg.xml`
+5. Copies `plugin-cfg.xml` to `$IHS_ROOT/conf/`; sets `WebSpherePluginConfig`; starts IHS
 
 **Usage:**
 ```bash
@@ -640,10 +639,9 @@ scripts/step2-dynamic-routing.sh
 ```
 
 **Prerequisites:**
-- `scripts/05-create-collective.sh` (controller formed and running on 9443)
-- member3 and/or member4 running (9083 / 9084) via `scripts/add-member.sh`
 - `scripts/install-ihs.sh` completed (`mod_was_ap24_http.so` present)
-- `scripts/step1-was-plugin.sh` is **not** required — step2 is now self-contained
+- Controller running on HTTP 9080 (`scripts/install-controller.sh`)
+- At least one member joined to the collective (`scripts/add-member-26.sh`)
 
 ---
 
