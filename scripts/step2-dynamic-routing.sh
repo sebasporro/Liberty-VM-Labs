@@ -63,6 +63,8 @@ CONTROLLER_HTTP=9080
 CONTROLLER_HTTPS=9443
 ADMIN_USER="admin"
 ADMIN_PASS="admin"
+KEYSTORE_PASS="Liberty26ctrl!"   # must match keystore.password in bootstrap.properties
+WEB_SERVER_NAME="webserver1"     # name registered with the collective controller
 
 echo ""
 echo "=== Step 3b: Liberty Dynamic Routing ==="
@@ -185,6 +187,8 @@ mkdir -p "${SETUP_OUTPUT_DIR}"
     --port="${CONTROLLER_HTTP}" \
     --user="${ADMIN_USER}" \
     --password="${ADMIN_PASS}" \
+    --keystorePassword="${KEYSTORE_PASS}" \
+    --webServerNames="${WEB_SERVER_NAME}" \
     --pluginInstallRoot="${SETUP_OUTPUT_DIR}" \
     --autoAcceptCertificates
 
