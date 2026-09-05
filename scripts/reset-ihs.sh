@@ -24,12 +24,16 @@ fi
 
 # 2. Overwrite httpd.conf with a clean baseline (no plugin directives)
 echo "[2/3] Writing clean httpd.conf..."
-cat > "${HTTPD_CONF}" << 'EOF'
+
+mkdir -p "${IHS_ROOT}/logs" \
+         "${IHS_ROOT}/htdocs"
+
+cat > "${HTTPD_CONF}" <<CONF_EOF
 # =============================================================================
 # IBM HTTP Server — clean baseline
 # Reset by reset-ihs.sh
 # =============================================================================
-ServerRoot "/home/itzuser/IBM/HTTPServer"
+ServerRoot "${IHS_ROOT}"
 Listen 8080
 ServerName localhost:8080
 ServerAdmin admin@localhost
@@ -47,8 +51,8 @@ LoadModule was_ap24_module        modules/mod_was_ap24_http.so
 User itzuser
 Group itzuser
 
-DocumentRoot "/home/itzuser/IBM/HTTPServer/htdocs"
-<Directory "/home/itzuser/IBM/HTTPServer/htdocs">
+DocumentRoot "${IHS_ROOT}/htdocs"
+<Directory "${IHS_ROOT}/htdocs">
     Options Indexes FollowSymLinks
     AllowOverride None
     Require all granted
@@ -60,7 +64,7 @@ LogFormat "%h %l %u %t \"%r\" %>s %b" common
 CustomLog "logs/access_log" common
 
 TypesConfig conf/mime.types
-EOF
+CONF_EOF
 
 echo "      Written: ${HTTPD_CONF}"
 

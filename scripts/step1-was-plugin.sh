@@ -27,7 +27,7 @@ echo ""
 # ---------------------------------------------------------------------------
 if [[ ! -f "${HTTPD_CONF}" ]]; then
     echo "ERROR: httpd.conf not found at ${HTTPD_CONF}"
-    echo "       Run scripts/reset-ihs.sh first."
+    echo "       Run scripts/install-ihs.sh first."
     exit 1
 fi
 
