@@ -144,11 +144,16 @@ fi
 # 4. (Re)start IHS
 # ---------------------------------------------------------------------------
 echo "[4/4] Starting IHS..."
+# Stop reliably regardless of PID file state — apachectl stop may report
+# "not running" if the PID file is missing while the process is still alive.
+"${APACHECTL}" stop 2>/dev/null; sleep 2
+pkill -9 -f "${IHS_ROOT}/bin/httpd" 2>/dev/null; sleep 1
 if ss -tlnp 2>/dev/null | grep -q ":8080 "; then
-    "${APACHECTL}" stop && sleep 2
+    echo "ERROR: port 8080 still in use after stop — cannot start IHS"
+    ss -tlnp | grep ":8080"
+    exit 1
 fi
 "${APACHECTL}" start
-
 sleep 1
 
 if ! ss -tlnp 2>/dev/null | grep -q ":8080 "; then

@@ -452,8 +452,18 @@ if ! echo "${RESULT}" | grep -q "Syntax OK"; then
 fi
 echo "  httpd.conf syntax: OK"
 
+# Stop IHS reliably regardless of PID file state.
+# apachectl stop uses the PID file; if the file is missing or stale the
+# command exits 0 ("not running") but the httpd process may still be live
+# holding :8080. Kill by binary path to be certain before restarting.
+"${APACHECTL}" stop 2>/dev/null; sleep 2
+# Hard-kill any surviving httpd workers from this IHS install
+pkill -9 -f "${IHS_ROOT}/bin/httpd" 2>/dev/null; sleep 1
+# Confirm port is free before attempting start
 if ss -tlnp 2>/dev/null | grep -q ":8080 "; then
-    "${APACHECTL}" stop && sleep 2
+    echo "  ERROR: port 8080 still in use after stop — cannot start IHS"
+    ss -tlnp | grep ":8080"
+    exit 1
 fi
 "${APACHECTL}" start
 sleep 2
