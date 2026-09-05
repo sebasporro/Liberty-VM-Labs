@@ -55,8 +55,23 @@ IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
 HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
 APACHECTL="${IHS_ROOT}/bin/apachectl"
 PLUGIN_CFG="${IHS_ROOT}/conf/plugin-cfg.xml"
-# gskcmd (IHS key management CLI) is needed to convert plugin-key.p12 → CMS .kdb
-GSKCMD="${IHS_ROOT}/bin/gskcapicmd"
+# Locate the real GSKit CLI for PKCS12 → CMS keystore conversion.
+# gskcapicmd in IHS is a wrapper that requires @@SERVERROOT@@ substitution at
+# install time and is often broken. The actual GSKit binary is gsk8capicmd_64
+# (or gsk8capicmd on 32-bit). Search the IHS bin dir and common system paths.
+GSKCMD=""
+for _candidate in \
+    "${IHS_ROOT}/bin/gsk8capicmd_64" \
+    "${IHS_ROOT}/bin/gsk8capicmd" \
+    "/usr/bin/gsk8capicmd_64" \
+    "/usr/bin/gsk8capicmd" \
+    "/opt/ibm/gsk8/bin/gsk8capicmd_64" \
+    "/opt/ibm/gsk8/bin/gsk8capicmd"; do
+    if [[ -x "${_candidate}" ]]; then
+        GSKCMD="${_candidate}"
+        break
+    fi
+done
 
 # Controller coordinates
 # NOTE: dynamicRouting setup connects on the HTTPS port (9443) — it uses the
@@ -309,7 +324,8 @@ echo "  Installed: ${PLUGIN_CFG}"
 
 # Convert plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS) required by the WAS plugin.
 PLUGIN_KEY_KDB="${IHS_ROOT}/conf/plugin-key.kdb"
-if [[ -n "${GENERATED_KEY}" && -f "${GENERATED_KEY}" && -x "${GSKCMD}" ]]; then
+if [[ -n "${GENERATED_KEY}" && -f "${GENERATED_KEY}" && -n "${GSKCMD}" ]]; then
+    echo "  Using GSKit CLI: ${GSKCMD}"
     # Remove any leftover CMS files from a previous run
     rm -f "${IHS_ROOT}/conf/plugin-key.kdb" \
           "${IHS_ROOT}/conf/plugin-key.sth" \
