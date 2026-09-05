@@ -528,7 +528,7 @@ Steps performed:
 3. Renames server from `template-26.0.0.8` → `<member-name>`
 4. Drops role and port override files into `configDropins/overrides/`
 5. Writes `bootstrap.properties`
-6. Runs `collective join` to register the member with the controller
+6. Runs `collective join --serverHost=localhost` — registers the member under `localhost` so the dynamic routing `/wr` table advertises `localhost:908x` (not the VM's real hostname/IP)
 7. Starts the member and verifies the app is reachable
 
 **Usage:**
@@ -544,30 +544,9 @@ scripts/add-member-26.sh member2
 
 ---
 
-### `scripts/start-apache.sh`  ⭐
+### `scripts/start-apache.sh`
 
-**Purpose:** Configures IBM HTTP Server (IHS) as the Liberty Collective front-end and starts it.
-
-Idempotent — safe to run multiple times. Will not add duplicate includes or re-enable
-already-enabled modules.
-
-Steps performed:
-1. Locates `/home/itzuser/IBM/HTTPServer/conf/httpd.conf`
-2. Uncomments required `LoadModule` lines: `mod_proxy`, `mod_proxy_http`, `mod_proxy_balancer`, `mod_slotmem_shm`, `mod_lbmethod_byrequests`
-3. Appends `Include` for `config/apache/httpd-liberty.conf`
-4. Runs `apachectl configtest`
-5. **Checks whether IHS is already listening on port 8080:**
-   - Already running → issues `apachectl graceful` to reload the updated config
-   - Not running → issues `apachectl start`
-6. Verifies all member and IHS endpoints respond
-
-**Usage:**
-```bash
-scripts/start-apache.sh
-```
-
-> **Note:** IHS listens on port **8080** in this lab configuration. `apachectl` must be on
-> `PATH` — run `scripts/install-ihs.sh` and follow the PATH export instruction if not already done.
+> ⚠️ **Legacy script** — superseded by `scripts/reset-ihs.sh` + `scripts/step1-was-plugin.sh` + `scripts/step2-dynamic-routing.sh`. Retained for reference only. Do not use in the current lab sequence.
 
 ---
 
@@ -579,15 +558,14 @@ Use this to recover from a broken IHS/plugin-cfg configuration without touching 
 Steps performed:
 1. Stops IHS if running
 2. Overwrites `httpd.conf` with a minimal clean config (loads `mod_was_ap24_http.so`, no `WebSpherePluginConfig`)
-3. Removes any stale `plugin-cfg.xml` from `$IHS_ROOT/conf/`
+3. Removes all stale WAS plugin files from `$IHS_ROOT/conf/`: `plugin-cfg.xml`, `plugin-key.p12`, `plugin-key.kdb`, `plugin-key.sth`
 
 **Usage:**
 ```bash
 scripts/reset-ihs.sh
 ```
 
-> **Note:** Always run this before `step1-was-plugin.sh` when troubleshooting IHS plugin issues.
-> Safe to run at any time — does not affect Liberty instances.
+> **Note:** Always run this before `step1-was-plugin.sh` or `step2-dynamic-routing.sh` when troubleshooting IHS plugin issues. Safe to run at any time — does not affect Liberty instances.
 
 ---
 
@@ -676,20 +654,32 @@ scripts/reset-environment.sh
 > **Note:** The `--full` flag is accepted for backwards compatibility but is now
 > a no-op — a reset is always a full reset.
 
-After reset, run the full pipeline from Phase 1:
+After reset, run the full pipeline:
 ```bash
+# Step 1 — build runtimes and golden packages
 scripts/01-install-runtime.sh
 scripts/02-build-template.sh
 scripts/03-build-package.sh
 scripts/01-install-runtime-25.sh
 scripts/02-build-template-25.sh
 scripts/03-build-package-25.sh
+
+# Step 2 — deploy controller and 26.0.0.8 members
 scripts/install-controller.sh
 scripts/add-member-26.sh member1
 scripts/add-member-26.sh member2
+
+# Step 3 — configure IHS and enable dynamic routing
+scripts/reset-ihs.sh
+scripts/step1-was-plugin.sh
+scripts/step2-dynamic-routing.sh
+
+# Step 4 — add 25.0.0.1 members (picked up by /wr automatically)
 scripts/add-member-25.sh member3
 scripts/add-member-25.sh member4
-scripts/start-apache.sh
+
+# Step 5 — validate
+scripts/07-validate.sh
 ```
 
 ---
@@ -737,7 +727,7 @@ Then: `apachectl graceful`
 **Purpose:** Runs 26 checks across the entire lab topology and prints a Lab Readiness Report.
 
 Checks performed:
-- Java 17 available
+- Java 17 or 21 available (Eclipse OpenJ9 21 is pre-installed on the lab VM)
 - Both Liberty runtimes installed (`wlp-26/`, `wlp-25/`)
 - Both golden packages exist
 - Controller: directory, port 9443, Admin Center, configDropins
@@ -804,7 +794,8 @@ scripts/03-build-package-25.sh
 **Purpose:** Deploys a Liberty 25.0.0.1 member and joins it to the running 26.0.0.8 controller.
 
 Mirrors `add-member-26.sh` exactly but unpacks `liberty-package-25.0.0.1.zip` and renames
-`template-25.0.0.1` instead of `template-26.0.0.8`. The collective join protocol is
+`template-25.0.0.1` instead of `template-26.0.0.8`. Uses `--serverHost=localhost` on `collective join`
+so the `/wr` routing table advertises `localhost:908x`. The collective join protocol is
 version-agnostic — mixed-version members coexist in the same collective.
 
 **Usage:**
