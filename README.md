@@ -636,15 +636,13 @@ Steps performed (always — there is no partial mode):
 
 | Step | What happens |
 |------|-------------|
-| 1 | Stops the controller (graceful `server stop`, 15 s pkill fallback) |
-| 2 | Stops all members (same timeout + pkill fallback per member) |
-| 3 | Removes `installs/` and recreates the empty directory |
-| 4 | Strips the Liberty `Include` line and comment from `httpd.conf` |
-| 5 | Comments out the five proxy/balancer `LoadModule` lines in `httpd.conf` |
-| 6 | Reloads IHS (`apachectl graceful`) if it is running |
-| 7 | Removes `wlp-26/` (extracted Liberty 26.0.0.8 runtime) |
-| 8 | Removes `wlp-25/` (extracted Liberty 25.0.0.1 runtime) |
-| 9 | Removes and recreates `packages/` (both golden ZIPs) |
+| 1 | Stops controller + all members (15 s timeout, pkill fallback for both) |
+| 2 | Removes `installs/`, recreates empty directory, restores `.gitkeep` |
+| 3 | Stops IHS; rewrites `httpd.conf` to the same clean baseline as `install-ihs.sh` (removes `WebSpherePluginConfig` and any other lab additions) |
+| 4 | Removes all WAS plugin artifacts from `$IHS_ROOT/conf/`: `plugin-cfg.xml`, `plugin-key.p12`, `plugin-key.kdb`, `plugin-key.sth` |
+| 5 | Removes `wlp-26/` (extracted Liberty 26.0.0.8 runtime) |
+| 6 | Removes `wlp-25/` (extracted Liberty 25.0.0.1 runtime) |
+| 7 | Removes and recreates `packages/` (both golden ZIPs) |
 
 **Usage:**
 ```bash
