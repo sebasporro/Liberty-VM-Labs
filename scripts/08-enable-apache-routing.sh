@@ -68,7 +68,7 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "[2/6] Ensuring was_ap24_module is loaded in ${HTTPD_CONF}..."
 
-WAS_MODULE_LINE="LoadModule was_ap24_module modules/mod_was_ap24_http.so"
+WAS_MODULE_LINE="LoadModule was_ap24_http_module modules/mod_was_ap24_http.so"
 
 if grep -q "^LoadModule was_ap24_module" "${HTTPD_CONF}"; then
     echo "      was_ap24_module: already enabled"

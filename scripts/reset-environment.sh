@@ -132,7 +132,7 @@ LoadModule dir_module             modules/mod_dir.so
 LoadModule mime_module            modules/mod_mime.so
 
 # WAS plugin — activated by scripts/step1-was-plugin.sh or step2-dynamic-routing.sh
-LoadModule was_ap24_module        modules/mod_was_ap24_http.so
+LoadModule was_ap24_http_module   modules/mod_was_ap24_http.so
 
 User itzuser
 Group itzuser
