@@ -217,6 +217,11 @@ Enables `dynamicRouting-1.0` on the controller. The IHS plugin polls the control
 `/wr` endpoint over **HTTP** (port 9080) to get the current member routing table — no static
 member list, no `plugin-cfg.xml` regeneration when members are added or removed.
 
+> **Port note:** `dynamicRouting setup` connects to the controller over **HTTPS (9443)** to
+> generate the plugin config — the same secure JMX/REST channel used by `collective join`.
+> The `/wr` endpoint that the IHS plugin polls *at runtime* is served over plain HTTP (9080).
+> These are two different ports for two different things.
+
 ```
 Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9080/wr
                                                      │
@@ -230,7 +235,7 @@ Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9080/wr
 The script:
 1. Adds `dynamicRouting-1.0` to the controller via `configDropins/overrides/`
 2. Restarts the controller and waits for `CWWKF0011I`
-3. Runs `dynamicRouting setup --port=9080 --keystorePassword=<pass> --webServerNames=webserver1` — generates `plugin-cfg.xml` pointing at `controller:9080/wr`
+3. Runs `dynamicRouting setup --port=9443 --keystorePassword=<pass> --webServerNames=webserver1` — generates `plugin-cfg.xml` pointing at `controller:9080/wr`
 4. Installs the new `plugin-cfg.xml` into `$IHS_ROOT/conf/` and sets `WebSpherePluginConfig`
 5. Starts IHS and verifies end-to-end routing
 
@@ -622,7 +627,7 @@ static `plugin-cfg.xml`. All collective members are routed automatically.
 
 How it works:
 - `dynamicRouting-1.0` activates the `/wr` routing endpoint on the controller HTTP port
-- `dynamicRouting setup` generates a `plugin-cfg.xml` pointing at `controller:9080/wr`; requires `--keystorePassword` (matches `keystore.password` in `bootstrap.properties`) and `--webServerNames` (web server registration name, default `webserver1`)
+- `dynamicRouting setup` connects to the controller via **HTTPS (9443)** to generate a `plugin-cfg.xml` pointing at `controller:9080/wr`; requires `--keystorePassword` (matches `keystore.password` in `bootstrap.properties`) and `--webServerNames` (web server registration name, default `webserver1`)
 - The plugin calls `/wr` every `RefreshInterval` (60 s) to get the live member routing table
 - No GSKit keystore required — `/wr` is served over plain HTTP
 
@@ -630,7 +635,7 @@ Steps performed:
 1. Pre-flight: verifies controller (HTTP 9080), at least one member, `mod_was_ap24_http.so`
 2. Adds `dynamic-routing.xml` dropin to controller `configDropins/overrides/`
 3. Restarts controller; waits for `CWWKF0011I` (server ready)
-4. Runs `dynamicRouting setup --port=${CONTROLLER_HTTP} --keystorePassword=<pass> --webServerNames=webserver1` → generates `plugin-cfg.xml` under `<pluginInstallRoot>/config/webserver1/`
+4. Runs `dynamicRouting setup --port=${CONTROLLER_HTTPS} --keystorePassword=<pass> --webServerNames=webserver1` → generates `plugin-cfg.xml` under `<pluginInstallRoot>/config/webserver1/`
 5. Copies `plugin-cfg.xml` to `$IHS_ROOT/conf/`; sets `WebSpherePluginConfig`; starts IHS
 
 **Usage:**

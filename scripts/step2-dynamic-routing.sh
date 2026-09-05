@@ -9,8 +9,9 @@
 # How Liberty dynamic routing works:
 #   1. The controller runs the dynamicRouting-1.0 feature which activates a
 #      /wr (WebSphere Routing) endpoint on the controller HTTP port (9080).
-#   2. The dynamicRouting setup command connects to the controller and
-#      generates a plugin-cfg.xml that points the IHS plugin at the /wr
+#   2. The dynamicRouting setup command connects to the controller via HTTPS
+#      (port 9443) — the same secure JMX/REST channel used by collective join.
+#      It generates a plugin-cfg.xml that points the IHS plugin at the /wr
 #      endpoint — NOT at individual member servers.
 #   3. mod_was_ap24_http.so polls /wr every RefreshInterval seconds.
 #      The controller returns the live routing table of all healthy collective
@@ -56,8 +57,10 @@ APACHECTL="${IHS_ROOT}/bin/apachectl"
 PLUGIN_CFG="${IHS_ROOT}/conf/plugin-cfg.xml"
 
 # Controller coordinates
-# NOTE: dynamicRouting setup connects on the HTTP port (9080), not HTTPS.
-# The /wr endpoint is served over plain HTTP on the controller HTTP port.
+# NOTE: dynamicRouting setup connects on the HTTPS port (9443) — it uses the
+# same secure JMX/REST channel as collective join.  The /wr routing endpoint
+# that the IHS plugin polls at runtime is served on HTTP (9080), but the
+# setup command itself must target HTTPS.
 CONTROLLER_HOST="localhost"
 CONTROLLER_HTTP=9080
 CONTROLLER_HTTPS=9443
@@ -184,7 +187,7 @@ mkdir -p "${SETUP_OUTPUT_DIR}"
 
 "${DYNAMIC_ROUTING_BIN}" setup \
     --host="${CONTROLLER_HOST}" \
-    --port="${CONTROLLER_HTTP}" \
+    --port="${CONTROLLER_HTTPS}" \
     --user="${ADMIN_USER}" \
     --password="${ADMIN_PASS}" \
     --keystorePassword="${KEYSTORE_PASS}" \
