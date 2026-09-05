@@ -110,34 +110,12 @@ scripts/install-ihs.sh
 ```
 
 This script:
-1. Locates the IHS installer ZIP at `/home/itzuser/software/IHS/`
-2. Extracts the archive → moves it to `/home/itzuser/IBM/HTTPServer`
-3. Installs required system libraries (`apr`, `apr-util`) via `dnf`/`yum`/`apt-get`
-4. Configures IHS to listen on port **8080**
+1. Removes any previous IHS install at `/home/itzuser/IBM/HTTPServer`
+2. Extracts the IHS archive ZIP from `/home/itzuser/software/IHS/` → moves it into place
+3. Installs the WAS plugin (`mod_was_ap24_http.so`) into `modules/`
+4. Adds `/home/itzuser/IBM/HTTPServer/bin` to `~/.bashrc` and sources it
 
-After install, add IHS to your PATH so `apachectl` is available to all lab scripts:
-
-```bash
-echo 'export PATH="/home/itzuser/IBM/HTTPServer/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-Verify and start IHS:
-
-```bash
-apachectl -v
-# Expected: Server version: IBM_HTTP_Server/...
-
-apachectl configtest
-# Expected: Syntax OK
-
-apachectl start
-
-ss -tlnp | grep 8080
-# Expected: a line showing LISTEN on *:8080
-```
-
-> **If the ZIP is at a different path**, override the search directory:
+> **If the ZIP is at a different path**, override before running:
 > ```bash
 > export IHS_INSTALLER_DIR=/path/to/dir/containing/ihs-zip
 > scripts/install-ihs.sh
@@ -223,28 +201,36 @@ for i in 1 2 3 4; do
 done
 ```
 
-#### Step 3b — Dynamic routing via controller
+#### Step 3b — True dynamic routing via controller `/wr`
 
-Enables `dynamicRouting-1.0` on the controller. The controller monitors collective membership
-and **rewrites `plugin-cfg.xml`** to keep the member list current. IHS still routes traffic
-directly to members — the controller manages the file, not the traffic.
+Enables `dynamicRouting-1.0` on the controller and wires `mod_was_ap24_http.so` to poll the
+controller's live `/wr` routing endpoint instead of reading a static member list.
 
 ```
-Browser → IHS:8080 → mod_was_ap24_http.so → member1:9081 / member2:9082
-                             ↑
-             plugin-cfg.xml kept current by controller (dynamicRouting-1.0)
+Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9443/wr
+                                                     │
+                                      live route table from collective
+                                                     │
+                          ┌─────────────────────────┤
+                          ▼                         ▼
+                     member3:9083             member4:9084
 ```
 
-> **Important:** `plugin-cfg.xml` must remain pointing at the members (from Step 3a).
-> `step2-dynamic-routing.sh` does **not** overwrite it.
+The script:
+1. Adds `dynamicRouting-1.0` to the controller via `configDropins/overrides/`
+2. Restarts the controller and waits for `CWWKF0011I`
+3. Runs `dynamicRouting setup` — generates a `plugin-cfg.xml` pointing at `controller:9443/wr`
+4. Creates `plugin-key.kdb` with `gskcapicmd` (GSKit CMS keystore for plugin SSL)
+5. Installs the new `plugin-cfg.xml` into `$IHS_ROOT/conf/` and patches `WebSpherePluginConfig`
+6. Starts IHS and verifies end-to-end routing
 
 ```bash
 scripts/step2-dynamic-routing.sh
 ```
 
-**Expected state:** `http://localhost:8080/server-info/` still returns `200`. The controller
-now rewrites `plugin-cfg.xml` automatically — new members joining the collective are picked
-up within `RefreshInterval` (60s) with no IHS config changes.
+**Expected state:** `http://localhost:8080/server-info/` returns `200`. The plugin now polls
+`/wr` every 60 s — members joining or leaving the collective are reflected automatically with
+no script re-run and no `plugin-cfg.xml` edits.
 
 ---
 
@@ -620,27 +606,34 @@ done
 
 ### `scripts/step2-dynamic-routing.sh`  ⭐
 
-**Purpose:** Enables Liberty `dynamicRouting-1.0` on the Collective Controller.
+**Purpose:** Implements TRUE Liberty Dynamic Routing — `mod_was_ap24_http.so` polls the
+controller's live `/wr` endpoint instead of reading a static member list.
 
-How it works: the controller monitors collective membership and **rewrites `plugin-cfg.xml`**
-with the current live member list. The WAS plugin in IHS re-reads the file every
-`RefreshInterval` (60s). IHS still routes traffic directly to members — the controller
-manages the file, not the traffic.
+How it works:
+- `dynamicRouting-1.0` activates the `/wr` routing endpoint on the controller
+- `plugin-cfg.xml` points at `controller:9443/wr` (not individual members)
+- The plugin calls `/wr` every `RefreshInterval` (60 s) to get the live member list
+- `gskcapicmd` creates `plugin-key.kdb` — the GSKit CMS keystore required for plugin SSL
 
 Steps performed:
-1. Validates controller and at least one member are running
-2. Adds `dynamic-routing.xml` dropin to `configDropins/overrides/` on the controller
-3. Restarts the controller and waits for `dynamicRouting-1.0` to load
-4. Verifies `plugin-cfg.xml` is still pointing at members (does **not** overwrite it)
-5. Verifies `GET /server-info/` via IHS still returns `200`
+1. Pre-flight: verifies `dynamicRouting` binary, `gskcapicmd`, controller (9443), members (9083/9084), `mod_was_ap24_http.so`
+2. Adds `dynamic-routing.xml` dropin to controller `configDropins/overrides/`
+3. Restarts controller; waits for `CWWKF0011I` (server ready)
+4. Runs `dynamicRouting setup --pluginInstallRoot` → generates `plugin-cfg.xml` + plugin keystore
+5. Creates `plugin-key.kdb` (CMS) with `gskcapicmd`; imports collective root cert as trusted CA
+6. Copies `plugin-cfg.xml` to `$IHS_ROOT/conf/`; patches `KeyRing` path; sets `WebSpherePluginConfig`
+7. Starts IHS; verifies `GET /server-info/` via IHS returns `200`
 
 **Usage:**
 ```bash
 scripts/step2-dynamic-routing.sh
 ```
 
-**Prerequisite:** `scripts/step1-was-plugin.sh` must have run successfully (IHS must be up
-and plugin configured). Controller and at least one member must be running.
+**Prerequisites:**
+- `scripts/05-create-collective.sh` (controller formed and running on 9443)
+- member3 and/or member4 running (9083 / 9084) via `scripts/add-member.sh`
+- `scripts/install-ihs.sh` completed (`mod_was_ap24_http.so` present)
+- `scripts/step1-was-plugin.sh` is **not** required — step2 is now self-contained
 
 ---
 
