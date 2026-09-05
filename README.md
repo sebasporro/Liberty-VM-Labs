@@ -43,7 +43,7 @@ with highest precedence. The golden package is never modified.
 | Requirement | Version | Notes |
 |-------------|---------|-------|
 | Java | 17 | Pre-installed on lab VM (IBM Semeru recommended) |
-| IBM HTTP Server (IHS) + WAS Plugins | 9.0+ | Full IHS ZIP (including WAS Plugins) pre-provisioned at `/home/itzuser/software/IHS/`. Must include a working `gskcapicmd` and the Intelligent Management-capable `mod_was_ap24_http.so`. |
+| IBM HTTP Server (IHS) + WAS Plugins | 9.0.5 FP025 | `9.0.5-WS-IHS-ARCHIVE-linux-x86_64-FP025.zip` pre-provisioned at `/home/itzuser/software/IHS/`. Must include a working `gskcapicmd` and the Intelligent Management-capable `mod_was_ap24_http.so`. |
 | Shell | bash | All scripts use `#!/bin/bash` |
 | Liberty installer | 26.0.0.8 ND | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` |
 | Liberty installer | 25.0.0.1 Base | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar` |
