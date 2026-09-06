@@ -121,11 +121,18 @@ if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     exit 1
 fi
 
-# collective create writes an empty quickStartSecurity placeholder — fill it in
-# so the admin user is available for collective join and Admin Center login
-sed -i "s|quickStartSecurity userName=\"\" userPassword=\"\"|quickStartSecurity userName=\"admin\" userPassword=\"${ADMIN_PASS}\"|" \
-    "${OVERRIDES_DIR}/collective-create.xml"
-echo "      PKI initialised + quickStartSecurity configured (admin/${ADMIN_PASS})"
+# collective create writes a quickStartSecurity placeholder into collective-create.xml.
+# quickStartSecurity creates its own internal registry and REPLACES basicRegistry at
+# runtime — the administrator-role in role-override.xml references the basicRegistry
+# user, so it never takes effect, causing restConnector-2.0 to return 403.
+#
+# Fix: strip quickStartSecurity and replace it with an explicit basicRegistry +
+# administrator-role (same pattern as the reference lab's controllerOverride.xml).
+# role-override.xml already has these elements; removing quickStartSecurity lets
+# Liberty use them instead of the internal registry.
+sed -i "/<quickStartSecurity/d" "${OVERRIDES_DIR}/collective-create.xml"
+echo "      quickStartSecurity removed from collective-create.xml"
+echo "      (basicRegistry + administrator-role in role-override.xml will be used)"
 echo ""
 
 # ---------------------------------------------------------------------------
