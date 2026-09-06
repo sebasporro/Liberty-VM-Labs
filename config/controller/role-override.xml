@@ -7,11 +7,15 @@
     </featureManager>
 
     <!-- User registry — admin credentials for Admin Center and collective join -->
-    <basicRegistry id="basic" realm="BasicRealm">
+    <!-- realm omitted so Liberty uses the default realm; administrator-role
+         then maps the unqualified name "admin" without a realm prefix -->
+    <basicRegistry id="basic">
         <user name="admin" password="${admin.password}"/>
     </basicRegistry>
 
-    <!-- Grant the 'admin' user full administrative access to Admin Center and JMX -->
+    <!-- Grant the 'admin' user the Administrator role for restConnector-2.0
+         and the adminCenter. With a named realm the user must be qualified as
+         realm/user — dropping the realm name avoids that mismatch. -->
     <administrator-role>
         <user>admin</user>
     </administrator-role>
