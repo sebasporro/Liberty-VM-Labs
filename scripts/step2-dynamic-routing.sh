@@ -216,21 +216,53 @@ rm -f "${PLUGIN_KEY_DIR}/plugin-key.kdb" \
     -stash
 [[ $? -eq 0 ]] || { echo "  ERROR: gskcapicmd -keydb -convert failed"; exit 1; }
 
-"${GSKCAPICMD}" -cert -setdefault \
+# List certs so we know the exact label to use for setdefault
+echo "  Certs in plugin-key.kdb:"
+"${GSKCAPICMD}" -cert -list \
     -pw "${KS_PASS}" \
-    -db "${PLUGIN_KEY_DIR}/plugin-key.kdb" \
-    -label default 2>/dev/null || true
+    -db "${PLUGIN_KEY_DIR}/plugin-key.kdb" 2>&1 | sed 's/^/    /'
+
+# Set the first available cert as default (pick label dynamically)
+FIRST_LABEL=$("${GSKCAPICMD}" -cert -list \
+    -pw "${KS_PASS}" \
+    -db "${PLUGIN_KEY_DIR}/plugin-key.kdb" 2>/dev/null \
+    | grep -v "^Certificates" | grep -v "^$" | head -1 | sed 's/^[[:space:]]*//')
+
+if [[ -n "${FIRST_LABEL}" ]]; then
+    "${GSKCAPICMD}" -cert -setdefault \
+        -pw "${KS_PASS}" \
+        -db "${PLUGIN_KEY_DIR}/plugin-key.kdb" \
+        -label "${FIRST_LABEL}" 2>&1 \
+        && echo "  Default cert set: ${FIRST_LABEL}" \
+        || echo "  WARNING: setdefault failed for label '${FIRST_LABEL}' — continuing"
+else
+    echo "  WARNING: no certs found in plugin-key.kdb — ODR will fail to authenticate"
+fi
 
 echo "  plugin-key.kdb : ${PLUGIN_KEY_DIR}/plugin-key.kdb"
 echo "  plugin-key.sth : ${PLUGIN_KEY_DIR}/plugin-key.sth"
 
-# Ownership — IHS worker runs as the User in httpd.conf
-IHS_USER=$(awk '/^User /  {print $2}' "${HTTPD_CONF}" 2>/dev/null)
-IHS_GRP=$(awk  '/^Group / {print $2}' "${HTTPD_CONF}" 2>/dev/null)
-[[ -n "${IHS_USER}" ]] && chown "${IHS_USER}:${IHS_GRP:-${IHS_USER}}" \
+# Permissions — IHS worker must be able to read the keystore files.
+# chmod 644 ensures readability regardless of chown outcome.
+chmod 644 \
     "${PLUGIN_KEY_DIR}/plugin-key.kdb" \
     "${PLUGIN_KEY_DIR}/plugin-key.sth" \
     "${PLUGIN_KEY_DIR}/plugin-key.rdb" 2>/dev/null || true
+
+IHS_USER=$(awk '/^User /  {print $2}' "${HTTPD_CONF}" 2>/dev/null)
+IHS_GRP=$(awk  '/^Group / {print $2}' "${HTTPD_CONF}" 2>/dev/null)
+if [[ -n "${IHS_USER}" ]]; then
+    chown "${IHS_USER}:${IHS_GRP:-${IHS_USER}}" \
+        "${PLUGIN_KEY_DIR}/plugin-key.kdb" \
+        "${PLUGIN_KEY_DIR}/plugin-key.sth" \
+        "${PLUGIN_KEY_DIR}/plugin-key.rdb" 2>/dev/null \
+        && echo "  Ownership set: ${IHS_USER}:${IHS_GRP:-${IHS_USER}}" \
+        || echo "  WARNING: chown failed — files left as $(stat -c '%U' "${PLUGIN_KEY_DIR}/plugin-key.kdb" 2>/dev/null)"
+fi
+
+echo ""
+echo "  Key file permissions:"
+ls -la "${PLUGIN_KEY_DIR}/" | grep "plugin-key" | sed 's/^/    /'
 
 # ---------------------------------------------------------------------------
 # Install plugin-cfg.xml
@@ -290,16 +322,34 @@ echo "  IHS: running on port 8080"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Verify — allow 60 s for the plugin to connect to /ibm/api/dynamicRouting
+# Verify — allow 90 s for the plugin to connect to /ibm/api/dynamicRouting
 # and receive its first routing table update
 # ---------------------------------------------------------------------------
-echo "  Verifying routing (up to 60 s)..."
+echo "  Verifying routing (up to 90 s)..."
 HTTP_CODE="000"
-for (( t=0; t<=60; t+=5 )); do
+for (( t=0; t<=90; t+=5 )); do
     [[ ${t} -gt 0 ]] && { sleep 5; echo "    ${t}s — HTTP ${HTTP_CODE}..."; }
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
         http://localhost:8080/server-info/ 2>/dev/null)
     [[ "${HTTP_CODE}" == "200" ]] && break
+    # Surface ODR init failure early so user doesn't wait the full 90 s
+    if grep -q "initializeODR.*Failed" "${PLUGIN_LOG_DIR}/http_plugin.log" 2>/dev/null; then
+        echo "  ERROR: ODR failed to initialize — keystore or connectivity issue"
+        echo "  Plugin log (last 20 lines):"
+        tail -20 "${PLUGIN_LOG_DIR}/http_plugin.log" | sed 's/^/    /'
+        echo ""
+        echo "  Keyfile check:"
+        KEYFILE=$(grep -o 'Keyfile="[^"]*"' "${PLUGIN_CFG}" 2>/dev/null | head -1)
+        echo "    plugin-cfg.xml says: ${KEYFILE}"
+        ls -la "${PLUGIN_KEY_DIR}/plugin-key.kdb" 2>/dev/null | sed 's/^/    /' \
+            || echo "    plugin-key.kdb NOT FOUND at ${PLUGIN_KEY_DIR}/"
+        echo ""
+        echo "  Controller /ibm/api/dynamicRouting reachable?"
+        curl -k -s -o /dev/null -w "    HTTP %{http_code}\n" \
+            -u "${ADMIN_USER}:${ADMIN_PASS}" \
+            "https://${CTRL_HOST}:${CTRL_HTTPS}/ibm/api/dynamicRouting" 2>/dev/null
+        break
+    fi
 done
 
 echo ""
