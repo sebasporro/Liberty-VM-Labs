@@ -135,12 +135,14 @@ echo ""
 #       <hostAlias>*:IHS_PORT</hostAlias>
 #   </virtualHost>
 # ---------------------------------------------------------------------------
-echo "[2/6] Injecting virtualHost dropin into running members..."
+echo "[2/6] Injecting virtualHost dropin into running members and restarting them..."
 
 for i in 1 2 3 4 5 6 7 8 9; do
     port=$(( 9080 + i ))
     member_name="member${i}"
-    member_overrides="${WORKSPACE_ROOT}/installs/${member_name}/wlp/usr/servers/${member_name}/configDropins/overrides"
+    member_install="${WORKSPACE_ROOT}/installs/${member_name}"
+    member_overrides="${member_install}/wlp/usr/servers/${member_name}/configDropins/overrides"
+    member_bin="${member_install}/wlp/bin/server"
 
     if ! ss -tlnp 2>/dev/null | grep -q ":${port} "; then
         continue
@@ -165,10 +167,19 @@ for i in 1 2 3 4 5 6 7 8 9; do
     </virtualHost>
 </server>
 VHOSTXML
-    echo "  Written: ${member_overrides}/dynamic-routing-vhost.xml"
+    echo "  Written dropin for ${member_name}"
+
+    # Restart member so it re-registers the virtualHost with the collective
+    if [[ -x "${member_bin}" ]]; then
+        "${member_bin}" stop "${member_name}" 2>/dev/null || true
+        sleep 2
+        "${member_bin}" start "${member_name}"
+        echo "  Restarted: ${member_name}"
+    fi
 done
-echo "  Waiting 5 s for members to pick up config change..."
-sleep 5
+
+echo "  Waiting 10 s for members to re-register with collective..."
+sleep 10
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -212,6 +223,21 @@ grep -q "CWWKF0012I.*restConnector-2.0" "${MESSAGES_LOG}" 2>/dev/null \
 
 echo "  Waiting 10 s for DynamicRouting MBean registration..."
 sleep 10
+
+# Verify the controller has server groups (members registered with virtualHost)
+echo "  Checking controller routing table..."
+ROUTING_JSON=$(curl -k -s -u "${ADMIN_USER}:${ADMIN_PASS}" \
+    -H "Accept: application/json" \
+    "https://${CONTROLLER_HOST}:${CONTROLLER_HTTPS}/ibm/api/dynamicRouting" \
+    2>/dev/null)
+if echo "${ROUTING_JSON}" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if d else 1)" 2>/dev/null; then
+    echo "  Routing table    : populated ✓"
+else
+    echo "  WARNING: Controller routing table is empty."
+    echo "           Members may not have registered their virtualHost yet."
+    echo "           dynamicRouting setup will still run — the plugin will"
+    echo "           retry connecting to the controller every 60 s."
+fi
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -321,20 +347,40 @@ mkdir -p "${PLUGIN_LOG_DIR}"
 [[ -n "${IHS_USER}" ]] && chown "${IHS_USER}:${IHS_GROUP:-${IHS_USER}}" "${PLUGIN_LOG_DIR}" 2>/dev/null || true
 echo "  Created log dir: ${PLUGIN_LOG_DIR}"
 
-# Patch VirtualHostGroup port and add UriGroup+Route if missing
-python3 - "${GENERATED_CFG}" "${IHS_HTTP_PORT}" <<'PYEOF'
+# Patch the generated plugin-cfg.xml:
+#   1. Fix Connector: switch to HTTP port 9080, add stashfile, remove keyring
+#      The plugin needs stashfile to unlock the CMS keystore for TLS. Since
+#      we want HTTP (simpler, no cert trust required), switch protocol+port
+#      and remove the keyring/stashfile properties entirely.
+#   2. Fix VirtualHost: replace generated port (80/443) with IHS port 8080
+#   3. Inject UriGroup+VirtualHostGroup+Route if missing
+python3 - "${GENERATED_CFG}" "${IHS_HTTP_PORT}" "${CONTROLLER_HTTP}" <<'PYEOF'
 import sys, re
 
-path = sys.argv[1]
-port = sys.argv[2]
+path      = sys.argv[1]
+ihs_port  = sys.argv[2]
+ctrl_http = sys.argv[3]
 
 with open(path) as f:
     xml = f.read()
 
-# Replace any VirtualHost port with IHS port
-xml = re.sub(r'(<VirtualHost\s+Name="\*:)\d+(")', rf'\g<1>{port}\2', xml)
+# Fix <Connector>: switch to HTTP, remove keyring/stashfile
+# Replace the entire Connector element inside IntelligentManagement
+def fix_connector(m):
+    c = m.group(0)
+    # Switch to http and controller HTTP port
+    c = re.sub(r'\bprotocol="https"', 'protocol="http"', c, flags=re.IGNORECASE)
+    c = re.sub(r'\bport="\d+"', f'port="{ctrl_http}"', c)
+    # Remove keyring and stashfile properties (not needed for HTTP)
+    c = re.sub(r'\s*<Property\s+name="(?:keyring|stashfile)"[^>]*/>', '', c, flags=re.IGNORECASE)
+    return c
 
-# If no VirtualHostGroup exists at all, inject full routing footer
+xml = re.sub(r'<Connector\b[^>]*>.*?</Connector>', fix_connector, xml, flags=re.DOTALL)
+
+# Fix VirtualHost port
+xml = re.sub(r'(<VirtualHost\s+Name="\*:)\d+(")', rf'\g<1>{ihs_port}\2', xml)
+
+# Inject routing footer if missing
 if '<VirtualHostGroup' not in xml:
     footer = f"""
     <UriGroup Name="default_uris">
@@ -342,7 +388,7 @@ if '<VirtualHostGroup' not in xml:
     </UriGroup>
 
     <VirtualHostGroup Name="default_vhosts">
-        <VirtualHost Name="*:{port}"/>
+        <VirtualHost Name="*:{ihs_port}"/>
     </VirtualHostGroup>
 
     <Route VirtualHostGroup="default_vhosts"
@@ -355,7 +401,7 @@ if '<VirtualHostGroup' not in xml:
 with open(path, 'w') as f:
     f.write(xml)
 
-print(f"  Patched VirtualHostGroup port → *:{port}")
+print(f"  Patched: Connector → http:{ctrl_http}, VirtualHost → *:{ihs_port}")
 PYEOF
 [[ $? -ne 0 ]] && { echo "  ERROR: Failed to patch plugin-cfg.xml"; exit 1; }
 
