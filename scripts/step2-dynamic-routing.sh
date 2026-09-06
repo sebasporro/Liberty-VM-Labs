@@ -101,6 +101,11 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "[2/4] Enabling dynamicRouting-1.0 + restConnector-2.0 on controller..."
 
+# The dynamicRouting REST service (/ibm/api/dynamicRouting) requires the
+# connecting client (the IHS plugin) to authenticate with a certificate that
+# maps to the administrator-role (CWWKV0020E if missing).
+# Grant the administrator-role to all certificate-authenticated clients so the
+# plugin cert accepted by the collective PKI is also accepted by the REST service.
 mkdir -p "${CTRL_OVERRIDES}"
 cat > "${CTRL_OVERRIDES}/dynamic-routing.xml" <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -109,6 +114,16 @@ cat > "${CTRL_OVERRIDES}/dynamic-routing.xml" <<'XML'
         <feature>dynamicRouting-1.0</feature>
         <feature>restConnector-2.0</feature>
     </featureManager>
+
+    <!-- Grant administrator-role to certificate-authenticated clients.
+         Required so the IHS plugin cert is accepted by /ibm/api/dynamicRouting.
+         Without this the controller logs CWWKV0020E and the plugin gets HTTP 403/500. -->
+    <administrator-role>
+        <user>admin</user>
+        <certificate>
+            <cn>*</cn>
+        </certificate>
+    </administrator-role>
 </server>
 XML
 
@@ -222,11 +237,12 @@ echo "  Certs in plugin-key.kdb:"
     -pw "${KS_PASS}" \
     -db "${PLUGIN_KEY_DIR}/plugin-key.kdb" 2>&1 | sed 's/^/    /'
 
-# Set the first available cert as default (pick label dynamically)
+# Set the first personal cert (-) as default — skip the legend header line and
+# trusted/secret-key certs. Personal certs are marked with "- " prefix.
 FIRST_LABEL=$("${GSKCAPICMD}" -cert -list \
     -pw "${KS_PASS}" \
     -db "${PLUGIN_KEY_DIR}/plugin-key.kdb" 2>/dev/null \
-    | grep -v "^Certificates" | grep -v "^$" | head -1 | sed 's/^[[:space:]]*//')
+    | grep "^-[[:space:]]" | head -1 | sed 's/^-[[:space:]]*//')
 
 if [[ -n "${FIRST_LABEL}" ]]; then
     "${GSKCAPICMD}" -cert -setdefault \
