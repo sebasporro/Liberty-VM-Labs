@@ -165,6 +165,7 @@ $WLP_HOME/bin/dynamicRouting setup \
     --password=admin \
     --keystorePassword=Liberty26ctrl! \
     --webServerNames=webserver1 \
+    --webServerPort=8080 \
     --pluginInstallRoot=$PluginRoot \
     --targetPath=$SCRATCH \
     --autoAcceptCertificates
