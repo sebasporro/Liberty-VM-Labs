@@ -172,24 +172,25 @@ echo ""
 #    step2-dynamic-routing.sh installs plugin-cfg.xml + plugin-key.p12 here.
 #    A clean reset must remove all of them.
 # ---------------------------------------------------------------------------
-echo "[4/7] Removing WAS plugin artifacts from IHS conf/..."
-if [[ -d "${IHS_ROOT}/conf" ]]; then
-    REMOVED=0
-    for f in \
-        "${IHS_ROOT}/conf/plugin-cfg.xml" \
-        "${IHS_ROOT}/conf/plugin-key.p12" \
-        "${IHS_ROOT}/conf/plugin-key.kdb" \
-        "${IHS_ROOT}/conf/plugin-key.sth"; do
-        if [[ -f "${f}" ]]; then
-            rm -f "${f}"
-            echo "      Removed: $(basename "${f}")"
-            (( REMOVED++ ))
-        fi
-    done
-    [[ ${REMOVED} -eq 0 ]] && echo "      Nothing to remove"
-else
-    echo "      IHS conf/ not found — skipped"
-fi
+echo "[4/7] Removing WAS plugin artifacts from IHS..."
+REMOVED=0
+for f in \
+    "${IHS_ROOT}/config/webserver1/plugin-cfg.xml" \
+    "${IHS_ROOT}/config/webserver1/plugin-key.kdb" \
+    "${IHS_ROOT}/config/webserver1/plugin-key.sth" \
+    "${IHS_ROOT}/config/webserver1/plugin-key.rdb" \
+    "${IHS_ROOT}/config/webserver1/plugin-key.p12" \
+    "${IHS_ROOT}/conf/plugin-cfg.xml" \
+    "${IHS_ROOT}/conf/plugin-key.p12" \
+    "${IHS_ROOT}/conf/plugin-key.kdb" \
+    "${IHS_ROOT}/conf/plugin-key.sth"; do
+    if [[ -f "${f}" ]]; then
+        rm -f "${f}"
+        echo "      Removed: ${f#${IHS_ROOT}/}"
+        (( REMOVED++ ))
+    fi
+done
+[[ ${REMOVED} -eq 0 ]] && echo "      Nothing to remove"
 echo ""
 
 # ---------------------------------------------------------------------------
