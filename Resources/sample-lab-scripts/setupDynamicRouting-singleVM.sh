@@ -165,7 +165,6 @@ $WLP_HOME/bin/dynamicRouting setup \
     --password=admin \
     --keystorePassword=Liberty26ctrl! \
     --webServerNames=webserver1 \
-    --webServerPort=8080 \
     --pluginInstallRoot=$PluginRoot \
     --targetPath=$SCRATCH \
     --autoAcceptCertificates
@@ -247,8 +246,20 @@ echo " Step 6: Install plugin-cfg.xml and key files"
 echo "------------------------------------------------"
 echo ""
 
-# Patch VirtualHost port before installing
-sed -i 's/VirtualHost Name="\*:[0-9]*/VirtualHost Name="*:8080/g' $GEN_CFG
+# The dynamicRouting setup generates plugin-cfg.xml with only the
+# <IntelligentManagement> stanza — no VirtualHostGroup/ServerCluster/Route.
+# ODR builds the server list dynamically at runtime from the collective.
+# However ODR still needs a <VirtualHostGroup> to know which incoming port
+# to intercept. Without it, initializeODR fails.
+# Inject a minimal VirtualHostGroup + UriGroup + Route block before </Config>.
+sed -i "s|</Config>|<VirtualHostGroup Name=\"default_vhost_group\">\n\
+    <VirtualHost Name=\"*:8080\"/>\n\
+</VirtualHostGroup>\n\
+<UriGroup Name=\"default_uri_group\">\n\
+    <Uri AffinityCookie=\"JSESSIONID\" AffinityURLIdentifier=\"jsessionid\" Name=\"/*\"/>\n\
+</UriGroup>\n\
+<Route VirtualHostGroup=\"default_vhost_group\" UriGroup=\"default_uri_group\" ServerCluster=\"defaultCollective\"/>\n\
+</Config>|" $GEN_CFG
 
 # Install plugin-cfg.xml
 cp $GEN_CFG $PLUGIN_INSTALL_DIR/plugin-cfg.xml
