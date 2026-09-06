@@ -115,15 +115,20 @@ cat > "${CTRL_OVERRIDES}/dynamic-routing.xml" <<'XML'
         <feature>restConnector-2.0</feature>
     </featureManager>
 
-    <!-- Grant administrator-role to certificate-authenticated clients.
-         Required so the IHS plugin cert is accepted by /ibm/api/dynamicRouting.
-         Without this the controller logs CWWKV0020E and the plugin gets HTTP 403/500. -->
+    <!--
+      restConnector-2.0 requires the caller to have administrator-role.
+      - <user>admin</user> grants it to the admin/admin password login used
+        by the dynamicRouting setup CLI (prevents 403 on MBean call).
+      - <ssl clientAuthenticationSupported="true"/> enables optional client-cert
+        auth so the IHS plugin can authenticate with its certificate
+        (prevents CWWKV0020E when the plugin connects to /ibm/api/dynamicRouting).
+    -->
     <administrator-role>
         <user>admin</user>
-        <certificate>
-            <cn>*</cn>
-        </certificate>
     </administrator-role>
+
+    <ssl id="defaultSSLConfig" clientAuthenticationSupported="true"/>
+
 </server>
 XML
 
@@ -149,8 +154,20 @@ grep -q "CWWKF0012I.*restConnector-2.0" "${MESSAGES_LOG}" 2>/dev/null \
     && echo "  restConnector-2.0  : active ✓" \
     || { echo "  ERROR: restConnector-2.0 did not load"; exit 1; }
 
-echo "  Pausing 10 s for DynamicRouting MBean to register..."
-sleep 10
+# Wait for security configuration (administrator-role) to be applied and the
+# REST JMX connector to be fully ready — Liberty logs CWWKO0219I when the
+# HTTPS connector is ready to accept connections
+echo "  Waiting for HTTPS connector ready..."
+for (( w=0; w<30; w+=2 )); do
+    grep -q "CWWKO0219I" "${MESSAGES_LOG}" 2>/dev/null && break
+    sleep 2
+done
+grep -q "CWWKO0219I" "${MESSAGES_LOG}" 2>/dev/null \
+    && echo "  HTTPS connector    : ready ✓" \
+    || echo "  WARNING: HTTPS connector message not found — proceeding anyway"
+
+echo "  Pausing 15 s for DynamicRouting MBean + security config to settle..."
+sleep 15
 echo ""
 
 # ---------------------------------------------------------------------------
