@@ -252,14 +252,24 @@ echo ""
 # However ODR still needs a <VirtualHostGroup> to know which incoming port
 # to intercept. Without it, initializeODR fails.
 # Inject a minimal VirtualHostGroup + UriGroup + Route block before </Config>.
-sed -i "s|</Config>|<VirtualHostGroup Name=\"default_vhost_group\">\n\
-    <VirtualHost Name=\"*:8080\"/>\n\
-</VirtualHostGroup>\n\
-<UriGroup Name=\"default_uri_group\">\n\
-    <Uri AffinityCookie=\"JSESSIONID\" AffinityURLIdentifier=\"jsessionid\" Name=\"/*\"/>\n\
-</UriGroup>\n\
-<Route VirtualHostGroup=\"default_vhost_group\" UriGroup=\"default_uri_group\" ServerCluster=\"defaultCollective\"/>\n\
-</Config>|" $GEN_CFG
+# Use a Python one-liner to avoid sed newline portability issues.
+python3 - "$GEN_CFG" <<'PYEOF'
+import sys
+path = sys.argv[1]
+with open(path, 'r') as f:
+    content = f.read()
+injection = """<VirtualHostGroup Name="default_vhost_group">
+    <VirtualHost Name="*:8080"/>
+</VirtualHostGroup>
+<UriGroup Name="default_uri_group">
+    <Uri AffinityCookie="JSESSIONID" AffinityURLIdentifier="jsessionid" Name="/*"/>
+</UriGroup>
+<Route VirtualHostGroup="default_vhost_group" UriGroup="default_uri_group" ServerCluster="defaultCollective"/>
+"""
+content = content.replace('</Config>', injection + '</Config>')
+with open(path, 'w') as f:
+    f.write(content)
+PYEOF
 
 # Install plugin-cfg.xml
 cp $GEN_CFG $PLUGIN_INSTALL_DIR/plugin-cfg.xml
