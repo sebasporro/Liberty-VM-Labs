@@ -564,15 +564,6 @@ scripts/add-member-26.sh member2
 
 **Prerequisite:** `packages/liberty-package-26.0.0.8.zip` must exist and controller must be running.
 
-> **Note:** `scripts/add-member.sh` still exists as a compatibility wrapper that delegates
-> to `add-member-26.sh`.
-
----
-
-### `scripts/start-apache.sh`
-
-> ⚠️ **Legacy script** — superseded by `scripts/reset-ihs.sh` + `scripts/step1-was-plugin.sh` + `scripts/step2-dynamic-routing.sh`. Retained for reference only. Do not use in the current lab sequence.
-
 ---
 
 ### `scripts/reset-ihs.sh`  ⭐
@@ -854,22 +845,6 @@ be running.
 
 ---
 
-### Legacy Build Scripts (04–06, 08)
-
-These scripts were used during initial lab construction and are retained for reference.
-Use the operational scripts above for day-to-day use.
-
-| Script | Purpose |
-|--------|---------|
-| `04-deploy-instances.sh` | Batch deploy of controller + member1 + member2 from package |
-| `05-create-collective.sh` | Full collective setup (create + join + start all) |
-| `06-configure-apache.sh` | Prints IHS include instructions (informational) |
-| `08-enable-apache-routing.sh` | Original IHS setup script (superseded by `reset-ihs.sh` + `step1-was-plugin.sh`) |
-| `start-apache.sh` | Legacy IHS start script (superseded by `reset-ihs.sh` + `step1-was-plugin.sh`) |
-| `enable-dynamic-routing.sh` | Legacy dynamic routing script (superseded by `step2-dynamic-routing.sh`) |
-
----
-
 ## Override Mechanism
 
 Each deployed instance is customised via two XML files dropped into
@@ -940,4 +915,4 @@ Key points:
 - Each version has its own isolated runtime directory (`wlp-26/` vs `wlp-25/`) and golden package, so they never interfere.
 - `reset-environment.sh` cleans **both** runtimes (`wlp-26/` and `wlp-25/`) and **both** packages.
 - `add-member-26.sh` always uses the 26.0.0.8 package; `add-member-25.sh` always uses the 25.0.0.1 package.
-- `add-member.sh` is kept as a compatibility wrapper that delegates to `add-member-26.sh`.
+- `add-member-26.sh` is the canonical script for 26.0.0.8 members; `add-member-25.sh` for 25.0.0.1 members.
