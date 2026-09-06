@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  routing-rules.xml — Dynamic Routing Rule template for the Liberty Collective Controller
+  
+  This file is NOT deployed directly. It is used as a reference template.
+  The apply-routing-rules.sh script writes a live version of this dropin into:
+    installs/controller/wlp/usr/servers/controller/configDropins/overrides/routing-rules.xml
+
+  To pin /server-info/* to a specific member:
+    scripts/apply-routing-rules.sh -s member1
+
+  To restore round-robin across all members:
+    scripts/apply-routing-rules.sh -s all
+
+  IBM Documentation — Configuring routing rules for Dynamic Routing:
+    https://www.ibm.com/docs/en/was-liberty/nd?topic=SSAW57_liberty/com.ibm.websphere.wlp.zseries.doc/ae/twlp_wve_routing_rules.htm
+-->
+<server description="Dynamic Routing Rules">
+    <featureManager>
+        <feature>dynamicRouting-1.0</feature>
+    </featureManager>
+
+    <!--
+      Route all /server-info/* requests to a single member.
+      Replace MEMBER_NAME with: member1 | member2 | member3 | member4
+
+      The destination pattern is: server=*,*,*,<serverName>
+        Field 1 (*): any collective   — wildcard
+        Field 2 (*): any host         — wildcard (single-VM lab)
+        Field 3 (*): any userdir      — wildcard
+        Field 4   : server name       — must match exactly
+
+      To route to multiple members (round-robin within the rule), add
+      additional <endpoint> entries.
+    -->
+    <dynamicRouting>
+        <routingRules webServers="webserver1">
+            <routingRule order="100" matchExpression="URI LIKE '/server-info%'">
+                <permitAction>
+                    <loadBalanceEndPoints>
+                        <endpoint destination="server=*,*,*,MEMBER_NAME"/>
+                    </loadBalanceEndPoints>
+                </permitAction>
+            </routingRule>
+        </routingRules>
+    </dynamicRouting>
+</server>

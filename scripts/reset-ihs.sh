@@ -67,10 +67,15 @@ CONF_EOF
 
 echo "      Written: ${HTTPD_CONF}"
 
-# 3. Remove stale WAS plugin files from IHS conf dir
+# 3. Remove stale WAS plugin files from IHS config/webserver1/ and conf/
 echo "[3/3] Removing stale WAS plugin files..."
 REMOVED=0
 for f in \
+    "${IHS_ROOT}/config/webserver1/plugin-cfg.xml" \
+    "${IHS_ROOT}/config/webserver1/plugin-key.kdb" \
+    "${IHS_ROOT}/config/webserver1/plugin-key.sth" \
+    "${IHS_ROOT}/config/webserver1/plugin-key.rdb" \
+    "${IHS_ROOT}/config/webserver1/plugin-key.p12" \
     "${IHS_ROOT}/conf/plugin-cfg.xml" \
     "${IHS_ROOT}/conf/plugin-key.p12" \
     "${IHS_ROOT}/conf/plugin-key.kdb" \

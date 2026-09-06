@@ -262,6 +262,16 @@ all collective members. Members added later are discovered automatically — no 
 for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
 ```
 
+#### Step 3c — Dynamic Routing Rules (optional)
+
+Once dynamic routing is active you can pin specific URIs to individual members using Liberty routing rules. The controller picks up dropin changes live — no restart needed.
+
+```bash
+scripts/apply-routing-rules.sh -s member1   # pin /server-info/* to member1
+scripts/apply-routing-rules.sh -s member2   # pin /server-info/* to member2
+scripts/apply-routing-rules.sh -s all       # remove pin — restore round-robin
+```
+
 ---
 
 ### Step 4 — Add 25.0.0.1 Members
@@ -573,7 +583,7 @@ Use this to recover from a broken IHS/plugin-cfg configuration without touching 
 Steps performed:
 1. Stops IHS if running
 2. Overwrites `httpd.conf` with a minimal clean config (loads `mod_was_ap24_http.so`, no `WebSpherePluginConfig`)
-3. Removes all stale WAS plugin files from `$IHS_ROOT/conf/`: `plugin-cfg.xml`, `plugin-key.p12`, `plugin-key.kdb`, `plugin-key.sth`
+3. Removes all stale WAS plugin files from `$IHS_ROOT/config/webserver1/` (`plugin-cfg.xml`, `plugin-key.kdb`, `plugin-key.sth`, `plugin-key.rdb`) and any leftovers in `$IHS_ROOT/conf/` from older runs
 
 **Usage:**
 ```bash
@@ -624,7 +634,7 @@ How it works:
 - `dynamicRouting setup` (Liberty CLI) connects via HTTPS and generates `plugin-cfg.xml` with an `<IntelligentManagement>` stanza and `plugin-key.p12` (PKCS12 keystore)
 - `gskcapicmd` converts `plugin-key.p12` → CMS `plugin-key.kdb` (required format for the WAS plugin)
 - `plugin-key.kdb` + `.sth` are placed at `$IHS_ROOT/config/webserver1/` — the exact path Liberty embeds as `Keyfile` in `plugin-cfg.xml`
-- `plugin-cfg.xml` is installed to `$IHS_ROOT/conf/`; IHS is restarted
+- `plugin-cfg.xml` is installed to `$IHS_ROOT/config/webserver1/` (alongside the key files, matching the reference lab); `WebSpherePluginConfig` points to this location; IHS is restarted
 
 Steps performed:
 1. Pre-flight: verifies `dynamicRouting` binary, `gskcapicmd` functional, controller running, no stale `collective-join.xml` on the controller
@@ -642,6 +652,56 @@ scripts/step2-dynamic-routing.sh
 - `scripts/install-ihs.sh` + `scripts/patch-ihs-serverroot.sh` completed (`gskcapicmd` functional)
 - Controller running on HTTPS 9443 (`scripts/install-controller.sh`)
 - At least one member joined to the collective (`scripts/add-member-26.sh`)
+
+---
+
+### `scripts/apply-routing-rules.sh`  ⭐
+
+**Purpose:** Applies (or removes) dynamic routing rules on the collective controller to pin
+requests for `/server-info/*` to a specific member, or restore default round-robin across all members.
+
+Liberty picks up the dropin change dynamically — no controller restart is needed.
+
+Steps performed:
+1. Validates the controller's `configDropins/overrides/` directory is present
+2. Writes `routing-rules.xml` into the controller dropin (pin mode) or removes it (round-robin mode)
+3. Restarts IHS so the WAS plugin refreshes its routing table
+
+```xml
+<!-- Generated dropin structure (pin to member1): -->
+<dynamicRouting>
+  <routingRules webServers="webserver1">
+    <routingRule order="100" matchExpression="URI LIKE '/server-info%'">
+      <permitAction>
+        <loadBalanceEndPoints>
+          <endpoint destination="server=*,*,*,member1"/>
+        </loadBalanceEndPoints>
+      </permitAction>
+    </routingRule>
+  </routingRules>
+</dynamicRouting>
+```
+
+**Usage:**
+```bash
+scripts/apply-routing-rules.sh -s member1   # all /server-info/* → member1 only
+scripts/apply-routing-rules.sh -s member2   # all /server-info/* → member2 only
+scripts/apply-routing-rules.sh -s all       # remove rule — restore round-robin
+```
+
+**Prerequisite:** `scripts/step2-dynamic-routing.sh` must have been completed successfully.
+
+**Verify:**
+```bash
+# With -s member1: every response should show member1
+for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
+
+# With -s all: responses should alternate across members
+for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
+```
+
+> **Reference:** See [`config/controller/routing-rules.xml`](config/controller/routing-rules.xml) for the annotated template.
+> IBM Documentation — [Configuring routing rules for Dynamic Routing](https://www.ibm.com/docs/en/was-liberty/nd?topic=SSAW57_liberty/com.ibm.websphere.wlp.zseries.doc/ae/twlp_wve_routing_rules.htm)
 
 ---
 
