@@ -132,6 +132,9 @@ cp "${SCRATCH_DIR}/plugin-key.kdb"  "${PLUGIN_DIR}/plugin-key.kdb"
 cp "${SCRATCH_DIR}/plugin-key.rdb"  "${PLUGIN_DIR}/plugin-key.rdb" 2>/dev/null || true
 cp "${SCRATCH_DIR}/plugin-key.sth"  "${PLUGIN_DIR}/plugin-key.sth"
 echo "      Files installed"
+# Return to SCRIPT_DIR before removing SCRATCH_DIR — deleting the cwd causes
+# every subsequent subprocess to fail with "getcwd: cannot access parent directories".
+cd "${SCRIPT_DIR}"
 rm -rf "${SCRATCH_DIR}"
 echo ""
 
