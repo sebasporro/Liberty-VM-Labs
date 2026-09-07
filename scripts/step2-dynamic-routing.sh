@@ -61,8 +61,25 @@ fi
 mkdir -p "${PLUGIN_DIR}" "${WORK_DIR}"
 
 # ---------------------------------------------------------------------------
-# 1. Run dynamicRouting setup
-#    Writes plugin-cfg.xml and plugin-key.p12 into the current directory.
+# 1. Seed config/webserver1/plugin-cfg.xml from the static config written by
+#    step1-was-plugin.sh. dynamicRouting setup merges <IntelligentManagement>
+#    into whatever is already at $pluginInstallRoot/config/webserver1/plugin-cfg.xml.
+#    Without a complete base file (ServerCluster, UriGroup, VirtualHostGroup,
+#    Route) the merged output is missing those elements and the plugin parser fails.
+# ---------------------------------------------------------------------------
+STATIC_CFG="${IHS_ROOT}/conf/plugin-cfg.xml"
+if [[ ! -f "${STATIC_CFG}" ]]; then
+    echo "ERROR: ${STATIC_CFG} not found."
+    echo "       Run scripts/step1-was-plugin.sh before this script."
+    exit 1
+fi
+cp "${STATIC_CFG}" "${PLUGIN_DIR}/plugin-cfg.xml"
+echo "      Seeded ${PLUGIN_DIR}/plugin-cfg.xml from step1 static config"
+
+# ---------------------------------------------------------------------------
+# 2. Run dynamicRouting setup
+#    Reads $pluginInstallRoot/config/webserver1/plugin-cfg.xml as merge base.
+#    Writes the merged plugin-cfg.xml and plugin-key.p12 to the current directory.
 #    We run from WORK_DIR so the output files land there cleanly.
 # ---------------------------------------------------------------------------
 echo "[1/4] Running dynamicRouting setup..."
