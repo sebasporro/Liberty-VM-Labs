@@ -336,11 +336,27 @@ patched = re.sub(
 # The cluster Name "defaultCollective" matches what the dynamic routing engine
 # uses as the default group name when registering servers from the collective.
 if '<ServerCluster' not in patched:
+    # The WAS plugin parser requires:
+    #   1. <ServerCluster> with at least one <Server> child — an empty
+    #      <ServerCluster> causes configDestroy + "Failed to load config"
+    #      even in dynamic routing (ODR) mode.  The placeholder Server
+    #      entry points at member1:9081; ODR will replace the live server
+    #      list at runtime but the parser needs something to validate against.
+    #   2. <PrimaryServers> listing that same Server.
+    #   3. <VirtualHostGroup> with the IHS listen port (8080).
+    #   4. <UriGroup> and <Route> tying them together.
     injection = '''\
 <ServerCluster CloneSeparatorChange="false" GetDWLMTable="false"
                IgnoreAffinityRequests="true" LoadBalance="Round Robin"
                Name="defaultCollective" PostSizeLimit="-1"
                RemoveSpecialHeaders="true" RetryInterval="60">
+    <Server CloneID="placeholder" ConnectTimeout="5" ExtendedHandshake="false"
+            MaxConnections="-1" Name="placeholder" ServerIOTimeout="900" WaitForContinue="false">
+        <Transport Hostname="localhost" Port="9081" Protocol="http"/>
+    </Server>
+    <PrimaryServers>
+        <Server Name="placeholder"/>
+    </PrimaryServers>
 </ServerCluster>
 <VirtualHostGroup Name="default_vhost_group">
     <VirtualHost Name="*:8080"/>
@@ -353,7 +369,7 @@ if '<ServerCluster' not in patched:
        ServerCluster="defaultCollective"/>
 '''
     patched = patched.replace('</Config>', injection + '</Config>')
-    print("  Static stanzas injected (ServerCluster/VirtualHostGroup/UriGroup/Route) ✓")
+    print("  Static stanzas injected (ServerCluster+placeholder Server/VirtualHostGroup/UriGroup/Route) ✓")
 else:
     print("  Static stanzas already present ✓")
 
