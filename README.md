@@ -228,9 +228,20 @@ for i in $(seq 8); do curl -s http://localhost:8080/server-info/ | grep -o 'memb
 
 #### Step 3b — Dynamic routing (Intelligent Management)
 
-> ⚠️ **TODO:** Enable native Liberty Intelligent Management dynamic routing so the IHS plugin
-> receives a live member routing table from the collective controller. Members joining, leaving,
-> or restarting should be reflected automatically with no manual config regeneration.
+```bash
+scripts/step2-dynamic-routing.sh
+```
+
+`mod_was_ap24_http.so` connects to the controller's `/ibm/api/dynamicRouting` endpoint and
+receives a live member routing table — members joining or leaving are reflected automatically.
+
+> **Note:** `dynamicRouting-1.0` and `restConnector-2.0` are already declared in
+> `config/controller/role-override.xml`; no controller restart is needed before running the script.
+
+```bash
+# Verify dynamic routing — responses should rotate across all running members
+for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
+```
 
 #### Step 3c — Dynamic Routing Rules (optional)
 
@@ -591,18 +602,19 @@ done
 `plugin-cfg.xml` regeneration needed when members join or leave.
 
 How it works:
-- `dynamicRouting-1.0` + `restConnector-2.0` are enabled on the controller
-- `dynamicRouting setup` (Liberty CLI) connects via HTTPS and generates `plugin-cfg.xml` with an `<IntelligentManagement>` stanza and `plugin-key.p12` (PKCS12 keystore)
+- `dynamicRouting-1.0` + `restConnector-2.0` are already declared in `config/controller/role-override.xml` — no controller restart or dropin needed
+- `dynamicRouting setup` (Liberty CLI) connects via HTTPS 9443 and generates `plugin-cfg.xml` with an `<IntelligentManagement>` stanza and `plugin-key.p12` (PKCS12 keystore)
 - `gskcapicmd` converts `plugin-key.p12` → CMS `plugin-key.kdb` (required format for the WAS plugin)
-- `plugin-key.kdb` + `.sth` are placed at `$IHS_ROOT/config/webserver1/` — the exact path Liberty embeds as `Keyfile` in `plugin-cfg.xml`
-- `plugin-cfg.xml` is installed to `$IHS_ROOT/config/webserver1/` (alongside the key files, matching the reference lab); `WebSpherePluginConfig` points to this location; IHS is restarted
+- `plugin-key.kdb` + `.sth` are placed at `$IHS_ROOT/config/webserver1/`; `plugin-cfg.xml` is installed alongside them
+- `WebSpherePluginConfig` in `httpd.conf` is updated to point at the new location; IHS is restarted
+- `fix-odr-connector.sh` patches the ODR connector to HTTP:9080 to avoid collective CA trust issues
 
 Steps performed:
-1. Pre-flight: verifies `dynamicRouting` binary, `gskcapicmd` functional, controller running, no stale `collective-join.xml` on the controller
-2. Writes `dynamic-routing.xml` dropin; restarts controller; hard-fails if `dynamicRouting-1.0` or `restConnector-2.0` don't confirm via `CWWKF0012I`; waits 5 s for MBean registration
-3. Runs `dynamicRouting setup --port=9443 --pluginInstallRoot=$IHS_ROOT --targetPath=<scratch> --webServerNames=webserver1`
-4. Runs `gskcapicmd -keydb -convert` (PKCS12 → CMS) + `-cert -setdefault`; places `.kdb`/`.sth`/`.rdb` at `$IHS_ROOT/config/webserver1/`
-5. Installs `plugin-cfg.xml`, sets `WebSpherePluginConfig`, restarts IHS, verifies HTTP 200
+1. Pre-flight: verifies `dynamicRouting` binary, `gskcapicmd`, and controller on HTTPS 9443
+2. Runs `dynamicRouting setup --port=9443 --user=admin --password=admin --pluginInstallRoot=$IHS_ROOT --webServerNames=webserver1 --autoAcceptCertificates` (output lands in `$SCRATCH_DIR`)
+3. Runs `gskcapicmd -keydb -convert` (PKCS12 → CMS) + `-cert -setdefault -label default`; `chown`s `.kdb`/`.rdb`/`.sth` to the IHS `User:Group` read from `httpd.conf` (per IBM docs)
+4. Copies `.kdb`/`.rdb`/`.sth` to `$IHS_ROOT/config/webserver1/` and `plugin-cfg.xml` to the `WebSpherePluginConfig` target; restarts IHS
+5. Calls `fix-odr-connector.sh` to switch the ODR `<Connector>` to `http://localhost:9080` — avoids collective CA trust issues on this single-VM lab
 
 **Usage:**
 ```bash
