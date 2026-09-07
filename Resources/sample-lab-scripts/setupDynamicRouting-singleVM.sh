@@ -249,16 +249,19 @@ echo ""
 # The dynamicRouting setup generates plugin-cfg.xml with only the
 # <IntelligentManagement> stanza — no VirtualHostGroup/ServerCluster/Route.
 # ODR builds the server list dynamically at runtime from the collective.
-# However ODR still needs a <VirtualHostGroup> to know which incoming port
-# to intercept. Without it, initializeODR fails.
-# Inject a minimal VirtualHostGroup + UriGroup + Route block before </Config>.
-# Use a Python one-liner to avoid sed newline portability issues.
+# However the WAS plugin parser REQUIRES:
+#   1. A <ServerCluster> element whose Name matches the Route's ServerCluster attr
+#   2. A <VirtualHostGroup> with the IHS listen port (8080)
+#   3. A <UriGroup> and <Route> tying them together
+# Without these the plugin parser fails even in dynamic routing (ODR) mode.
 python3 - "$GEN_CFG" <<'PYEOF'
 import sys
 path = sys.argv[1]
 with open(path, 'r') as f:
     content = f.read()
-injection = """<VirtualHostGroup Name="default_vhost_group">
+injection = """<ServerCluster CloneSeparatorChange="false" GetDWLMTable="false" IgnoreAffinityRequests="true" LoadBalance="Round Robin" Name="defaultCollective" PostSizeLimit="-1" RemoveSpecialHeaders="true" RetryInterval="60">
+</ServerCluster>
+<VirtualHostGroup Name="default_vhost_group">
     <VirtualHost Name="*:8080"/>
 </VirtualHostGroup>
 <UriGroup Name="default_uri_group">
@@ -269,6 +272,7 @@ injection = """<VirtualHostGroup Name="default_vhost_group">
 content = content.replace('</Config>', injection + '</Config>')
 with open(path, 'w') as f:
     f.write(content)
+print("plugin-cfg.xml patched OK")
 PYEOF
 
 # Install plugin-cfg.xml
