@@ -85,7 +85,7 @@ fi
 # Verify /ibm/api/dynamicRouting is reachable on HTTP
 DR_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
     "http://${CTRL_HOST}:${CTRL_HTTP}/ibm/api/dynamicRouting" 2>/dev/null)
-if [[ "${DR_CODE}" == "200" || "${DR_CODE}" == "401" || "${DR_CODE}" == "403" ]]; then
+if [[ "${DR_CODE}" == "200" || "${DR_CODE}" == "302" || "${DR_CODE}" == "401" || "${DR_CODE}" == "403" ]]; then
     echo "  /ibm/api/dynamicRouting : reachable (HTTP ${DR_CODE}) ✓"
 else
     echo "  ERROR: /ibm/api/dynamicRouting not reachable (HTTP ${DR_CODE})"
