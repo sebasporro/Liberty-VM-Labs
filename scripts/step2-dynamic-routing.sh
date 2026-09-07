@@ -6,14 +6,11 @@
 # The controller already has dynamicRouting-1.0 + restConnector-2.0 declared
 # in config/controller/role-override.xml — no dropin changes are needed.
 #
-# What this script does:
-#   1. Runs 'dynamicRouting setup' against the controller (HTTPS 9443)
-#      --autoAcceptCertificates installs the collective CA into plugin-key.p12
-#      so the ODR library can authenticate to the controller over HTTPS.
-#   2. Converts the generated plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS)
-#   3. Installs plugin-cfg.xml + key files into $IHS_ROOT/config/webserver1/
-#   4. Wires WebSpherePluginConfig in httpd.conf, restarts IHS
-#   5. Waits up to 60s for ODR to connect and verifies HTTP 200
+# How dynamicRouting setup works:
+#   - Writes plugin-cfg.xml and plugin-key.p12 into the CURRENT DIRECTORY
+#   - plugin-cfg.xml must be copied to wherever WebSpherePluginConfig points
+#   - plugin-key.p12 must be converted to CMS format via gskcapicmd, then
+#     plugin-key.kdb/.sth copied to $IHS_ROOT/config/webserver1/
 #
 # Usage:  scripts/step2-dynamic-routing.sh
 #
@@ -21,10 +18,6 @@
 #   - scripts/install-controller.sh completed (controller on HTTPS 9443)
 #   - scripts/add-member-26.sh member1 completed (at least one member joined)
 #   - scripts/install-ihs.sh completed (gskcapicmd functional)
-#   - scripts/step1-was-plugin.sh completed — REQUIRED: dynamicRouting setup
-#     merges the IntelligentManagement stanza into the existing plugin-cfg.xml
-#     written by step1. Without it the generated file is missing ServerCluster,
-#     UriGroup, VirtualHostGroup, and Route elements and the plugin parser fails.
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,6 +31,7 @@ HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
 APACHECTL="${IHS_ROOT}/bin/apachectl"
 GSKCAPICMD="${IHS_ROOT}/bin/gskcapicmd"
 KEYSTORE_PASS="Liberty26ctrl!"
+WORK_DIR="/tmp/liberty-dr-$$"
 
 echo ""
 echo "=== Step 2: Enable Dynamic Routing (Intelligent Management) ==="
@@ -64,28 +58,15 @@ if ! curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adminCente
     exit 1
 fi
 
-mkdir -p "${PLUGIN_DIR}"
+mkdir -p "${PLUGIN_DIR}" "${WORK_DIR}"
 
 # ---------------------------------------------------------------------------
 # 1. Run dynamicRouting setup
-#    Must run from $IHS_ROOT — setup reads the existing plugin-cfg.xml from
-#    $pluginInstallRoot/config/webserver1/ (written by step1-was-plugin.sh)
-#    and merges <IntelligentManagement> into it. It also writes plugin-key.p12
-#    into the current directory, so we run from $IHS_ROOT to keep everything
-#    under the plugin install root.
-#    --autoAcceptCertificates accepts the collective self-signed CA and embeds
-#    it in plugin-key.p12 so the ODR library can authenticate over HTTPS.
+#    Writes plugin-cfg.xml and plugin-key.p12 into the current directory.
+#    We run from WORK_DIR so the output files land there cleanly.
 # ---------------------------------------------------------------------------
 echo "[1/4] Running dynamicRouting setup..."
-
-# step1-was-plugin.sh must have run first — its plugin-cfg.xml is the merge base
-if [[ ! -f "${IHS_ROOT}/conf/plugin-cfg.xml" ]]; then
-    echo "ERROR: ${IHS_ROOT}/conf/plugin-cfg.xml not found."
-    echo "       Run scripts/step1-was-plugin.sh before this script."
-    exit 1
-fi
-
-cd "${IHS_ROOT}"
+cd "${WORK_DIR}"
 "${WLP_BIN}/dynamicRouting" setup \
     --host=localhost \
     --port=9443 \
@@ -100,66 +81,56 @@ cd "${SCRIPT_DIR}"
 
 if [[ ${DR_RC} -ne 0 ]]; then
     echo "ERROR: dynamicRouting setup exited with code ${DR_RC}."
+    rm -rf "${WORK_DIR}"
     exit 1
 fi
-if [[ ! -f "${PLUGIN_DIR}/plugin-cfg.xml" ]]; then
-    echo "ERROR: dynamicRouting setup did not produce ${PLUGIN_DIR}/plugin-cfg.xml"
+if [[ ! -f "${WORK_DIR}/plugin-cfg.xml" || ! -f "${WORK_DIR}/plugin-key.p12" ]]; then
+    echo "ERROR: dynamicRouting setup did not produce expected output files in ${WORK_DIR}"
+    ls -la "${WORK_DIR}/" 2>/dev/null
+    rm -rf "${WORK_DIR}"
     exit 1
 fi
-echo "      dynamicRouting setup complete"
+echo "      plugin-cfg.xml and plugin-key.p12 generated in ${WORK_DIR}"
 echo ""
 
 # ---------------------------------------------------------------------------
 # 2. Convert plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS)
-#    setup writes plugin-key.p12 into $IHS_ROOT (the cwd during setup).
 #    CMS is the only keystore format the WAS plugin accepts.
 # ---------------------------------------------------------------------------
 echo "[2/4] Converting plugin keystore (PKCS12 → CMS)..."
-P12="${IHS_ROOT}/plugin-key.p12"
-KDB="${PLUGIN_DIR}/plugin-key.kdb"
-
-if [[ ! -f "${P12}" ]]; then
-    echo "ERROR: plugin-key.p12 not found at ${P12}"
-    exit 1
-fi
-
 "${GSKCAPICMD}" -keydb -convert \
     -pw "${KEYSTORE_PASS}" \
-    -db "${P12}" \
+    -db "${WORK_DIR}/plugin-key.p12" \
     -old_format pkcs12 \
-    -target "${KDB}" \
+    -target "${WORK_DIR}/plugin-key.kdb" \
     -new_format cms \
     -stash
 
 "${GSKCAPICMD}" -cert -setdefault \
     -pw "${KEYSTORE_PASS}" \
-    -db "${KDB}" \
+    -db "${WORK_DIR}/plugin-key.kdb" \
     -label default
 
-# IBM docs: chown keystore files to IHS User:Group
-IHS_USER=$(grep -E "^User "  "${HTTPD_CONF}" | awk '{print $2}')
-IHS_GROUP=$(grep -E "^Group " "${HTTPD_CONF}" | awk '{print $2}')
-if [[ -n "${IHS_USER}" && -n "${IHS_GROUP}" ]]; then
-    chown "${IHS_USER}:${IHS_GROUP}" \
-        "${PLUGIN_DIR}/plugin-key.kdb" \
-        "${PLUGIN_DIR}/plugin-key.rdb" \
-        "${PLUGIN_DIR}/plugin-key.sth" 2>/dev/null || true
-fi
-
-rm -f "${P12}"
 echo "      Keystore conversion complete"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 3. plugin-cfg.xml is already in $PLUGIN_DIR — written by dynamicRouting setup
+# 3. Copy plugin files to their destinations
+#    plugin-cfg.xml  → wherever WebSpherePluginConfig points in httpd.conf
+#    plugin-key.kdb/.sth/.rdb → $IHS_ROOT/config/webserver1/
 # ---------------------------------------------------------------------------
-echo "[3/4] Plugin files in place at ${PLUGIN_DIR}"
-echo "      plugin-cfg.xml  — merged static + IntelligentManagement"
-echo "      plugin-key.kdb  — collective CA trusted keystore (CMS)"
+echo "[3/4] Installing plugin files..."
+cp "${WORK_DIR}/plugin-cfg.xml"  "${PLUGIN_DIR}/plugin-cfg.xml"
+cp "${WORK_DIR}/plugin-key.kdb"  "${PLUGIN_DIR}/plugin-key.kdb"
+cp "${WORK_DIR}/plugin-key.sth"  "${PLUGIN_DIR}/plugin-key.sth"
+[[ -f "${WORK_DIR}/plugin-key.rdb" ]] && cp "${WORK_DIR}/plugin-key.rdb" "${PLUGIN_DIR}/plugin-key.rdb"
+rm -rf "${WORK_DIR}"
+echo "      plugin-cfg.xml  → ${PLUGIN_DIR}/plugin-cfg.xml"
+echo "      plugin-key.kdb  → ${PLUGIN_DIR}/plugin-key.kdb"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 4. Wire WebSpherePluginConfig in httpd.conf and restart IHS
+# 4. Point WebSpherePluginConfig at the new plugin-cfg.xml and restart IHS
 # ---------------------------------------------------------------------------
 echo "[4/4] Updating httpd.conf and restarting IHS..."
 PLUGIN_CFG_LINE="WebSpherePluginConfig ${PLUGIN_DIR}/plugin-cfg.xml"
@@ -184,9 +155,7 @@ echo "      IHS running on port 8080"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 5. Wait for ODR to connect and verify routing
-#    The ODR library connects to the controller HTTPS endpoint, retrieves
-#    the live member table, and begins routing. Allow up to 60s.
+# 5. Wait for ODR to connect and verify routing (up to 60s)
 # ---------------------------------------------------------------------------
 echo "[5/5] Waiting for ODR to connect to controller..."
 HTTP_CODE="000"
@@ -211,11 +180,7 @@ if [[ "${HTTP_CODE}" == "200" ]]; then
     echo "    bash scripts/apply-routing-rules.sh -s member1"
 else
     echo "  ERROR: ODR did not start routing within 60s."
-    echo ""
-    echo "  Diagnostics:"
-    echo "    Plugin log:      tail -30 ${IHS_ROOT}/logs/webserver1/http_plugin.log"
-    echo "    Controller log:  tail -30 ${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/logs/messages.log"
-    echo "    plugin-cfg.xml:  cat ${PLUGIN_DIR}/plugin-cfg.xml"
+    echo "  Plugin log:  tail -30 ${IHS_ROOT}/logs/webserver1/http_plugin.log"
     exit 1
 fi
 echo ""
