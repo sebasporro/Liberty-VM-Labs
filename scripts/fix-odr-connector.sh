@@ -1,18 +1,22 @@
 #!/bin/bash
 # =============================================================================
 # fix-odr-connector.sh
-# Patches the installed plugin-cfg.xml to use HTTP:9080 for the ODR connector
-# instead of HTTPS:9443, then restarts IHS and verifies routing.
+# Patches the installed plugin-cfg.xml with two fixes required on a single-VM lab:
 #
-# WHY:
-#   dynamicRouting setup generates an HTTPS connector with a keyring pointing
-#   at plugin-key.kdb. The ODR library must present that certificate to the
-#   controller's collective PKI. In a single-VM install the collective CA is
-#   self-signed and not in the plugin trust chain, so ODR silently fails to
-#   connect and keeps routing to the static placeholder server → HTTP 500.
+# Fix 1 — ODR Connector HTTPS → HTTP:9080
+#   dynamicRouting setup generates an HTTPS connector. The ODR library must
+#   present the collective certificate to the controller PKI, but the collective
+#   CA is self-signed and not in the plugin trust chain → ODR fails to connect.
+#   The /ibm/api/dynamicRouting endpoint is also available on plain HTTP:9080,
+#   switching to HTTP removes the keystore trust requirement entirely.
 #
-#   The /ibm/api/dynamicRouting endpoint is available on plain HTTP (port 9080).
-#   Switching to HTTP removes the keystore trust requirement entirely.
+# Fix 2 — TraceSpecification name absolute path
+#   dynamicRouting setup writes a relative filename (odr-trace.xml) in the
+#   <TraceSpecification name="..."/> attribute inside <IntelligentManagement>.
+#   The ODR library opens it relative to the process working directory, which
+#   is unpredictable at IHS startup → "Failed to open odr-trace.xml" →
+#   "Failed to create ODR environment" → no dynamic routing.
+#   Fix: replace the relative name with an absolute path under IHS logs/.
 #
 # Usage:
 #   bash scripts/fix-odr-connector.sh
@@ -28,56 +32,80 @@ echo ""
 
 if [ ! -f "${PLUGIN_CFG}" ]; then
     echo "ERROR: ${PLUGIN_CFG} not found."
-    echo "       Run setupDynamicRouting-singleVM.sh first."
+    echo "       Run scripts/step2-dynamic-routing.sh first."
     exit 1
 fi
 
-python3 - "${PLUGIN_CFG}" <<'PYEOF'
+mkdir -p "${IHS_ROOT}/logs"
+
+python3 - "${PLUGIN_CFG}" "${IHS_ROOT}" <<'PYEOF'
 import sys, re, xml.etree.ElementTree as ET
 
-path = sys.argv[1]
+path     = sys.argv[1]
+ihs_root = sys.argv[2]
+
 with open(path) as f:
     content = f.read()
 
-# Check whether already patched
-if 'protocol="http"' in content and 'port="9080"' in content:
-    print("  ODR connector already set to HTTP:9080 — nothing to do.")
-    sys.exit(0)
+patched = content
 
-# Switch HTTPS connector to HTTP:9080
-patched = re.sub(
-    r'<Connector host="[^"]*" port="[0-9]+" protocol="https">',
-    '<Connector host="localhost" port="9080" protocol="http">',
-    content
-)
+# ------------------------------------------------------------------
+# Fix 1: Switch HTTPS Connector → HTTP:9080, remove keyring property
+# ------------------------------------------------------------------
+if 'protocol="http"' in patched and 'port="9080"' in patched:
+    print("  Fix 1: ODR connector already HTTP:9080 — skipped")
+else:
+    patched = re.sub(
+        r'<Connector host="[^"]*" port="[0-9]+" protocol="https">',
+        '<Connector host="localhost" port="9080" protocol="http">',
+        patched
+    )
+    patched = re.sub(
+        r'<Property name="keyring"[^>]*/>\n?',
+        '',
+        patched
+    )
+    if patched == content:
+        print("  Fix 1: WARNING — no HTTPS Connector found; file may already be correct")
+        m = re.search(r'<Connector[^>]*>', content)
+        if m:
+            print(f"           Current connector: {m.group(0)}")
+    else:
+        print("  Fix 1: ODR Connector switched to HTTP:9080 ✓")
+        print("  Fix 1: Keyring property removed ✓")
 
-# Remove the keyring property inside the Connector (not needed for HTTP)
-patched = re.sub(
-    r'<Property name="keyring"[^>]*/>\n?',
-    '',
+# ------------------------------------------------------------------
+# Fix 2: Replace relative odr-trace.xml path with absolute path
+# ------------------------------------------------------------------
+abs_trace = f"{ihs_root}/logs/odr-trace.xml"
+# Match: <TraceSpecification name="odr-trace.xml" .../>  (relative, any variant)
+#   or   <TraceSpecification name="..." .../> where name does not start with /
+new, n = re.subn(
+    r'(<TraceSpecification\s[^>]*name=")(?!/)[^"]*(")',
+    rf'\g<1>{abs_trace}\g<2>',
     patched
 )
+if n:
+    patched = new
+    print(f"  Fix 2: TraceSpecification path → {abs_trace} ✓")
+else:
+    print("  Fix 2: No relative TraceSpecification path found — skipped")
 
-if patched == content:
-    print("  WARNING: No HTTPS Connector found — file may already be correct.")
-    m = re.search(r'<Connector[^>]*>', content)
-    if m:
-        print(f"  Current connector: {m.group(0)}")
-    sys.exit(0)
-
-# Validate result is well-formed XML
+# ------------------------------------------------------------------
+# Validate and write
+# ------------------------------------------------------------------
 try:
     ET.fromstring(patched)
 except ET.ParseError as e:
     print(f"  ERROR: patched XML is not well-formed: {e}")
     sys.exit(1)
 
-with open(path, 'w') as f:
-    f.write(patched)
-
-print("  ODR Connector switched to HTTP:9080 ✓")
-print("  Keyring property removed ✓")
-print("  plugin-cfg.xml is valid XML ✓")
+if patched != content:
+    with open(path, 'w') as f:
+        f.write(patched)
+    print("  plugin-cfg.xml updated and validated ✓")
+else:
+    print("  plugin-cfg.xml unchanged — already correct")
 PYEOF
 
 if [ $? -ne 0 ]; then
