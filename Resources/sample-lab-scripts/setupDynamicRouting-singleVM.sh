@@ -285,6 +285,9 @@ echo "$PLUGIN_INSTALL_DIR/plugin-key.sth installed"
 chmod 644 $PLUGIN_INSTALL_DIR/plugin-key.kdb \
           $PLUGIN_INSTALL_DIR/plugin-key.sth 2>/dev/null || true
 
+# Create the plugin log directory — IHS will not start if this is missing
+mkdir -p $IHS_HOME/logs/webserver1
+
 # ---------------------------------------------------------------------------
 # Step 7 — add WebSpherePluginConfig directive to httpd.conf
 #           (not explicit in reference lab — the plugin-cfg.xml path is
