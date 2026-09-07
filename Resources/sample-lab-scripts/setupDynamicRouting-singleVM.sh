@@ -91,8 +91,15 @@ echo ""
 
 mkdir -p $SERVER_DIR/configDropins/overrides
 
-# Write the dropin inline so we control exactly what goes in — no dependency
-# on scriptArtifacts/dynamicRouting-26.xml being present.
+# Remove any previously copied dropin files that may conflict.
+# The old script copied dynamicRouting-26.xml (no administrator-role, no ssl).
+# Having two files that both declare restConnector-2.0 + ssl causes Liberty to
+# produce a duplicate-element config warning that resets the SSL config and
+# breaks authentication.
+rm -f $SERVER_DIR/configDropins/overrides/dynamicRouting-26.xml
+rm -f $SERVER_DIR/configDropins/overrides/dynamicRouting.xml
+
+# Write the dropin inline so we control exactly what goes in.
 cat > $SERVER_DIR/configDropins/overrides/dynamic-routing.xml <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <server description="Dynamic routing features">
