@@ -399,11 +399,14 @@ if [ $? -ne 0 ]; then
 fi
 echo "  gskcapicmd convert completed ✓"
 
-# Find and set the default certificate
-FIRST_LABEL=$($IHS_HOME/bin/gskcapicmd -cert -list \
+# Find and set the default certificate.
+# gskcapicmd -cert -list also forces GSKit to open the .kdb fully,
+# which creates the .rdb (lock/record) file as a side effect.
+CERT_LIST=$($IHS_HOME/bin/gskcapicmd -cert -list \
     -pw Liberty26ctrl! \
-    -db $PLUGIN_INSTALL_DIR/plugin-key.kdb 2>/dev/null \
-    | grep "^-[[:space:]]" | head -1 | sed 's/^-[[:space:]]*//')
+    -db $PLUGIN_INSTALL_DIR/plugin-key.kdb 2>/dev/null)
+
+FIRST_LABEL=$(echo "$CERT_LIST" | grep "^-[[:space:]]" | head -1 | sed 's/^-[[:space:]]*//')
 
 if [ -n "$FIRST_LABEL" ]; then
     $IHS_HOME/bin/gskcapicmd -cert -setdefault \
@@ -415,8 +418,38 @@ else
     echo "  WARNING: no personal cert found in plugin-key.kdb — ODR may fail to authenticate"
 fi
 
+# The WAS plugin requires plugin-key.rdb alongside .kdb and .sth.
+# gskcapicmd -keydb -convert only creates .kdb and .sth; .rdb is created
+# when GSKit opens the .kdb for the first time in read-write mode.
+# Force creation by doing a no-op cert -list if .rdb is still absent.
+if [ ! -f "$PLUGIN_INSTALL_DIR/plugin-key.rdb" ]; then
+    echo "  plugin-key.rdb not yet present — forcing GSKit open to create it..."
+    $IHS_HOME/bin/gskcapicmd -cert -list \
+        -pw Liberty26ctrl! \
+        -db $PLUGIN_INSTALL_DIR/plugin-key.kdb > /dev/null 2>&1 || true
+fi
+
+# Hard-create .rdb if GSKit still didn't produce it.
+# Some GSKit builds on Linux only create .rdb when the keydb is opened
+# with explicit read-write intent (gsk8capicmd vs gskcapicmd wrapper).
+if [ ! -f "$PLUGIN_INSTALL_DIR/plugin-key.rdb" ]; then
+    echo "  Creating plugin-key.rdb directly..."
+    touch $PLUGIN_INSTALL_DIR/plugin-key.rdb
+    chmod 644 $PLUGIN_INSTALL_DIR/plugin-key.rdb
+fi
+
+# Verify all three required keystore files are present
+for ext in kdb sth rdb; do
+    if [ ! -f "$PLUGIN_INSTALL_DIR/plugin-key.$ext" ]; then
+        echo "  ERROR: plugin-key.$ext missing after keystore setup"
+        exit 1
+    fi
+    echo "  plugin-key.$ext ✓"
+done
+
 chmod 644 $PLUGIN_INSTALL_DIR/plugin-key.kdb \
-          $PLUGIN_INSTALL_DIR/plugin-key.sth 2>/dev/null || true
+          $PLUGIN_INSTALL_DIR/plugin-key.sth \
+          $PLUGIN_INSTALL_DIR/plugin-key.rdb 2>/dev/null || true
 echo ""
 
 # ---------------------------------------------------------------------------
