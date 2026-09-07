@@ -38,12 +38,10 @@ fi
 
 mkdir -p "${IHS_ROOT}/logs"
 
-python3 - "${PLUGIN_CFG}" "${IHS_ROOT}" <<'PYEOF'
+python3 - "${PLUGIN_CFG}" <<'PYEOF'
 import sys, re, xml.etree.ElementTree as ET
 
-path     = sys.argv[1]
-ihs_root = sys.argv[2]
-
+path = sys.argv[1]
 with open(path) as f:
     content = f.read()
 
@@ -73,23 +71,6 @@ else:
     else:
         print("  Fix 1: ODR Connector switched to HTTP:9080 ✓")
         print("  Fix 1: Keyring property removed ✓")
-
-# ------------------------------------------------------------------
-# Fix 2: Replace relative odr-trace.xml path with absolute path
-# ------------------------------------------------------------------
-abs_trace = f"{ihs_root}/logs/odr-trace.xml"
-# Match: <TraceSpecification name="odr-trace.xml" .../>  (relative, any variant)
-#   or   <TraceSpecification name="..." .../> where name does not start with /
-new, n = re.subn(
-    r'(<TraceSpecification\s[^>]*name=")(?!/)[^"]*(")',
-    rf'\g<1>{abs_trace}\g<2>',
-    patched
-)
-if n:
-    patched = new
-    print(f"  Fix 2: TraceSpecification path → {abs_trace} ✓")
-else:
-    print("  Fix 2: No relative TraceSpecification path found — skipped")
 
 # ------------------------------------------------------------------
 # Validate and write

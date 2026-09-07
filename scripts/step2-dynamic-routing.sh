@@ -62,6 +62,25 @@ fi
 mkdir -p "${PLUGIN_DIR}" "${SCRATCH_DIR}"
 
 # ---------------------------------------------------------------------------
+# Pre-create odr-trace.xml that the ODR library looks for at startup.
+# The WAS Plugins package ships this under $pluginInstallRoot/properties/.
+# When --pluginInstallRoot points at the IHS root (not a separate Plugins
+# install) that directory does not exist and the ODR library fails with:
+#   "Failed to open odr-trace.xml" → "Failed to create ODR environment"
+# Creating a minimal valid file at that path is all that is required.
+# ---------------------------------------------------------------------------
+mkdir -p "${IHS_ROOT}/properties"
+if [[ ! -f "${IHS_ROOT}/properties/odr-trace.xml" ]]; then
+    cat > "${IHS_ROOT}/properties/odr-trace.xml" <<'ODR_TRACE_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<TraceSpecification>
+    <Component name="default" specification=":INFO"/>
+</TraceSpecification>
+ODR_TRACE_EOF
+    echo "      Created ${IHS_ROOT}/properties/odr-trace.xml"
+fi
+
+# ---------------------------------------------------------------------------
 # 1. Run dynamicRouting setup
 # ---------------------------------------------------------------------------
 echo "[1/4] Running dynamicRouting setup..."
