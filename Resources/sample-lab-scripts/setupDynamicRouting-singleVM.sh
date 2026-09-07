@@ -99,30 +99,19 @@ mkdir -p $SERVER_DIR/configDropins/overrides
 rm -f $SERVER_DIR/configDropins/overrides/dynamicRouting-26.xml
 rm -f $SERVER_DIR/configDropins/overrides/dynamicRouting.xml
 
-# Write the dropin inline so we control exactly what goes in.
+# Write a minimal dropin — features only.
+# administrator-role, basicRegistry, and ssl are declared in role-override.xml
+# which is always present. Duplicating them here causes Liberty 26 to fail
+# CWWKS9104A because duplicate security elements are not merged additively.
 cat > $SERVER_DIR/configDropins/overrides/dynamic-routing.xml <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
-<server description="Dynamic routing features">
-    <featureManager>
-        <feature>dynamicRouting-1.0</feature>
-        <!-- restConnector-2.0 is required by the dynamicRouting setup CLI
-             to reach the DynamicRouting MBean via Liberty's REST JMX bridge. -->
-        <feature>restConnector-2.0</feature>
-    </featureManager>
-
+<server description="Dynamic routing features — activation dropin">
     <!--
-      Explicit administrator-role grant in this dropin so it is present
-      regardless of the order in which overrides are processed.
-      - <user>admin</user>  : allows the dynamicRouting setup CLI to authenticate
-      - clientAuthenticationSupported : allows the IHS plugin to authenticate
-        with its certificate (prevents CWWKV0020E when plugin connects to ODR)
+      restConnector-2.0 and dynamicRouting-1.0 are also declared in
+      config/controller/role-override.xml (alongside administrator-role).
+      This dropin is kept as a no-op marker so the script can detect whether
+      dynamic routing has been enabled on this controller instance.
     -->
-    <administrator-role>
-        <user>admin</user>
-    </administrator-role>
-
-    <ssl id="defaultSSLConfig" clientAuthenticationSupported="true"/>
-
 </server>
 XML
 

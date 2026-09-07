@@ -4,6 +4,17 @@
         <feature>collectiveController-1.0</feature>
         <feature>adminCenter-1.0</feature>
         <feature>appSecurity-5.0</feature>
+        <!--
+          restConnector-2.0 and dynamicRouting-1.0 are declared here — alongside
+          administrator-role and basicRegistry — so that Liberty's role-to-feature
+          binding is resolved in the same config pass.
+          In Liberty 26, restConnector-2.0 only honours administrator-role when
+          the feature and the role are processed together; declaring the feature
+          in a separate dropin causes CWWKS9104A (role not granted) even when
+          the role element is present in another file.
+        -->
+        <feature>restConnector-2.0</feature>
+        <feature>dynamicRouting-1.0</feature>
     </featureManager>
 
     <!-- User registry — admin credentials for Admin Center and collective join -->
@@ -13,10 +24,17 @@
         <user name="admin" password="${admin.password}"/>
     </basicRegistry>
 
-    <!-- Grant the 'admin' user the Administrator role for restConnector-2.0
-         and the adminCenter. With a named realm the user must be qualified as
-         realm/user — dropping the realm name avoids that mismatch. -->
+    <!-- Grant admin the Administrator role.
+         Covers: adminCenter, restConnector-2.0 (IBMJMXConnectorREST),
+         and the dynamicRouting setup CLI. -->
     <administrator-role>
         <user>admin</user>
     </administrator-role>
+
+    <!-- clientAuthenticationSupported allows the IHS plugin to authenticate
+         with its collective certificate when connecting to the ODR endpoint.
+         Declared here (not in a dropin) so it is processed in the same pass
+         as appSecurity-5.0 and administrator-role. -->
+    <ssl id="defaultSSLConfig" clientAuthenticationSupported="true"/>
+
 </server>
