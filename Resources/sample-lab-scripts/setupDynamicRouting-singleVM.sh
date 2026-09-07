@@ -308,16 +308,40 @@ except ET.ParseError as e:
     print(f"  ERROR: plugin-cfg.xml is not valid XML: {e}")
     sys.exit(1)
 
-# Patch 1: fix VirtualHost port — dynamicRouting setup writes port 80 by default;
-#           IHS in this lab listens on 8080.
 with open(path, 'r') as f:
     content = f.read()
 
 import re
+
+# Patch 1: fix VirtualHost port — dynamicRouting setup writes port 80 by default;
+#           IHS in this lab listens on 8080.
 patched = re.sub(
     r'VirtualHost Name="\*:[0-9]+"',
     'VirtualHost Name="*:8080"',
     content
+)
+
+# Patch 2: switch ODR connector from HTTPS→HTTP so it connects on port 9080.
+#
+# dynamicRouting setup generates an HTTPS connector with a keyring pointing
+# at plugin-key.kdb. The ODR library must then present that certificate to
+# the controller's collective PKI. If the cert chain is not trusted (common
+# in single-VM installs where the collective CA is self-signed and not in
+# the plugin keystore's trust chain), ODR silently fails to connect and the
+# plugin keeps routing to the static placeholder server → HTTP 500.
+#
+# The /ibm/api/dynamicRouting endpoint is also available on plain HTTP (9080).
+# Using HTTP removes the keystore trust requirement entirely.
+patched = re.sub(
+    r'<Connector host="[^"]*" port="[0-9]+" protocol="https">',
+    '<Connector host="localhost" port="9080" protocol="http">',
+    patched
+)
+# Remove the keyring property inside the Connector — not needed for HTTP
+patched = re.sub(
+    r'\s*<Property name="keyring"[^/]*/>\s*',
+    '\n',
+    patched
 )
 
 # Patch 2: inject the static stanzas the WAS plugin parser REQUIRES.
