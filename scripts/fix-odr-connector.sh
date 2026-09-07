@@ -53,8 +53,8 @@ patched = re.sub(
 
 # Remove the keyring property inside the Connector (not needed for HTTP)
 patched = re.sub(
-    r'\s*<Property name="keyring"[^/]*/>\s*',
-    '\n',
+    r'<Property name="keyring"[^>]*/>\n?',
+    '',
     patched
 )
 
