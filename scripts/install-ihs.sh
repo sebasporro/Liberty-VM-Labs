@@ -111,7 +111,7 @@ if [[ -d "${IHS_INSTALL_ROOT}/gsk8/bin" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Install WAS plugin (mod_was_ap24_http.so)
+# 3. Install WAS plugin (mod_was_ap24_http.so) and ODR library (libodr.so)
 # ---------------------------------------------------------------------------
 echo "[3/5] Installing WAS plugin..."
 
@@ -128,6 +128,24 @@ else
     fi
 fi
 echo "      ${IHS_INSTALL_ROOT}/modules/mod_was_ap24_http.so"
+
+# libodr.so — the ODR (dynamic routing) engine library.
+# The WAS plugin loads it from bin/64bits/libodr.so at startup.
+# The IHS archive installs it under plugin/bin/64bits/ but the plugin
+# hardcodes bin/64bits/ as the load path — create a symlink to bridge the gap.
+LIBODR_SRC=$(find "${IHS_INSTALL_ROOT}/plugin/bin/64bits" -name "libodr.so" 2>/dev/null | head -1)
+if [[ -n "${LIBODR_SRC}" ]]; then
+    mkdir -p "${IHS_INSTALL_ROOT}/bin/64bits"
+    if [[ ! -e "${IHS_INSTALL_ROOT}/bin/64bits/libodr.so" ]]; then
+        ln -s "${LIBODR_SRC}" "${IHS_INSTALL_ROOT}/bin/64bits/libodr.so"
+        echo "      Created symlink: bin/64bits/libodr.so → plugin/bin/64bits/libodr.so"
+    else
+        echo "      bin/64bits/libodr.so already present"
+    fi
+else
+    echo "  WARNING: libodr.so not found under ${IHS_INSTALL_ROOT}/plugin/ — dynamic routing will not work." >&2
+    echo "           Expected: ${IHS_INSTALL_ROOT}/plugin/bin/64bits/libodr.so" >&2
+fi
 
 # ---------------------------------------------------------------------------
 # 4. Write baseline httpd.conf + required directories
