@@ -37,7 +37,6 @@ PLUGIN_DIR="${IHS_ROOT}/config/webserver1"
 HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
 APACHECTL="${IHS_ROOT}/bin/apachectl"
 GSKCAPICMD="${IHS_ROOT}/bin/gskcapicmd"
-SCRATCH_DIR="/tmp/liberty-dr-$$"
 KEYSTORE_PASS="Liberty26ctrl!"
 
 echo ""
@@ -65,28 +64,28 @@ if ! curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adminCente
     exit 1
 fi
 
-# step1-was-plugin.sh must have run first — dynamicRouting setup merges the
-# IntelligentManagement stanza into the existing plugin-cfg.xml. Without that
-# base file the generated config is missing ServerCluster/UriGroup/Route and
-# the WAS plugin parser rejects it with "malformed sections within Plugin's XML".
-STATIC_CFG="${IHS_ROOT}/conf/plugin-cfg.xml"
-if [[ ! -f "${STATIC_CFG}" ]]; then
-    echo "ERROR: ${STATIC_CFG} not found."
+mkdir -p "${PLUGIN_DIR}"
+
+# ---------------------------------------------------------------------------
+# 1. Run dynamicRouting setup
+#    Must run from $IHS_ROOT — setup reads the existing plugin-cfg.xml from
+#    $pluginInstallRoot/config/webserver1/ (written by step1-was-plugin.sh)
+#    and merges <IntelligentManagement> into it. It also writes plugin-key.p12
+#    into the current directory, so we run from $IHS_ROOT to keep everything
+#    under the plugin install root.
+#    --autoAcceptCertificates accepts the collective self-signed CA and embeds
+#    it in plugin-key.p12 so the ODR library can authenticate over HTTPS.
+# ---------------------------------------------------------------------------
+echo "[1/4] Running dynamicRouting setup..."
+
+# step1-was-plugin.sh must have run first — its plugin-cfg.xml is the merge base
+if [[ ! -f "${IHS_ROOT}/conf/plugin-cfg.xml" ]]; then
+    echo "ERROR: ${IHS_ROOT}/conf/plugin-cfg.xml not found."
     echo "       Run scripts/step1-was-plugin.sh before this script."
     exit 1
 fi
 
-mkdir -p "${PLUGIN_DIR}" "${SCRATCH_DIR}"
-
-# ---------------------------------------------------------------------------
-# 1. Run dynamicRouting setup
-#    Connects to the controller via HTTPS 9443. --autoAcceptCertificates
-#    accepts the collective's self-signed CA and embeds it in plugin-key.p12
-#    so the ODR library can establish a trusted HTTPS connection at runtime.
-#    Output files (plugin-cfg.xml, plugin-key.p12) land in SCRATCH_DIR.
-# ---------------------------------------------------------------------------
-echo "[1/4] Running dynamicRouting setup..."
-cd "${SCRATCH_DIR}"
+cd "${IHS_ROOT}"
 "${WLP_BIN}/dynamicRouting" setup \
     --host=localhost \
     --port=9443 \
@@ -97,14 +96,14 @@ cd "${SCRATCH_DIR}"
     --webServerNames=webserver1 \
     --autoAcceptCertificates
 DR_RC=$?
+cd "${SCRIPT_DIR}"
 
 if [[ ${DR_RC} -ne 0 ]]; then
     echo "ERROR: dynamicRouting setup exited with code ${DR_RC}."
     exit 1
 fi
-if [[ ! -f "${SCRATCH_DIR}/plugin-cfg.xml" ]]; then
-    echo "ERROR: dynamicRouting setup succeeded but plugin-cfg.xml was not produced."
-    echo "       Check that --pluginInstallRoot and --webServerNames are correct."
+if [[ ! -f "${PLUGIN_DIR}/plugin-cfg.xml" ]]; then
+    echo "ERROR: dynamicRouting setup did not produce ${PLUGIN_DIR}/plugin-cfg.xml"
     exit 1
 fi
 echo "      dynamicRouting setup complete"
@@ -112,49 +111,51 @@ echo ""
 
 # ---------------------------------------------------------------------------
 # 2. Convert plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS)
+#    setup writes plugin-key.p12 into $IHS_ROOT (the cwd during setup).
 #    CMS is the only keystore format the WAS plugin accepts.
 # ---------------------------------------------------------------------------
 echo "[2/4] Converting plugin keystore (PKCS12 → CMS)..."
+P12="${IHS_ROOT}/plugin-key.p12"
+KDB="${PLUGIN_DIR}/plugin-key.kdb"
+
+if [[ ! -f "${P12}" ]]; then
+    echo "ERROR: plugin-key.p12 not found at ${P12}"
+    exit 1
+fi
+
 "${GSKCAPICMD}" -keydb -convert \
     -pw "${KEYSTORE_PASS}" \
-    -db "${SCRATCH_DIR}/plugin-key.p12" \
+    -db "${P12}" \
     -old_format pkcs12 \
-    -target "${SCRATCH_DIR}/plugin-key.kdb" \
+    -target "${KDB}" \
     -new_format cms \
     -stash
 
 "${GSKCAPICMD}" -cert -setdefault \
     -pw "${KEYSTORE_PASS}" \
-    -db "${SCRATCH_DIR}/plugin-key.kdb" \
+    -db "${KDB}" \
     -label default
 
-# IBM docs: chown keystore files to match IHS User:Group in httpd.conf.
-# On this single-VM lab everything runs as itzuser so this is a no-op,
-# but it is required by the documented procedure.
+# IBM docs: chown keystore files to IHS User:Group
 IHS_USER=$(grep -E "^User "  "${HTTPD_CONF}" | awk '{print $2}')
 IHS_GROUP=$(grep -E "^Group " "${HTTPD_CONF}" | awk '{print $2}')
 if [[ -n "${IHS_USER}" && -n "${IHS_GROUP}" ]]; then
     chown "${IHS_USER}:${IHS_GROUP}" \
-        "${SCRATCH_DIR}/plugin-key.kdb" \
-        "${SCRATCH_DIR}/plugin-key.rdb" \
-        "${SCRATCH_DIR}/plugin-key.sth" 2>/dev/null || true
+        "${PLUGIN_DIR}/plugin-key.kdb" \
+        "${PLUGIN_DIR}/plugin-key.rdb" \
+        "${PLUGIN_DIR}/plugin-key.sth" 2>/dev/null || true
 fi
 
+rm -f "${P12}"
 echo "      Keystore conversion complete"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 3. Install plugin files into $IHS_ROOT/config/webserver1/
+# 3. plugin-cfg.xml is already in $PLUGIN_DIR — written by dynamicRouting setup
 # ---------------------------------------------------------------------------
-echo "[3/4] Installing plugin files to ${PLUGIN_DIR}..."
-cp "${SCRATCH_DIR}/plugin-cfg.xml" "${PLUGIN_DIR}/plugin-cfg.xml"
-cp "${SCRATCH_DIR}/plugin-key.kdb" "${PLUGIN_DIR}/plugin-key.kdb"
-cp "${SCRATCH_DIR}/plugin-key.rdb" "${PLUGIN_DIR}/plugin-key.rdb" 2>/dev/null || true
-cp "${SCRATCH_DIR}/plugin-key.sth" "${PLUGIN_DIR}/plugin-key.sth"
-echo "      Files installed"
-# cd away before rm — deleting the cwd breaks all subsequent subprocesses
-cd "${SCRIPT_DIR}"
-rm -rf "${SCRATCH_DIR}"
+echo "[3/4] Plugin files in place at ${PLUGIN_DIR}"
+echo "      plugin-cfg.xml  — merged static + IntelligentManagement"
+echo "      plugin-key.kdb  — collective CA trusted keystore (CMS)"
 echo ""
 
 # ---------------------------------------------------------------------------
