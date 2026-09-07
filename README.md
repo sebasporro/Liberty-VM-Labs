@@ -228,39 +228,9 @@ for i in $(seq 8); do curl -s http://localhost:8080/server-info/ | grep -o 'memb
 
 #### Step 3b — Dynamic routing (Intelligent Management)
 
-Enables native Liberty **Intelligent Management** dynamic routing. The controller continuously
-delivers the live member routing table to the IHS plugin — members joining, leaving, starting,
-or stopping are reflected automatically with no script re-run or config regeneration.
-
-```
-Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9443/ibm/api/dynamicRouting
-                                                       │
-                                         live route table (all members)
-                                                       │
-                       ┌──────────────┬───────────────┼───────────────┐
-                       ▼              ▼               ▼               ▼
-                  member1:9081  member2:9082  member3:9083  member4:9084
-```
-
-The script follows the IBM documentation procedure exactly:
-1. Writes `dynamic-routing.xml` dropin enabling `dynamicRouting-1.0` + `restConnector-2.0` on the controller
-2. Restarts the controller; hard-fails if either feature does not confirm in `messages.log`
-3. Runs `dynamicRouting setup` — generates `plugin-cfg.xml` (`<IntelligentManagement>` stanza) and `plugin-key.p12`
-4. Runs `gskcapicmd` to convert `plugin-key.p12` → CMS `plugin-key.kdb` (required format for the WAS plugin)
-5. Places `plugin-key.kdb` + `.sth` at `$IHS_ROOT/config/webserver1/` (the path Liberty embeds in `plugin-cfg.xml`)
-6. Installs `plugin-cfg.xml`, sets `WebSpherePluginConfig`, restarts IHS, verifies HTTP 200
-
-```bash
-scripts/step2-dynamic-routing.sh
-```
-
-**Expected state:** `http://localhost:8080/server-info/` returns `200` and round-robins across
-all collective members. Members added later are discovered automatically — no re-run needed.
-
-```bash
-# Verify round-robin across members
-for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
-```
+> ⚠️ **TODO:** Enable native Liberty Intelligent Management dynamic routing so the IHS plugin
+> receives a live member routing table from the collective controller. Members joining, leaving,
+> or restarting should be reflected automatically with no manual config regeneration.
 
 #### Step 3c — Dynamic Routing Rules (optional)
 
