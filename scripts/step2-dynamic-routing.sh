@@ -21,6 +21,10 @@
 #   - scripts/install-controller.sh completed (controller on HTTPS 9443)
 #   - scripts/add-member-26.sh member1 completed (at least one member joined)
 #   - scripts/install-ihs.sh completed (gskcapicmd functional)
+#   - scripts/step1-was-plugin.sh completed — REQUIRED: dynamicRouting setup
+#     merges the IntelligentManagement stanza into the existing plugin-cfg.xml
+#     written by step1. Without it the generated file is missing ServerCluster,
+#     UriGroup, VirtualHostGroup, and Route elements and the plugin parser fails.
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -58,6 +62,17 @@ fi
 if ! curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adminCenter 2>/dev/null | grep -qE "^(200|302)$"; then
     echo "ERROR: Controller is not responding on HTTPS 9443."
     echo "       Run scripts/install-controller.sh first."
+    exit 1
+fi
+
+# step1-was-plugin.sh must have run first — dynamicRouting setup merges the
+# IntelligentManagement stanza into the existing plugin-cfg.xml. Without that
+# base file the generated config is missing ServerCluster/UriGroup/Route and
+# the WAS plugin parser rejects it with "malformed sections within Plugin's XML".
+STATIC_CFG="${IHS_ROOT}/conf/plugin-cfg.xml"
+if [[ ! -f "${STATIC_CFG}" ]]; then
+    echo "ERROR: ${STATIC_CFG} not found."
+    echo "       Run scripts/step1-was-plugin.sh before this script."
     exit 1
 fi
 

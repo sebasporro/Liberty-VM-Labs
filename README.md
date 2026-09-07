@@ -228,12 +228,16 @@ for i in $(seq 8); do curl -s http://localhost:8080/server-info/ | grep -o 'memb
 
 #### Step 3b — Dynamic routing (Intelligent Management)
 
+`dynamicRouting setup` **merges** the `<IntelligentManagement>` stanza into the existing
+`plugin-cfg.xml` written by step1. Step 3a must have run first — do not reset IHS between steps.
+
 ```bash
 scripts/step2-dynamic-routing.sh
 ```
 
-`mod_was_ap24_http.so` connects to the controller's `/ibm/api/dynamicRouting` endpoint and
-receives a live member routing table — members joining or leaving are reflected automatically.
+`mod_was_ap24_http.so` connects to the controller's `/ibm/api/dynamicRouting` endpoint over HTTPS
+and continuously receives the live member routing table — members joining or leaving are reflected
+automatically without regenerating the plugin config.
 
 > **Note:** `dynamicRouting-1.0` and `restConnector-2.0` are already declared in
 > `config/controller/role-override.xml`; no controller restart is needed before running the script.
