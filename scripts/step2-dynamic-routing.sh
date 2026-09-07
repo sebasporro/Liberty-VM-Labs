@@ -8,10 +8,12 @@
 #
 # What this script does:
 #   1. Runs 'dynamicRouting setup' against the controller (HTTPS 9443)
+#      --autoAcceptCertificates installs the collective CA into plugin-key.p12
+#      so the ODR library can authenticate to the controller over HTTPS.
 #   2. Converts the generated plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS)
 #   3. Installs plugin-cfg.xml + key files into $IHS_ROOT/config/webserver1/
 #   4. Wires WebSpherePluginConfig in httpd.conf, restarts IHS
-#   5. Patches the ODR connector to HTTP:9080 (avoids collective CA trust issues)
+#   5. Waits up to 60s for ODR to connect and verifies HTTP 200
 #
 # Usage:  scripts/step2-dynamic-routing.sh
 #
@@ -62,26 +64,11 @@ fi
 mkdir -p "${PLUGIN_DIR}" "${SCRATCH_DIR}"
 
 # ---------------------------------------------------------------------------
-# Pre-create odr-trace.xml that the ODR library looks for at startup.
-# The WAS Plugins package ships this under $pluginInstallRoot/properties/.
-# When --pluginInstallRoot points at the IHS root (not a separate Plugins
-# install) that directory does not exist and the ODR library fails with:
-#   "Failed to open odr-trace.xml" → "Failed to create ODR environment"
-# Creating a minimal valid file at that path is all that is required.
-# ---------------------------------------------------------------------------
-mkdir -p "${IHS_ROOT}/properties"
-if [[ ! -f "${IHS_ROOT}/properties/odr-trace.xml" ]]; then
-    cat > "${IHS_ROOT}/properties/odr-trace.xml" <<'ODR_TRACE_EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<TraceSpecification>
-    <Component name="default" specification=":INFO"/>
-</TraceSpecification>
-ODR_TRACE_EOF
-    echo "      Created ${IHS_ROOT}/properties/odr-trace.xml"
-fi
-
-# ---------------------------------------------------------------------------
 # 1. Run dynamicRouting setup
+#    Connects to the controller via HTTPS 9443. --autoAcceptCertificates
+#    accepts the collective's self-signed CA and embeds it in plugin-key.p12
+#    so the ODR library can establish a trusted HTTPS connection at runtime.
+#    Output files (plugin-cfg.xml, plugin-key.p12) land in SCRATCH_DIR.
 # ---------------------------------------------------------------------------
 echo "[1/4] Running dynamicRouting setup..."
 cd "${SCRATCH_DIR}"
@@ -110,6 +97,7 @@ echo ""
 
 # ---------------------------------------------------------------------------
 # 2. Convert plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS)
+#    CMS is the only keystore format the WAS plugin accepts.
 # ---------------------------------------------------------------------------
 echo "[2/4] Converting plugin keystore (PKCS12 → CMS)..."
 "${GSKCAPICMD}" -keydb -convert \
@@ -125,18 +113,16 @@ echo "[2/4] Converting plugin keystore (PKCS12 → CMS)..."
     -db "${SCRATCH_DIR}/plugin-key.kdb" \
     -label default
 
-# IBM docs require chown of the generated keystore files to match the IHS
-# User/Group in httpd.conf.  On this single-VM lab both IHS and Liberty run
-# as itzuser, so the files are already correctly owned; the chown is explicit
-# for compliance with the documented procedure.
-IHS_USER=$(grep -E "^User " "${HTTPD_CONF}" | awk '{print $2}')
+# IBM docs: chown keystore files to match IHS User:Group in httpd.conf.
+# On this single-VM lab everything runs as itzuser so this is a no-op,
+# but it is required by the documented procedure.
+IHS_USER=$(grep -E "^User "  "${HTTPD_CONF}" | awk '{print $2}')
 IHS_GROUP=$(grep -E "^Group " "${HTTPD_CONF}" | awk '{print $2}')
 if [[ -n "${IHS_USER}" && -n "${IHS_GROUP}" ]]; then
     chown "${IHS_USER}:${IHS_GROUP}" \
         "${SCRATCH_DIR}/plugin-key.kdb" \
         "${SCRATCH_DIR}/plugin-key.rdb" \
         "${SCRATCH_DIR}/plugin-key.sth" 2>/dev/null || true
-    echo "      chown ${IHS_USER}:${IHS_GROUP} applied to keystore files"
 fi
 
 echo "      Keystore conversion complete"
@@ -146,13 +132,12 @@ echo ""
 # 3. Install plugin files into $IHS_ROOT/config/webserver1/
 # ---------------------------------------------------------------------------
 echo "[3/4] Installing plugin files to ${PLUGIN_DIR}..."
-cp "${SCRATCH_DIR}/plugin-cfg.xml"  "${PLUGIN_DIR}/plugin-cfg.xml"
-cp "${SCRATCH_DIR}/plugin-key.kdb"  "${PLUGIN_DIR}/plugin-key.kdb"
-cp "${SCRATCH_DIR}/plugin-key.rdb"  "${PLUGIN_DIR}/plugin-key.rdb" 2>/dev/null || true
-cp "${SCRATCH_DIR}/plugin-key.sth"  "${PLUGIN_DIR}/plugin-key.sth"
+cp "${SCRATCH_DIR}/plugin-cfg.xml" "${PLUGIN_DIR}/plugin-cfg.xml"
+cp "${SCRATCH_DIR}/plugin-key.kdb" "${PLUGIN_DIR}/plugin-key.kdb"
+cp "${SCRATCH_DIR}/plugin-key.rdb" "${PLUGIN_DIR}/plugin-key.rdb" 2>/dev/null || true
+cp "${SCRATCH_DIR}/plugin-key.sth" "${PLUGIN_DIR}/plugin-key.sth"
 echo "      Files installed"
-# Return to SCRIPT_DIR before removing SCRATCH_DIR — deleting the cwd causes
-# every subsequent subprocess to fail with "getcwd: cannot access parent directories".
+# cd away before rm — deleting the cwd breaks all subsequent subprocesses
 cd "${SCRIPT_DIR}"
 rm -rf "${SCRATCH_DIR}"
 echo ""
@@ -166,9 +151,8 @@ if grep -q "^WebSpherePluginConfig" "${HTTPD_CONF}"; then
     sed -i "s|^WebSpherePluginConfig .*|${PLUGIN_CFG_LINE}|" "${HTTPD_CONF}"
     echo "      WebSpherePluginConfig: updated"
 else
-    echo "" >> "${HTTPD_CONF}"
-    echo "# Dynamic routing — added by step2-dynamic-routing.sh" >> "${HTTPD_CONF}"
-    echo "${PLUGIN_CFG_LINE}" >> "${HTTPD_CONF}"
+    printf '\n# Dynamic routing — added by step2-dynamic-routing.sh\n%s\n' \
+        "${PLUGIN_CFG_LINE}" >> "${HTTPD_CONF}"
     echo "      WebSpherePluginConfig: added"
 fi
 
@@ -184,17 +168,38 @@ echo "      IHS running on port 8080"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Patch ODR connector to HTTP:9080 (avoids collective CA trust issue)
+# 5. Wait for ODR to connect and verify routing
+#    The ODR library connects to the controller HTTPS endpoint, retrieves
+#    the live member table, and begins routing. Allow up to 60s.
 # ---------------------------------------------------------------------------
-echo "  Patching ODR connector to HTTP:9080..."
-bash "${SCRIPT_DIR}/fix-odr-connector.sh"
+echo "[5/5] Waiting for ODR to connect to controller..."
+HTTP_CODE="000"
+for t in $(seq 0 5 60); do
+    [[ $t -gt 0 ]] && { sleep 5; echo "      ${t}s — HTTP ${HTTP_CODE}..."; }
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        http://localhost:8080/server-info/ 2>/dev/null)
+    [[ "${HTTP_CODE}" == "200" ]] && break
+done
 
 echo ""
-echo "=== Step 2 complete: Dynamic Routing enabled ==="
+echo "  GET http://localhost:8080/server-info/ → HTTP ${HTTP_CODE}"
 echo ""
-echo "  Verify round-robin across all members:"
-echo "    for i in \$(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done"
-echo ""
-echo "  Next (optional) — pin requests to a specific member:"
-echo "    bash scripts/apply-routing-rules.sh -s member1"
+
+if [[ "${HTTP_CODE}" == "200" ]]; then
+    echo "=== Step 2 complete: Dynamic Routing enabled ==="
+    echo ""
+    echo "  Verify round-robin across all members:"
+    echo "    for i in \$(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done"
+    echo ""
+    echo "  Next (optional) — pin requests to a specific member:"
+    echo "    bash scripts/apply-routing-rules.sh -s member1"
+else
+    echo "  ERROR: ODR did not start routing within 60s."
+    echo ""
+    echo "  Diagnostics:"
+    echo "    Plugin log:      tail -30 ${IHS_ROOT}/logs/webserver1/http_plugin.log"
+    echo "    Controller log:  tail -30 ${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/logs/messages.log"
+    echo "    plugin-cfg.xml:  cat ${PLUGIN_DIR}/plugin-cfg.xml"
+    exit 1
+fi
 echo ""
