@@ -76,6 +76,38 @@ fi
 
 echo "      dynamicRouting setup completed successfully."
 
+# Patch plugin-cfg.xml for Liberty 26 compatibility (AcceptType + trailing slash URI)
+python3 - "${TEMP_DIR}/plugin-cfg.xml" "${PLUGIN_TARGET_DIR}" <<'PYEOF'
+import sys, re
+
+path, target_dir = sys.argv[1], sys.argv[2]
+content = open(path).read()
+
+# Fix Keyfile / Stashfile paths to point to final target directory
+content = re.sub(r'(<Property\s+Name="Keyfile"\s+Value=")[^"]*(")', r'\g<1>' + target_dir + r'/plugin-key.kdb\g<2>', content)
+content = re.sub(r'(<Property\s+Name="Stashfile"\s+Value=")[^"]*(")', r'\g<1>' + target_dir + r'/plugin-key.sth\g<2>', content)
+content = re.sub(r'(<Property\s+name="keyring"\s+value=")[^"]*(")', r'\g<1>' + target_dir + r'/plugin-key.kdb\g<2>', content)
+
+# Inject AcceptType into ConnectorCluster if missing
+if 'AcceptType' not in content:
+    content = re.sub(r'(<ConnectorCluster\b[^>]*>)', r'\1\n        <Property name="AcceptType" value="application/json"/>', content)
+
+# Ensure trailing slash on dynamicRouting uri
+content = re.sub(r'(<Property\s+name="uri"\s+value="/ibm/api/dynamicRouting)(")', r'\g<1>/\g<2>', content)
+
+open(path, 'w').write(content)
+PYEOF
+
+# Create a minimal odr-trace.xml to satisfy libodr.so trace lookup
+mkdir -p "${IHS_ROOT}/properties"
+cat > "${IHS_ROOT}/properties/odr-trace.xml" <<'ODR_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<trace-specification>
+    <trace-group name="odr" level="info"/>
+</trace-specification>
+ODR_EOF
+cp "${IHS_ROOT}/properties/odr-trace.xml" "${PLUGIN_TARGET_DIR}/odr-trace.xml"
+
 # 4. Convert PKCS12 keystore to CMS (KDB/STH) for the WAS plug-in
 echo "[3/5] Converting plugin keystore (PKCS12 -> CMS)..."
 "${GSKCAPICMD}" -keydb -convert \
