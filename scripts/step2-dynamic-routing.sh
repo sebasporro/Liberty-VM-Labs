@@ -3,22 +3,23 @@
 # step2-dynamic-routing.sh
 # Enables Liberty Intelligent Management dynamic routing.
 #
-# The controller already has dynamicRouting-1.0 + restConnector-2.0 declared
-# in config/controller/role-override.xml — no dropin changes are needed.
+# Prerequisites (Step 3a must be complete and working):
+#   - scripts/install-controller.sh  (controller on HTTPS 9443)
+#   - scripts/add-member-26.sh       (at least one member joined)
+#   - scripts/step1-was-plugin.sh    (static routing confirmed on port 8080)
 #
-# How dynamicRouting setup works:
-#   - Writes plugin-cfg.xml and plugin-key.p12 into the CURRENT DIRECTORY
-#   - plugin-cfg.xml must be copied to wherever WebSpherePluginConfig points
-#   - plugin-key.p12 must be converted to CMS format via gskcapicmd, then
-#     plugin-key.kdb/.sth copied to $IHS_ROOT/config/webserver1/
+# What this script does:
+#   1. Stops IHS and removes stale plugin keystore files
+#   2. Runs dynamicRouting setup — merges <IntelligentManagement> into the
+#      existing plugin-cfg.xml and generates plugin-key.p12
+#   3. Converts plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS)
+#   4. Installs the merged plugin-cfg.xml and keystore, starts IHS
+#   5. Verifies ODR routing is active (up to 60s)
 #
-# Usage:  scripts/step2-dynamic-routing.sh
-#
-# Prerequisites:
-#   - scripts/install-controller.sh completed (controller on HTTPS 9443)
-#   - scripts/add-member-26.sh member1 completed (at least one member joined)
-#   - scripts/install-ihs.sh completed (gskcapicmd functional)
+# dynamicRouting-1.0 and restConnector-2.0 are already declared in
+# config/controller/role-override.xml — no controller restart is needed.
 # =============================================================================
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
@@ -52,8 +53,16 @@ if [[ ! -x "${GSKCAPICMD}" ]]; then
     exit 1
 fi
 
-if ! curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adminCenter 2>/dev/null | grep -qE "^(200|302)$"; then
-    echo "ERROR: Controller is not responding on HTTPS 9443."
+if [[ ! -f "${IHS_ROOT}/conf/plugin-cfg.xml" ]]; then
+    echo "ERROR: ${IHS_ROOT}/conf/plugin-cfg.xml not found."
+    echo "       Run scripts/step1-was-plugin.sh first."
+    exit 1
+fi
+
+CTRL_STATUS=$(curl -k -s -o /dev/null -w "%{http_code}" \
+    https://localhost:9443/adminCenter 2>/dev/null)
+if [[ ! "${CTRL_STATUS}" =~ ^(200|302)$ ]]; then
+    echo "ERROR: Controller is not responding on HTTPS 9443 (got HTTP ${CTRL_STATUS})."
     echo "       Run scripts/install-controller.sh first."
     exit 1
 fi
@@ -61,29 +70,49 @@ fi
 mkdir -p "${PLUGIN_DIR}" "${WORK_DIR}"
 
 # ---------------------------------------------------------------------------
-# 1. Seed config/webserver1/plugin-cfg.xml from the static config written by
-#    step1-was-plugin.sh. dynamicRouting setup merges <IntelligentManagement>
-#    into whatever is already at $pluginInstallRoot/config/webserver1/plugin-cfg.xml.
-#    Without a complete base file (ServerCluster, UriGroup, VirtualHostGroup,
-#    Route) the merged output is missing those elements and the plugin parser fails.
+# 1. Stop IHS and clean stale keystore files
+#    IHS must be stopped before dynamicRouting setup so the plugin does not
+#    hold plugin-cfg.xml or plugin-key.kdb open when setup reads/writes them.
+#    Stale CMS keystores must be removed — gskcapicmd will not overwrite them.
 # ---------------------------------------------------------------------------
-STATIC_CFG="${IHS_ROOT}/conf/plugin-cfg.xml"
-if [[ ! -f "${STATIC_CFG}" ]]; then
-    echo "ERROR: ${STATIC_CFG} not found."
-    echo "       Run scripts/step1-was-plugin.sh before this script."
-    exit 1
-fi
-cp "${STATIC_CFG}" "${PLUGIN_DIR}/plugin-cfg.xml"
+echo "[1/4] Stopping IHS and removing stale plugin files..."
+"${APACHECTL}" stop 2>/dev/null || true
+sleep 2
+pkill -9 -f "${IHS_ROOT}/bin/httpd" 2>/dev/null || true
+sleep 1
+echo "      IHS stopped"
+
+for ext in kdb rdb sth crl p12; do
+    f="${PLUGIN_DIR}/plugin-key.${ext}"
+    [[ -e "${f}" ]] && rm -f "${f}" && echo "      Removed: ${f}"
+done
+[[ -e "${PLUGIN_DIR}/plugin-cfg.xml" ]] && rm -f "${PLUGIN_DIR}/plugin-cfg.xml" \
+    && echo "      Removed: ${PLUGIN_DIR}/plugin-cfg.xml"
+
+# Seed plugin-cfg.xml from the static config written by step1-was-plugin.sh.
+# dynamicRouting setup reads $pluginInstallRoot/config/webserver1/plugin-cfg.xml
+# as its merge base — without a complete base file (ServerCluster, UriGroup,
+# VirtualHostGroup, Route) the merged output is missing those elements and the
+# WAS plugin parser fails on startup.
+cp "${IHS_ROOT}/conf/plugin-cfg.xml" "${PLUGIN_DIR}/plugin-cfg.xml"
 echo "      Seeded ${PLUGIN_DIR}/plugin-cfg.xml from step1 static config"
+echo ""
 
 # ---------------------------------------------------------------------------
 # 2. Run dynamicRouting setup
 #    Reads $pluginInstallRoot/config/webserver1/plugin-cfg.xml as merge base.
-#    Writes the merged plugin-cfg.xml and plugin-key.p12 to the current directory.
-#    We run from WORK_DIR so the output files land there cleanly.
+#    Writes merged plugin-cfg.xml and plugin-key.p12 to --targetPath.
 # ---------------------------------------------------------------------------
-echo "[1/4] Running dynamicRouting setup..."
-cd "${WORK_DIR}"
+echo "[2/4] Running dynamicRouting setup..."
+
+# Liberty 26+ uses --webServerName (singular); older builds use --webServerNames.
+_DR_HELP=$("${WLP_BIN}/dynamicRouting" setup --help 2>&1 || true)
+if echo "$_DR_HELP" | grep -q -- "--webServerName[^s]"; then
+    WS_FLAG="--webServerName=webserver1"
+else
+    WS_FLAG="--webServerNames=webserver1"
+fi
+
 "${WLP_BIN}/dynamicRouting" setup \
     --host=localhost \
     --port=9443 \
@@ -91,30 +120,24 @@ cd "${WORK_DIR}"
     --password=admin \
     --keystorePassword="${KEYSTORE_PASS}" \
     --pluginInstallRoot="${IHS_ROOT}" \
-    --webServerNames=webserver1 \
+    "${WS_FLAG}" \
+    --targetPath="${WORK_DIR}" \
     --autoAcceptCertificates
-DR_RC=$?
-cd "${SCRIPT_DIR}"
 
-if [[ ${DR_RC} -ne 0 ]]; then
-    echo "ERROR: dynamicRouting setup exited with code ${DR_RC}."
-    rm -rf "${WORK_DIR}"
-    exit 1
-fi
 if [[ ! -f "${WORK_DIR}/plugin-cfg.xml" || ! -f "${WORK_DIR}/plugin-key.p12" ]]; then
     echo "ERROR: dynamicRouting setup did not produce expected output files in ${WORK_DIR}"
     ls -la "${WORK_DIR}/" 2>/dev/null
     rm -rf "${WORK_DIR}"
     exit 1
 fi
-echo "      plugin-cfg.xml and plugin-key.p12 generated in ${WORK_DIR}"
+echo "      plugin-cfg.xml and plugin-key.p12 generated"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 2. Convert plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS)
+# 3. Convert plugin-key.p12 (PKCS12) → plugin-key.kdb (CMS)
 #    CMS is the only keystore format the WAS plugin accepts.
 # ---------------------------------------------------------------------------
-echo "[2/4] Converting plugin keystore (PKCS12 → CMS)..."
+echo "[3/4] Converting plugin keystore (PKCS12 → CMS)..."
 "${GSKCAPICMD}" -keydb -convert \
     -pw "${KEYSTORE_PASS}" \
     -db "${WORK_DIR}/plugin-key.p12" \
@@ -123,46 +146,41 @@ echo "[2/4] Converting plugin keystore (PKCS12 → CMS)..."
     -new_format cms \
     -stash
 
-"${GSKCAPICMD}" -cert -setdefault \
+# Set the first available personal cert as default (label varies by build).
+FIRST_LABEL=$("${GSKCAPICMD}" -cert -list \
     -pw "${KEYSTORE_PASS}" \
-    -db "${WORK_DIR}/plugin-key.kdb" \
-    -label default
-
+    -db "${WORK_DIR}/plugin-key.kdb" 2>/dev/null \
+    | grep "^-[[:space:]]" | head -1 | sed 's/^-[[:space:]]*//')
+if [[ -n "${FIRST_LABEL}" ]]; then
+    "${GSKCAPICMD}" -cert -setdefault \
+        -pw "${KEYSTORE_PASS}" \
+        -db "${WORK_DIR}/plugin-key.kdb" \
+        -label "${FIRST_LABEL}"
+fi
 echo "      Keystore conversion complete"
 echo ""
 
 # ---------------------------------------------------------------------------
-# 3. Copy plugin files to their destinations
-#    plugin-cfg.xml  → wherever WebSpherePluginConfig points in httpd.conf
-#    plugin-key.kdb/.sth/.rdb → $IHS_ROOT/config/webserver1/
+# 4. Install plugin files and start IHS
 # ---------------------------------------------------------------------------
-echo "[3/4] Installing plugin files..."
-cp "${WORK_DIR}/plugin-cfg.xml"  "${PLUGIN_DIR}/plugin-cfg.xml"
-cp "${WORK_DIR}/plugin-key.kdb"  "${PLUGIN_DIR}/plugin-key.kdb"
-cp "${WORK_DIR}/plugin-key.sth"  "${PLUGIN_DIR}/plugin-key.sth"
+echo "[4/4] Installing plugin files and starting IHS..."
+cp "${WORK_DIR}/plugin-cfg.xml" "${PLUGIN_DIR}/plugin-cfg.xml"
+cp "${WORK_DIR}/plugin-key.kdb" "${PLUGIN_DIR}/plugin-key.kdb"
+cp "${WORK_DIR}/plugin-key.sth" "${PLUGIN_DIR}/plugin-key.sth"
 [[ -f "${WORK_DIR}/plugin-key.rdb" ]] && cp "${WORK_DIR}/plugin-key.rdb" "${PLUGIN_DIR}/plugin-key.rdb"
 rm -rf "${WORK_DIR}"
-echo "      plugin-cfg.xml  → ${PLUGIN_DIR}/plugin-cfg.xml"
-echo "      plugin-key.kdb  → ${PLUGIN_DIR}/plugin-key.kdb"
-echo ""
 
-# ---------------------------------------------------------------------------
-# 4. Point WebSpherePluginConfig at the new plugin-cfg.xml and restart IHS
-# ---------------------------------------------------------------------------
-echo "[4/4] Updating httpd.conf and restarting IHS..."
 PLUGIN_CFG_LINE="WebSpherePluginConfig ${PLUGIN_DIR}/plugin-cfg.xml"
 if grep -q "^WebSpherePluginConfig" "${HTTPD_CONF}"; then
     sed -i "s|^WebSpherePluginConfig .*|${PLUGIN_CFG_LINE}|" "${HTTPD_CONF}"
-    echo "      WebSpherePluginConfig: updated"
 else
     printf '\n# Dynamic routing — added by step2-dynamic-routing.sh\n%s\n' \
         "${PLUGIN_CFG_LINE}" >> "${HTTPD_CONF}"
-    echo "      WebSpherePluginConfig: added"
 fi
 
-"${APACHECTL}" stop 2>/dev/null; sleep 2
-pkill -9 -f "${IHS_ROOT}/bin/httpd" 2>/dev/null; sleep 1
-"${APACHECTL}" start; sleep 3
+"${APACHECTL}" configtest
+"${APACHECTL}" start
+sleep 3
 
 if ! ss -tlnp 2>/dev/null | grep -q ":8080 "; then
     echo "ERROR: IHS failed to start. Check: ${IHS_ROOT}/logs/error_log"
@@ -195,9 +213,9 @@ if [[ "${HTTP_CODE}" == "200" ]]; then
     echo ""
     echo "  Next (optional) — pin requests to a specific member:"
     echo "    bash scripts/apply-routing-rules.sh -s member1"
+    echo ""
 else
     echo "  ERROR: ODR did not start routing within 60s."
     echo "  Plugin log:  tail -30 ${IHS_ROOT}/logs/webserver1/http_plugin.log"
     exit 1
 fi
-echo ""
