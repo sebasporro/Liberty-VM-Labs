@@ -5,8 +5,8 @@
         <feature>adminCenter-1.0</feature>
         <feature>appSecurity-5.0</feature>
         <!--
-          restConnector-2.0 and dynamicRouting-1.0 are declared here — alongside
-          administrator-role and basicRegistry — so that Liberty's role-to-feature
+          restConnector-2.0 and dynamicRouting-1.0 are declared here alongside
+          administrator-role and basicRegistry so that Liberty's role-to-feature
           binding is resolved in the same config pass.
           In Liberty 26, restConnector-2.0 only honours administrator-role when
           the feature and the role are processed together; declaring the feature
@@ -17,9 +17,7 @@
         <feature>dynamicRouting-1.0</feature>
     </featureManager>
 
-    <!-- User registry — admin credentials for Admin Center and collective join -->
-    <!-- realm omitted so Liberty uses the default realm; administrator-role
-         then maps the unqualified name "admin" without a realm prefix -->
+    <!-- User registry: admin credentials for Admin Center and collective join -->
     <basicRegistry id="basic">
         <user name="admin" password="${admin.password}"/>
     </basicRegistry>
@@ -31,12 +29,9 @@
         <user>admin</user>
     </administrator-role>
 
-    <!-- Do NOT require client certificate authentication on the default SSL config.
-         The WAS plugin connects to /ibm/api/dynamicRouting over HTTPS but does not
-         present a collective client certificate — it authenticates via the trusted
-         keystore built by dynamicRouting setup --autoAcceptCertificates.
-         clientAuthenticationSupported="true" causes unknown_ca SSL handshake failures
-         because the controller demands a cert the plugin was not issued. -->
+    <!-- clientAuthentication="false": the WAS plugin connects to
+         /ibm/api/dynamicRouting over HTTPS without presenting a client cert.
+         Setting clientAuthenticationSupported="true" causes unknown_ca failures. -->
     <ssl id="defaultSSLConfig" clientAuthentication="false"/>
 
 </server>
