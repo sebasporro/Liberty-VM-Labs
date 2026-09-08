@@ -9,7 +9,6 @@ source "${SCRIPT_DIR}/00-set-env.sh"
 
 IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
 CTRL_SERVER="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller"
-CTRL_PLUGIN_CFG="${CTRL_SERVER}/plugin-cfg.xml"
 PLUGIN_DIR="${IHS_ROOT}/config/webserver1"
 OUT="/tmp/liberty-debug-$(date +%Y%m%d-%H%M%S).txt"
 
@@ -215,16 +214,14 @@ find "${IHS_ROOT}" -name "libodr.so" 2>/dev/null >> "${OUT}" \
     || echo "(libodr.so not found)" >> "${OUT}"
 
 # ---------------------------------------------------------------------------
-section "29. CONTROLLER: authoritative plugin-cfg.xml (controller-generated)"
-# The controller writes this on every start and every dynamicRouting setup call.
-# step2 uses this as the source for the installed plugin-cfg.xml.
+section "29. CONTROLLER: static self-routing plugin-cfg.xml (for reference only)"
+# This is the controller's OWN static plugin-cfg.xml — it routes traffic to
+# the controller itself and has NO IntelligentManagement stanza.
+# step2 uses the WORK_DIR output of dynamicRouting setup, NOT this file.
 echo "--- File info ---" >> "${OUT}"
-ls -la "${CTRL_PLUGIN_CFG}" 2>/dev/null >> "${OUT}" || echo "(not found)" >> "${OUT}"
+ls -la "${CTRL_SERVER}/plugin-cfg.xml" 2>/dev/null >> "${OUT}" || echo "(not found)" >> "${OUT}"
 echo "" >> "${OUT}"
-echo "--- Content ---" >> "${OUT}"
-cat "${CTRL_PLUGIN_CFG}" 2>/dev/null >> "${OUT}" || echo "(not found)" >> "${OUT}"
-echo "" >> "${OUT}"
-echo "--- logs/state/ directory ---" >> "${OUT}"
+echo "--- logs/state/ directory (plugin-cfg.xml written here at startup) ---" >> "${OUT}"
 ls -la "${CTRL_SERVER}/logs/state/" 2>/dev/null >> "${OUT}"
 
 # ---------------------------------------------------------------------------

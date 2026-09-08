@@ -24,8 +24,6 @@ CONTROLLER_DIR="${WORKSPACE_ROOT}/installs/controller"
 WLP_BIN="${CONTROLLER_DIR}/wlp/bin"
 CTRL_SERVER_DIR="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller"
 CTRL_OVERRIDES="${CTRL_SERVER_DIR}/configDropins/overrides"
-# The controller writes its authoritative plugin-cfg.xml here on every start/setup:
-CTRL_PLUGIN_CFG="${CTRL_SERVER_DIR}/plugin-cfg.xml"
 PLUGIN_DIR="${IHS_ROOT}/config/webserver1"
 HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
 APACHECTL="${IHS_ROOT}/bin/apachectl"
@@ -171,37 +169,27 @@ cd - > /dev/null
     echo "ERROR: plugin-key.p12 not produced by dynamicRouting setup"
     rm -rf "${WORK_DIR}"; exit 1
 }
+[[ ! -f "${WORK_DIR}/plugin-cfg.xml" ]] && {
+    echo "ERROR: plugin-cfg.xml not produced by dynamicRouting setup"
+    rm -rf "${WORK_DIR}"; exit 1
+}
 echo "      Done"; echo ""
 
 # ---------------------------------------------------------------------------
-# [3/4] Build the plugin-cfg.xml from the controller's authoritative copy
+# [3/4] Patch the plugin-cfg.xml that dynamicRouting setup wrote to WORK_DIR.
 #
-# The controller writes an up-to-date plugin-cfg.xml to its own server dir.
-# This file already has:
-#   - IntelligentManagement stanza with ConnectorCluster → localhost:9443
-#   - ServerCluster, VirtualHostGroup, UriGroup, Route stanzas intact
-#   - Correct Keyfile/Stashfile paths (we patch these below)
+# setup writes plugin-cfg.xml into WORK_DIR (because we cd there before
+# running it).  That file already has IntelligentManagement + ConnectorCluster.
 #
-# The only thing it is missing is the AcceptType property inside
-# ConnectorCluster — Liberty 26's DynamicRoutingRestService throws
-# UnsupportedOperationException (HTTP 500) for any request without
-# Accept: application/json.  The AcceptType property instructs libodr.so
-# to send that header.
+# The controller's own plugin-cfg.xml at CTRL_SERVER_DIR/plugin-cfg.xml is
+# its static self-routing file — it has no IntelligentManagement stanza and
+# must NOT be used here.
+#
+# The only patch needed: inject AcceptType into ConnectorCluster so libodr.so
+# sends Accept: application/json.  Liberty 26's DynamicRoutingRestService
+# throws UnsupportedOperationException (HTTP 500) without that header.
 # ---------------------------------------------------------------------------
-echo "[3/4] Building plugin-cfg.xml from controller's authoritative copy..."
-
-# Wait up to 10s for the controller to (re)generate its plugin-cfg.xml
-for i in $(seq 1 10); do
-    [[ -f "${CTRL_PLUGIN_CFG}" ]] && break
-    sleep 1
-done
-[[ ! -f "${CTRL_PLUGIN_CFG}" ]] && {
-    echo "ERROR: Controller plugin-cfg.xml not found at ${CTRL_PLUGIN_CFG}"
-    echo "       Trigger regeneration: restart controller or call dynamicRouting setup"
-    rm -rf "${WORK_DIR}"; exit 1
-}
-
-cp "${CTRL_PLUGIN_CFG}" "${WORK_DIR}/plugin-cfg.xml"
+echo "[3/4] Patching plugin-cfg.xml from dynamicRouting setup output..."
 
 python3 - "${WORK_DIR}/plugin-cfg.xml" "${PLUGIN_DIR}" <<'PYEOF'
 import re, sys
