@@ -57,24 +57,43 @@ CTRL_HTTP=$(curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adm
 }
 
 # ---------------------------------------------------------------------------
-# Ensure the controller has the correct role-override.xml:
-#   - dynamicRouting-1.0 feature declared
-#   - clientAuthentication="false" on the default SSL config
-#     (clientAuthenticationSupported="true" causes unknown_ca SSL failures
-#      because the WAS plugin does not present a collective client cert)
-# Always copy — idempotent, Liberty picks up configDropins changes live.
+# Fix controller config dropins:
+#
+# 1. role-override.xml — ensure dynamicRouting-1.0 is declared and
+#    clientAuthentication="false" is set (not clientAuthenticationSupported="true").
+#
+# 2. collective-create.xml — Liberty's 'collective create' writes an
+#    <ssl id="defaultSSLConfig" clientAuthenticationSupported="true"/> element.
+#    Liberty MERGES same-id elements across dropins, so this attribute survives
+#    even when role-override.xml sets clientAuthentication="false", causing
+#    SSLHandshakeException: unknown_ca on every WAS plugin connection.
+#    Strip the ssl element from collective-create.xml so role-override.xml owns it.
 # ---------------------------------------------------------------------------
 NEED_SLEEP=false
-if ! grep -q "dynamicRouting-1.0" "${CTRL_OVERRIDES}/role-override.xml" 2>/dev/null; then
-    NEED_SLEEP=true
-fi
-if grep -q 'clientAuthenticationSupported="true"' "${CTRL_OVERRIDES}/role-override.xml" 2>/dev/null; then
+
+# Always update role-override.xml
+if ! grep -q "dynamicRouting-1.0" "${CTRL_OVERRIDES}/role-override.xml" 2>/dev/null || \
+   grep -q 'clientAuthenticationSupported="true"' "${CTRL_OVERRIDES}/role-override.xml" 2>/dev/null; then
     NEED_SLEEP=true
 fi
 cp "${WORKSPACE_ROOT}/config/controller/role-override.xml" \
    "${CTRL_OVERRIDES}/role-override.xml"
+
+# Strip clientAuthenticationSupported ssl element from collective-create.xml
+if grep -q 'clientAuthenticationSupported' "${CTRL_OVERRIDES}/collective-create.xml" 2>/dev/null; then
+    echo "  Patching collective-create.xml: removing clientAuthenticationSupported ssl element..."
+    python3 - "${CTRL_OVERRIDES}/collective-create.xml" <<'PYEOF'
+import re, sys
+content = open(sys.argv[1]).read()
+content = re.sub(r'\n?\s*<!--\s*clientAuthenticationSupported[^>]*-->\s*\n?', '\n', content)
+content = re.sub(r'\n?\s*<ssl\s[^/]*/>', '', content)
+open(sys.argv[1], 'w').write(content)
+PYEOF
+    NEED_SLEEP=true
+fi
+
 if [[ "${NEED_SLEEP}" == "true" ]]; then
-    echo "  controller role-override.xml updated — waiting 15s for Liberty to reload..."
+    echo "  Controller config updated — waiting 15s for Liberty to reload..."
     sleep 15
 fi
 
