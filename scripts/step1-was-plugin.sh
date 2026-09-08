@@ -108,9 +108,16 @@ cat > "${PLUGIN_CFG}" <<EOF
     <Property Name="ESIEnableRecursiveInclude"    Value="false"/>
     <Property Name="ESIMaxRecursiveIncludeDepth"  Value="10"/>
 
+    <!--
+      ServerCluster Name MUST be "defaultCollective" — this is the cluster
+      group name that dynamicRouting setup (step 3b) writes into the
+      <IntelligentManagement> stanza and uses to identify this collective's
+      members at runtime.  The <Route> below must reference the same name
+      so ODR's live routing table is served for the correct route.
+    -->
     <ServerCluster CloneSeparatorChange="false" GetDWLMTable="false"
                    IgnoreAffinityRequests="true" LoadBalance="Round Robin"
-                   Name="LibertyCluster" PostSizeLimit="-1"
+                   Name="defaultCollective" PostSizeLimit="-1"
                    RemoveSpecialHeaders="true" RetryInterval="60">
 ${SERVER_BLOCKS}
         <PrimaryServers>
@@ -118,17 +125,17 @@ $(printf "${PRIMARY_LIST}")        </PrimaryServers>
 
     </ServerCluster>
 
-    <UriGroup Name="LibertyCluster_URIs">
+    <UriGroup Name="defaultCollective_URIs">
         <Uri AffinityCookie="JSESSIONID" AffinityURLIdentifier="jsessionid" Name="/*"/>
     </UriGroup>
 
-    <VirtualHostGroup Name="LibertyHosts">
+    <VirtualHostGroup Name="defaultCollective_Hosts">
         <VirtualHost Name="*:8080"/>
     </VirtualHostGroup>
 
-    <Route ServerCluster="LibertyCluster"
-           UriGroup="LibertyCluster_URIs"
-           VirtualHostGroup="LibertyHosts"/>
+    <Route ServerCluster="defaultCollective"
+           UriGroup="defaultCollective_URIs"
+           VirtualHostGroup="defaultCollective_Hosts"/>
 
 </Config>
 EOF
