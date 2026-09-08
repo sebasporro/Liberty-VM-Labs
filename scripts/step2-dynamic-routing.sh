@@ -233,16 +233,55 @@ echo "      IHS running on port 8080"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Wait for the WAS plugin to connect to /ibm/api/dynamicRouting on the
-# controller and start serving traffic through IHS.
+# [5/5] Inline diagnostics + wait for traffic
 # ---------------------------------------------------------------------------
-echo "[5/5] Waiting for dynamic routing (up to 90s)..."
+CTRL_LOG="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/logs/messages.log"
+
+echo "[5/5] Inline diagnostics..."
+echo ""
+
+# Controller endpoint — actual status both with and without Accept header
+DR_NONE=$(curl -k -u admin:admin -s -o /dev/null -w "%{http_code}" \
+    https://localhost:9443/ibm/api/dynamicRouting 2>/dev/null)
+DR_JSON=$(curl -k -u admin:admin -H "Accept: application/json" \
+    -s -o /dev/null -w "%{http_code}" \
+    https://localhost:9443/ibm/api/dynamicRouting 2>/dev/null)
+DR_HDRS=$(curl -k -u admin:admin -H "Accept: application/json" \
+    -s -D - -o /dev/null \
+    https://localhost:9443/ibm/api/dynamicRouting 2>/dev/null | grep -E "^HTTP|^reason|^location" | head -3)
+echo "  Controller /ibm/api/dynamicRouting:"
+echo "    no Accept header : HTTP ${DR_NONE}"
+echo "    Accept: app/json : HTTP ${DR_JSON}"
+echo "    headers          : ${DR_HDRS}"
+echo ""
+
+# Plugin log — last odr/connect lines
+echo "  Plugin log (last relevant):"
+grep -i "odrInit\|odrChild\|ODR enabled\|Intelligent\|9443\|abort\|NULL\|state change" \
+    "${IHS_ROOT}/logs/webserver1/http_plugin.log" 2>/dev/null | tail -8 | sed 's/^/    /'
+echo ""
+
+# Controller errors since last start
+LAST_LINE=$(grep -n "CWWKF0011I" "${CTRL_LOG}" 2>/dev/null | tail -1 | cut -d: -f1)
+echo "  Controller errors since last start:"
+[[ -n "${LAST_LINE}" ]] && tail -n +"${LAST_LINE}" "${CTRL_LOG}" \
+    | grep -E "CWWK[A-Z][0-9]+[EW]|Exception|FFDC" | tail -8 | sed 's/^/    /'
+echo ""
+
+# Wait for traffic — show both statuses on each tick
+echo "  Waiting for traffic through IHS (up to 120s)..."
 CODE="000"
-for t in $(seq 0 5 90); do
-    [[ $t -gt 0 ]] && { sleep 5; printf "      %ds...\n" "${t}"; }
-    CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/server-info/ 2>/dev/null)
-    [[ "${CODE}" == "200" ]] && break
+for t in $(seq 0 5 120); do
+    [[ $t -gt 0 ]] && {
+        sleep 5
+        CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/server-info/ 2>/dev/null)
+        DR_NOW=$(curl -k -u admin:admin -s -o /dev/null -w "%{http_code}" \
+            https://localhost:9443/ibm/api/dynamicRouting 2>/dev/null)
+        printf "    %3ds  IHS:%s  controller:%s\n" "${t}" "${CODE}" "${DR_NOW}"
+        [[ "${CODE}" == "200" ]] && break
+    }
 done
+CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/server-info/ 2>/dev/null)
 
 if [[ "${CODE}" == "200" ]]; then
     echo ""
@@ -253,16 +292,7 @@ if [[ "${CODE}" == "200" ]]; then
     echo ""
 else
     echo ""
-    echo "  WARNING: HTTP ${CODE} after 90s — dynamic routing not yet serving traffic"
-    echo ""
-    echo "  Diagnose with:"
-    echo "    bash ${SCRIPT_DIR}/check-dynamic-routing.sh"
-    echo ""
-    echo "  Controller dynamic routing endpoint (must return 200):"
-    echo "    curl -k -u admin:admin https://localhost:9443/ibm/api/dynamicRouting"
-    echo ""
-    echo "  Controller errors:"
-    CTRL_LOG="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/logs/messages.log"
-    grep -E "dynamicRouting|CWWKZ|Exception|ERROR" "${CTRL_LOG}" 2>/dev/null | tail -10 | sed 's/^/    /'
+    echo "  FAILED — run full diagnostics:"
+    echo "    bash ${SCRIPT_DIR}/collect-debug.sh && cat /tmp/liberty-debug-*.txt"
     exit 1
 fi
