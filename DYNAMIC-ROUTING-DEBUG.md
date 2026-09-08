@@ -119,7 +119,7 @@ Liberty 26's `dynamicRouting setup` strips `ServerCluster`, `VirtualHostGroup`, 
 
 ---
 
-## Current Status (as of last run)
+## Current Status (as of last run — Sep 8 15:28)
 
 | Check | Status | Notes |
 |---|---|---|
@@ -127,10 +127,12 @@ Liberty 26's `dynamicRouting setup` strips `ServerCluster`, `VirtualHostGroup`, 
 | member2:9082 direct | OK 200 | |
 | Controller admin center | OK 302 | Redirects to login |
 | Controller SSL (no client cert) | OK | Fixed by FIX 1 |
-| `/ibm/api/dynamicRouting` no Accept | 500 | Liberty 26 bug — throws instead of 406. Expected from curl; plugin sends correct headers. |
-| `/ibm/api/dynamicRouting` Accept:json | 307 | Was HTTP/2 protocol mismatch. Fixed by FIX 4. **Needs verification after restart.** |
-| libodr.so initialized | Aborting | NULL proxy after 307. Should resolve once HTTP/2 disabled (FIX 4). |
-| IHS routing via plugin | **PENDING** | Waiting for verification after HTTP/2 fix |
+| `/ibm/api/dynamicRouting` no Accept | 500 | Liberty 26 throws 500 (not 406) when Accept header is absent. Expected from raw curl. |
+| `/ibm/api/dynamicRouting` Accept:json | **307** | Controller still HTTP/2. `ports-override.xml` deployed but controller never restarted — `CWWKG0018I: No functional changes` confirms runtime ignored the re-copy. **FIX 8 applied.** |
+| `AcceptType` in installed plugin-cfg.xml | **MISSING** | Script was injecting into `WORK_DIR/plugin-cfg.xml` (output of `dynamicRouting setup`) which was already stripped/merged. **Root fix: use controller's own `plugin-cfg.xml` as source (FIX 11).** |
+| `dynamic-routing.xml` dropin | Benign (checked) | Sep 7 15:42, not in repo. Auto-neutralised if conflicting. |
+| libodr.so initialized | Aborting | NULL proxy — caused by HTTP/2 307 + missing AcceptType. Both fixed now. |
+| IHS routing via plugin | **PENDING** | Run step2 after git pull. |
 
 ---
 
@@ -150,10 +152,30 @@ Liberty 26's `dynamicRouting setup` strips `ServerCluster`, `VirtualHostGroup`, 
 
 The controller's `configDropins/overrides/` contains a `dynamic-routing.xml` file (dated Sep 7 15:42) that is **not in the repo**. Its contents have never been captured. It may contain a conflicting SSL or feature declaration.
 
-**First thing to do in the next session:**
+**Mitigation applied in FIX 10:** `step2-dynamic-routing.sh` now reads the file at runtime. If it contains `<ssl` or `<httpEndpoint`, it is replaced with a safe empty stub and backed up as `dynamic-routing.xml.bak`. Otherwise it is left as-is.
+
+**To inspect manually before running step2:**
 ```bash
 cat ~/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/configDropins/overrides/dynamic-routing.xml
 ```
+
+---
+
+## Bug History
+
+| Fix | Issue | Root Cause | Resolution |
+|---|---|---|---|
+| FIX 1 | `unknown_ca` SSL handshake failure | `collective-create.xml` writes `clientAuthenticationSupported="true"` which merges across dropins | Strip `<ssl>` from `collective-create.xml`; `role-override.xml` owns SSL config |
+| FIX 2 | `ConfigParserException` at row 37 | UTF-8 em-dash in XML comments | Replace em-dashes with ASCII hyphens in `role-override.xml` |
+| FIX 3 | `port 9443 could not be reached` on `dynamicRouting setup` | SSL channel changes need full restart, not just config reload | Full restart before `dynamicRouting setup` |
+| FIX 4 | `libodr.so` aborts with NULL proxy; `dynamicRouting` returns HTTP 307 | Liberty 26 defaults to HTTP/2; `libodr.so` sends HTTP/1.1 interests POST | `<httpOptions http2Enabled="false"/>` in `ports-override.xml` |
+| FIX 5 | Duplicate `WebSpherePluginConfig` in `httpd.conf` | Python rewrite appended a second line on reruns | Deduplicate — keep first, drop all subsequent |
+| FIX 6 | `dynamicRouting setup` flag errors | `--webServerName` vs `--webServerNames` mismatch | Always use `--webServerNames`; drop `--targetPath` |
+| FIX 7 | Plugin `websphereFindTransport: Unable to find a transport` | `dynamicRouting setup` strips `ServerCluster/VirtualHostGroup/UriGroup/Route` | Re-inject placeholder stanzas after setup |
+| FIX 8 | HTTP/2 still active after `ports-override.xml` deployed | `http2Enabled` is HTTP channel property; needs full restart not hot-reload. Prior run copied the file but never restarted. | Detect HTTP/2 on live controller; force full `server stop/start` when detected |
+| FIX 9 | `AcceptType` property absent from installed `plugin-cfg.xml` | Script was patching the `WORK_DIR` output of `dynamicRouting setup` — a merged/stripped file. Patch never produced `AcceptType` in the file that was installed. | **FIX 11 supersedes: use controller's own generated `plugin-cfg.xml` as source instead of setup output** |
+| FIX 10 | Unknown `dynamic-routing.xml` dropin may conflict | Unmanaged file from prior manual run; contents unknown | Read file at runtime; neutralize if `<ssl>` or `<httpEndpoint>` present |
+| FIX 11 | `AcceptType` injection and missing stanzas not reaching installed file | `dynamicRouting setup` writes its output to `WORK_DIR/plugin-cfg.xml` after our Python patch runs — so the patch was discarded. Controller's own `CTRL_SERVER_DIR/plugin-cfg.xml` is the authoritative file (generated fresh on every setup/restart); use that as source, patch it, install it. | Step2 now copies `CTRL_SERVER_DIR/plugin-cfg.xml`, patches paths + AcceptType, installs to `PLUGIN_DIR`. `dynamicRouting setup` is used only for `plugin-key.p12` generation. |
 
 ---
 
