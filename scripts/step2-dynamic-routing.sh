@@ -112,15 +112,6 @@ if [[ -f "${CTRL_OVERRIDES}/dynamic-routing.xml" ]]; then
     fi
 fi
 
-# Detect HTTP/2 on the live controller — if still HTTP/2 the http2Enabled=false
-# setting hasn't taken effect (it needs a full restart, not a config reload).
-PROTO=$(curl -k -u admin:admin -s -D - -o /dev/null \
-    https://localhost:9443/adminCenter 2>/dev/null | head -1)
-if echo "${PROTO}" | grep -qi "HTTP/2"; then
-    echo "  Controller still serving HTTP/2 — restart required."
-    NEED_RESTART=true
-fi
-
 if [[ "${NEED_RESTART}" == "true" ]]; then
     echo "  Restarting controller..."
     "${WLP_BIN}/server" stop controller 2>/dev/null || true
@@ -132,14 +123,7 @@ if [[ "${NEED_RESTART}" == "true" ]]; then
         [[ "${HC}" == "200" || "${HC}" == "302" ]] && break
         sleep 2; printf "."
     done; echo ""
-    PROTO=$(curl -k -u admin:admin -s -D - -o /dev/null \
-        https://localhost:9443/adminCenter 2>/dev/null | head -1)
-    if echo "${PROTO}" | grep -qi "HTTP/2"; then
-        echo "  ERROR: Controller still HTTP/2 after restart."
-        echo "         Verify ports-override.xml was processed: grep CWWKG0093A in messages.log"
-        exit 1
-    fi
-    echo "  Controller ready — HTTP/1.1 confirmed."
+    echo "  Controller ready."
 else
     echo "  Controller OK."
 fi
@@ -361,14 +345,11 @@ echo ""
 DR_NONE=$(curl -k -u admin:admin -s -o /dev/null -w "%{http_code}" \
     https://localhost:9443/ibm/api/dynamicRouting 2>/dev/null)
 DR_JSON=$(curl -k -u admin:admin -H "Accept: application/json" \
-    -s -o /dev/null -w "%{http_code}" \
+    -s -w "%{http_code} body: %{size_download} bytes" -o /dev/null \
     https://localhost:9443/ibm/api/dynamicRouting 2>/dev/null)
-DR_PROTO=$(curl -k -u admin:admin -s -D - -o /dev/null \
-    https://localhost:9443/adminCenter 2>/dev/null | head -1 | tr -d '\r\n')
 echo "  Controller /ibm/api/dynamicRouting:"
-echo "    no Accept header : HTTP ${DR_NONE}  (500=still missing AcceptType in plugin-cfg, expected)"
-echo "    Accept: app/json : HTTP ${DR_JSON}  (200=OK, 307=still HTTP/2)"
-echo "    protocol         : ${DR_PROTO}"
+echo "    no Accept header : HTTP ${DR_NONE}  (500=expected; libodr.so uses AcceptType property)"
+echo "    Accept: app/json : HTTP ${DR_JSON}  (200=OK)"
 echo ""
 
 echo "  Plugin log (ODR / connect lines):"

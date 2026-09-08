@@ -1,16 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <server description="Controller ports and security override">
-    <!-- http2Enabled="false" set directly on httpEndpoint as an attribute.
-         httpOptions with http2Enabled is processed by Liberty but does not
-         disable HTTP/2 when servlet-6.0 is active — servlet-6.0 pulls in
-         the http-2.0 feature which re-enables HTTP/2 at the transport level
-         regardless of httpOptions. Setting the attribute on the endpoint
-         element itself is the authoritative override in Liberty 26. -->
     <httpEndpoint id="defaultHttpEndpoint"
                   host="*"
                   httpPort="9080"
-                  httpsPort="9443"
-                  http2Enabled="false"/>
+                  httpsPort="9443"/>
 
     <keyStore id="defaultKeyStore" password="${keystore.password}"/>
     <collectiveController>
