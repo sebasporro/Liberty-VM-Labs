@@ -8,6 +8,7 @@ source "${SCRIPT_DIR}/00-set-env.sh"
 IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
 CONTROLLER_DIR="${WORKSPACE_ROOT}/installs/controller"
 WLP_BIN="${CONTROLLER_DIR}/wlp/bin"
+CTRL_OVERRIDES="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/configDropins/overrides"
 PLUGIN_DIR="${IHS_ROOT}/config/webserver1"
 HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
 APACHECTL="${IHS_ROOT}/bin/apachectl"
@@ -26,6 +27,18 @@ echo ""
 
 CTRL=$(curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adminCenter 2>/dev/null)
 [[ "${CTRL}" != "200" && "${CTRL}" != "302" ]] && { echo "ERROR: Controller not responding (HTTP ${CTRL}). Run install-controller.sh first."; exit 1; }
+
+# --- Ensure dynamicRouting-1.0 is active on the controller ---
+# The controller may have been installed before this feature was added to
+# role-override.xml. Copy the current version and wait for Liberty to pick
+# it up dynamically (no restart needed — configDropins changes are live).
+if ! grep -q "dynamicRouting-1.0" "${CTRL_OVERRIDES}/role-override.xml" 2>/dev/null; then
+    echo "  Updating controller role-override.xml with dynamicRouting-1.0..."
+    cp "${WORKSPACE_ROOT}/config/controller/role-override.xml" \
+       "${CTRL_OVERRIDES}/role-override.xml"
+    echo "  Waiting 15s for Liberty to pick up the feature..."
+    sleep 15
+fi
 
 mkdir -p "${PLUGIN_DIR}" "${WORK_DIR}"
 
