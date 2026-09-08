@@ -1,0 +1,210 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Liberty VM Labs — Session Context Summary</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 14px; line-height: 1.6; background: #ffffff; color: #1f2328; padding: 32px 24px; }
+  .page { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #57606a; font-size: 13px; margin-bottom: 28px; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px; }
+  h2 { font-size: 15px; font-weight: 700; margin: 24px 0 8px; color: #1f2328; }
+  h3 { font-size: 13px; font-weight: 700; margin: 16px 0 4px; color: #1f2328; }
+  p { margin-bottom: 8px; }
+  ul, ol { padding-left: 20px; margin-bottom: 8px; }
+  li { margin-bottom: 3px; }
+  code { font-family: "SF Mono", "Consolas", "Menlo", monospace; font-size: 12px; background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 3px; padding: 1px 5px; }
+  pre { font-family: "SF Mono", "Consolas", "Menlo", monospace; font-size: 12px; background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; margin: 8px 0 12px; overflow-x: auto; line-height: 1.5; white-space: pre-wrap; }
+  .section { border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px 20px; margin-bottom: 16px; }
+  .section.warn { border-left: 4px solid #d97706; }
+  .section.ok   { border-left: 4px solid #16a34a; }
+  .section.err  { border-left: 4px solid #dc2626; }
+  .section.info { border-left: 4px solid #3b82d4; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
+  .tag.fixed  { background: #dcfce7; color: #166534; }
+  .tag.open   { background: #fef9c3; color: #92400e; }
+  .tag.broken { background: #fee2e2; color: #991b1b; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
+  th { text-align: left; padding: 6px 10px; background: #f7f8fa; border: 1px solid #e5e7eb; font-weight: 600; }
+  td { padding: 6px 10px; border: 1px solid #e5e7eb; vertical-align: top; }
+  .footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #57606a; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Liberty VM Labs — Session Context Summary</h1>
+  <p class="subtitle">Repo: <code>https://github.com/sebasporro/Liberty-VM-Labs</code>  |  Branch: <code>main</code>  |  Current commit: <code>6d3f7d0</code>  |  VM user: <code>itzuser@vm-1</code></p>
+
+  
+  <div class="section info">
+    <h2>Goal</h2>
+    <p>Run <code>scripts/step2-dynamic-routing.sh</code> successfully to enable Liberty Dynamic Routing on the collective. This configures <code>mod_was_ap24_http.so</code> (IHS WAS plugin) to poll the controller's <code>/wr</code> endpoint and route requests across all four collective members dynamically.</p>
+    <p><strong>Architecture target:</strong></p>
+    <pre>Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9080/wr
+                                                       │
+                                        live route table
+                                                       │
+                    ┌──────────────┬──────────────┬──────────────┐
+                    ▼              ▼              ▼              ▼
+               member1:9081  member2:9082  member3:9083  member4:9084
+               (26.0.0.8)    (26.0.0.8)   (25.0.0.1)   (25.0.0.1)</pre>
+  </div>
+
+  
+  <div class="section">
+    <h2>Environment</h2>
+    <table>
+      <tr><th>Component</th><th>Path / Value</th><th>Status</th></tr>
+      <tr><td>Workspace root</td><td><code>/home/itzuser/Liberty-VM-Labs</code></td><td>✓ cloned</td></tr>
+      <tr><td>Controller</td><td><code>installs/controller/wlp</code> — HTTP 9080 / HTTPS 9443</td><td>✓ running</td></tr>
+      <tr><td>member1 (26.0.0.8)</td><td><code>installs/member1/wlp</code> — HTTP 9081</td><td>✓ running</td></tr>
+      <tr><td>member2 (26.0.0.8)</td><td><code>installs/member2/wlp</code> — HTTP 9082</td><td>✓ running</td></tr>
+      <tr><td>member3 (25.0.0.1)</td><td><code>installs/member3/wlp</code> — HTTP 9083</td><td>✓ running</td></tr>
+      <tr><td>member4 (25.0.0.1)</td><td><code>installs/member4/wlp</code> — HTTP 9084</td><td>✓ running</td></tr>
+      <tr><td>IHS</td><td><code>/home/itzuser/IBM/HTTPServer</code> — port 8080</td><td>installed</td></tr>
+      <tr><td>WAS plugin</td><td><code>/home/itzuser/IBM/HTTPServer/modules/mod_was_ap24_http.so</code></td><td>✓ present</td></tr>
+      <tr><td>KEYSTORE_PASS</td><td><code>Liberty26ctrl!</code> (matches bootstrap.properties)</td><td>✓</td></tr>
+      <tr><td>ADMIN_USER / PASS</td><td><code>admin / admin</code></td><td>✓</td></tr>
+    </table>
+  </div>
+
+  
+  <div class="section">
+    <h2>Error History — step2-dynamic-routing.sh</h2>
+
+    <h3>Error 1 <span class="tag fixed">FIXED</span></h3>
+    <pre>Missing argument --keystorePassword.
+Missing argument --webServerNames.
+exit 20</pre>
+    <p><strong>Fix:</strong> Added <code>--keystorePassword="Liberty26ctrl!"</code> and <code>--webServerNames="webserver1"</code> to the <code>dynamicRouting setup</code> invocation.</p>
+
+    <h3>Error 2 <span class="tag fixed">FIXED</span></h3>
+    <pre>Error: Unsupported or unrecognized SSL message
+exit 255</pre>
+    <p><strong>Fix:</strong> Changed <code>--port</code> from <code>9080</code> (plain HTTP) to <code>9443</code> (HTTPS). The setup CLI uses the secure JMX/REST channel — it must target HTTPS.</p>
+
+    <h3>Error 3 <span class="tag open">UNSOLVED — current blocker</span></h3>
+    <pre>Auto-accepting the certificate chain for target server.
+Certificate subject DN: CN=localhost, OU=controller, O=ibm, C=us
+
+Error: CWWKX0217E: No MBean is currently registered with the given ObjectName
+'WebSphere:feature=dynamicRouting,type=DynamicRouting,name=DynamicRouting'
+
+Unable to complete the MBean operation.
+exit 255</pre>
+    <p><strong>What is confirmed:</strong></p>
+    <ul>
+      <li>HTTPS connection succeeds — certificate is accepted</li>
+      <li>Authentication works — no auth error</li>
+      <li><code>dynamicRouting-1.0</code> shows <strong>active ✓</strong> in messages.log grep</li>
+      <li><code>restConnector-2.0</code> shows <strong>active ✓</strong> in messages.log grep</li>
+      <li>Despite both features confirmed active, the DynamicRouting MBean is not registered</li>
+    </ul>
+    <p><strong>Attempted fix (wrong):</strong> Added <code>restConnector-2.0</code> to the dropin — did not help. Error is identical after the fix.</p>
+    <p><strong>Root cause: UNKNOWN.</strong> The next step requires actual diagnostic output from the VM — not guesswork.</p>
+  </div>
+
+  
+  <div class="section warn">
+    <h2>Diagnostics Required — run these on the VM</h2>
+    <p>Do NOT make any more code changes until these outputs are reviewed:</p>
+
+    <h3>1. dynamicRouting built-in help</h3>
+    <pre>/home/itzuser/Liberty-VM-Labs/installs/controller/wlp/bin/dynamicRouting setup --help 2&gt;&amp;1</pre>
+
+    <h3>2. messages.log tail immediately after failure</h3>
+    <pre>tail -80 /home/itzuser/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/logs/messages.log</pre>
+
+    <h3>3. Features actually installed in this Liberty edition</h3>
+    <pre>ls /home/itzuser/Liberty-VM-Labs/installs/controller/wlp/lib/features/ \
+  | grep -iE "dynamicRout|restConn|collective" | head -20</pre>
+
+    <h3>4. MBeans registered on the live controller</h3>
+    <pre>curl -k -s -u admin:admin \
+  "https://localhost:9443/IBMJMXConnectorREST/mbeans?objectName=WebSphere:feature%3DdynamicRouting*" \
+  | head -40</pre>
+
+    <h3>5. What MBeans ARE registered (to see the actual feature set)</h3>
+    <pre>curl -k -s -u admin:admin \
+  "https://localhost:9443/IBMJMXConnectorREST/mbeans" \
+  | python3 -m json.tool 2&gt;/dev/null | grep '"objectName"' | head -40</pre>
+  </div>
+
+  
+  <div class="section">
+    <h2>Key Files — Current State</h2>
+
+    <h3><code>scripts/step2-dynamic-routing.sh</code> — current dropin written at step 2:</h3>
+    <pre>&lt;server description="Dynamic routing feature"&gt;
+    &lt;featureManager&gt;
+        &lt;feature&gt;dynamicRouting-1.0&lt;/feature&gt;
+        &lt;feature&gt;restConnector-2.0&lt;/feature&gt;
+    &lt;/featureManager&gt;
+&lt;/server&gt;</pre>
+
+    <h3><code>scripts/step2-dynamic-routing.sh</code> — dynamicRouting setup call:</h3>
+    <pre>"${DYNAMIC_ROUTING_BIN}" setup \
+    --host="localhost" \
+    --port="9443" \
+    --user="admin" \
+    --password="admin" \
+    --keystorePassword="Liberty26ctrl!" \
+    --webServerNames="webserver1" \
+    --pluginInstallRoot="${SETUP_OUTPUT_DIR}" \
+    --autoAcceptCertificates</pre>
+
+    <h3><code>config/controller/role-override.xml</code> — controller features:</h3>
+    <pre>&lt;featureManager&gt;
+    &lt;feature&gt;collectiveController-1.0&lt;/feature&gt;
+    &lt;feature&gt;adminCenter-1.0&lt;/feature&gt;
+    &lt;feature&gt;appSecurity-5.0&lt;/feature&gt;
+&lt;/featureManager&gt;</pre>
+
+    <h3><code>config/template/server.xml</code> — base template features:</h3>
+    <pre>&lt;featureManager&gt;
+    &lt;feature&gt;servlet-6.0&lt;/feature&gt;
+    &lt;feature&gt;ssl-1.0&lt;/feature&gt;
+    &lt;feature&gt;pages-3.1&lt;/feature&gt;
+    &lt;feature&gt;expressionLanguage-5.0&lt;/feature&gt;
+&lt;/featureManager&gt;</pre>
+  </div>
+
+  
+  <div class="section">
+    <h2>Repo Structure (relevant paths)</h2>
+    <pre>Liberty-VM-Labs/
+├── scripts/
+│   ├── 00-set-env.sh               WORKSPACE_ROOT=/home/itzuser/Liberty-VM-Labs
+│   ├── install-ihs.sh              Installs IHS + mod_was_ap24_http.so
+│   ├── install-controller.sh       Deploys controller, collective create
+│   ├── add-member-26.sh            Deploys 26.0.0.8 member, collective join
+│   ├── add-member-25.sh            Deploys 25.0.0.1 member, collective join
+│   ├── reset-ihs.sh                Resets httpd.conf to clean baseline
+│   ├── step1-was-plugin.sh         Static plugin-cfg.xml → member1+2 direct
+│   └── step2-dynamic-routing.sh    ← BROKEN — current focus
+├── config/
+│   ├── controller/
+│   │   ├── role-override.xml       collectiveController-1.0 + adminCenter-1.0
+│   │   └── ports-override.xml      HTTP 9080 / HTTPS 9443
+│   └── template/
+│       └── server.xml              servlet-6.0, ssl-1.0, pages-3.1, el-5.0
+└── installs/                       Runtime instances (git-ignored)</pre>
+  </div>
+
+  
+  <div class="section err">
+    <h2>What NOT to do in the next session</h2>
+    <ul>
+      <li>Do not change <code>--port</code> — it is correctly set to <code>9443</code></li>
+      <li>Do not remove <code>--keystorePassword</code> or <code>--webServerNames</code> — they are required</li>
+      <li>Do not add more features blindly — <code>restConnector-2.0</code> was added and did not help</li>
+      <li><strong>Collect the diagnostic outputs above first, then act on evidence</strong></li>
+    </ul>
+  </div>
+
+  <div class="footer">Made with IBM Bob</div>
+</div>
+</body>
+</html>

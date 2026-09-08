@@ -1,0 +1,130 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Liberty VM Labs — Session Summary</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 14px; line-height: 1.6; background: #fff; color: #1f2328; max-width: 760px; margin: 0 auto; padding: 32px 24px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  h2 { font-size: 15px; font-weight: 600; margin-top: 28px; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+  h3 { font-size: 13px; font-weight: 600; margin-top: 16px; margin-bottom: 4px; color: #1f2328; }
+  .subtitle { color: #57606a; font-size: 13px; margin-bottom: 24px; }
+  code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 3px; padding: 1px 5px; }
+  pre { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px 14px; font-size: 12px; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace; line-height: 1.5; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; }
+  .green  { background: #d1fae5; color: #065f46; }
+  .red    { background: #fee2e2; color: #991b1b; }
+  .yellow { background: #fef9c3; color: #713f12; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th { background: #f7f8fa; text-align: left; padding: 6px 10px; border: 1px solid #e5e7eb; font-weight: 600; }
+  td { padding: 6px 10px; border: 1px solid #e5e7eb; vertical-align: top; }
+  .step-ok::before  { content: "✅ "; }
+  .step-fail::before { content: "❌ "; }
+  ul { margin: 4px 0 8px 0; padding-left: 20px; }
+  li { margin-bottom: 3px; }
+  .section-note { background: #f7f8fa; border-left: 3px solid #3b82d4; padding: 10px 14px; font-size: 13px; margin: 12px 0; border-radius: 0 4px 4px 0; }
+  footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #57606a; }
+</style>
+</head>
+<body>
+
+<h1>Liberty VM Labs — Session Summary</h1>
+<div class="subtitle">GitHub: <strong>sebasporro/Liberty-VM-Labs</strong> · Branch: <strong>main</strong> · Last commit: <code>3dfdea1</code></div>
+
+<h2>Environment</h2>
+<table>
+  <tr><th>Component</th><th>Details</th></tr>
+  <tr><td>VM hostname</td><td><code>vm-1.itz-709wr4.local</code> (single VM)</td></tr>
+  <tr><td>User</td><td><code>itzuser</code></td></tr>
+  <tr><td>Lab directory</td><td><code>/home/itzuser/Liberty-VM-Labs</code></td></tr>
+  <tr><td>Liberty versions</td><td>26.0.0.8 (controller + member1 + member2), 25.0.0.1 (member3 + member4 — not yet deployed)</td></tr>
+  <tr><td>IHS</td><td><code>/home/itzuser/IBM/HTTPServer</code> · port 8080</td></tr>
+  <tr><td>Controller ports</td><td>HTTP 9080 / HTTPS 9443</td></tr>
+  <tr><td>Member ports</td><td>member1: 9081 · member2: 9082</td></tr>
+</table>
+
+<h2>Lab Steps — Current Status</h2>
+<table>
+  <tr><th>Step</th><th>Script</th><th>Status</th></tr>
+  <tr><td>Install Liberty 26 runtime</td><td><code>01-install-runtime.sh</code></td><td><span class="badge green">DONE</span></td></tr>
+  <tr><td>Build template + package</td><td><code>02/03-build-*.sh</code></td><td><span class="badge green">DONE</span></td></tr>
+  <tr><td>Deploy collective controller</td><td><code>install-controller.sh</code></td><td><span class="badge green">DONE</span></td></tr>
+  <tr><td>Deploy member1 + member2</td><td><code>add-member-26.sh member1/2</code></td><td><span class="badge green">DONE</span> — all nodes show <code>localhost</code> in Admin Center</td></tr>
+  <tr><td>Step 3a — Static WAS plugin routing</td><td><code>reset-ihs.sh + step1-was-plugin.sh</code></td><td><span class="badge green">DONE</span> — round-robin confirmed working</td></tr>
+  <tr><td>Step 3b — Dynamic routing</td><td><code>step2-dynamic-routing.sh</code></td><td><span class="badge red">BLOCKED</span> — see below</td></tr>
+  <tr><td>Step 4 — Add 25.0.0.1 members</td><td><code>add-member-25.sh member3/4</code></td><td><span class="badge yellow">NOT STARTED</span></td></tr>
+  <tr><td>Step 3c — Routing rules</td><td><code>apply-routing-rules.sh</code></td><td><span class="badge yellow">NOT STARTED</span></td></tr>
+</table>
+
+<h2>Fixes Applied This Session (all committed)</h2>
+
+<h3>1. <code>plugin-cfg.xml</code> install location</h3>
+<p>Moved from <code>$IHS_ROOT/conf/</code> → <code>$IHS_ROOT/config/webserver1/</code> alongside the keystore files. This is what the WAS plugin expects and matches the reference lab (IBMTechSales lab-1030).</p>
+
+<h3>2. Removed 7 legacy scripts</h3>
+<p>Deleted: <code>04-deploy-instances.sh</code>, <code>05-create-collective.sh</code>, <code>06-configure-apache.sh</code>, <code>08-enable-apache-routing.sh</code>, <code>start-apache.sh</code>, <code>enable-dynamic-routing.sh</code>, <code>add-member.sh</code>.</p>
+
+<h3>3. Members registering with VM hostname instead of localhost</h3>
+<p>Added <code>--hostName=localhost</code> to <code>collective join</code> in <code>add-member-26.sh</code> and <code>add-member-25.sh</code>. Without this, members registered as <code>vm-1.itz-709wr4.local</code> and the dynamic routing table would advertise unreachable endpoints.</p>
+
+<h3>4. New: <code>apply-routing-rules.sh</code> + <code>config/controller/routing-rules.xml</code></h3>
+<p>Equivalent to the reference lab's Part 6. Pins <code>/server-info/*</code> to a specific member or restores round-robin.</p>
+
+<h3>5. <code>reset-environment.sh</code> cleanup paths</h3>
+<p>Fixed to clean <code>config/webserver1/</code> (primary) in addition to legacy <code>conf/</code>.</p>
+
+<h2>Current Blocker — Step 3b Dynamic Routing</h2>
+
+<div class="section-note">
+  <strong>Error:</strong> <code>CWWKX0229E: server responded with code 403 Forbidden</code> on <code>dynamicRouting setup</code> CLI<br />
+  <strong>Secondary error (plugin side):</strong> <code>CWWKV0020E: Authentication to the Dynamic Routing REST service uses the admin role</code>
+</div>
+
+<h3>What is confirmed working</h3>
+<ul>
+  <li>Controller is running with <code>dynamicRouting-1.0</code> + <code>restConnector-2.0</code> loaded</li>
+  <li><code>plugin-cfg.xml</code> is generated, <code>plugin-key.kdb</code> is created with correct certs (<code>memberRoot</code>, <code>controllerRoot</code>, <code>default</code>)</li>
+  <li>IHS starts and serves on port 8080</li>
+  <li>The <code>/ibm/api/dynamicRouting</code> endpoint exists (returns 500 only when called without <code>Accept: application/json</code> — the endpoint itself is healthy)</li>
+</ul>
+
+<h3>Root cause</h3>
+<p><code>restConnector-2.0</code> on Liberty 26 requires the calling user (<code>admin</code>) to be explicitly in the <code>administrator-role</code>. <code>quickStartSecurity</code> creates the user but does <strong>not</strong> automatically grant them the administrator-role for REST connector access. The <code>&lt;administrator-role&gt;&lt;user&gt;admin&lt;/user&gt;</code> dropin was added but the 403 persists — suggesting either a config merge issue or the dropin is not taking effect before the CLI runs.</p>
+
+<h3>What to diagnose in the next session</h3>
+<p>Run these on the VM and share output:</p>
+<pre># 1. Confirm the dropin is present and correct
+cat ~/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/configDropins/overrides/dynamic-routing.xml
+
+# 2. Check what security is actually loaded (may reveal conflicting config)
+cat ~/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/configDropins/overrides/collective-create.xml
+
+# 3. Test if admin/admin can reach the REST JMX endpoint directly
+curl -k -u admin:admin -w "\nHTTP %{http_code}\n" \
+    https://localhost:9443/IBMJMXConnectorREST/mbeans 2&gt;&amp;1 | tail -5
+
+# 4. Check controller log for security/role messages after last restart
+grep -i "administrator\|CWWKS\|role\|security" \
+    ~/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/logs/messages.log | tail -20</pre>
+
+<h3>Likely fix directions</h3>
+<ul>
+  <li>If <code>curl /IBMJMXConnectorREST/mbeans</code> also returns 403: the <code>administrator-role</code> dropin is not merging correctly — try adding <code>appSecurity-3.0</code> feature to the dropin</li>
+  <li>If <code>curl</code> returns 200: the timing fix isn't enough — the <code>dynamicRouting setup</code> command needs a longer wait or a retry loop</li>
+  <li>If <code>collective-create.xml</code> defines its own <code>&lt;administrator-role&gt;</code>: Liberty may not merge two — move everything into a single element</li>
+</ul>
+
+<h2>Key Files</h2>
+<table>
+  <tr><th>File</th><th>Purpose</th></tr>
+  <tr><td><code>scripts/step2-dynamic-routing.sh</code></td><td>Main script for dynamic routing setup — current work area</td></tr>
+  <tr><td><code>scripts/install-controller.sh</code></td><td>Deploys controller; writes <code>collective-create.xml</code> with <code>quickStartSecurity</code></td></tr>
+  <tr><td><code>scripts/add-member-26.sh</code></td><td>Deploys 26.0.0.8 member with <code>--hostName=localhost</code></td></tr>
+  <tr><td><code>scripts/apply-routing-rules.sh</code></td><td>New — dynamic routing rules (Part 6)</td></tr>
+  <tr><td><code>config/controller/routing-rules.xml</code></td><td>New — annotated routing rule template</td></tr>
+  <tr><td><code>scripts/reset-environment.sh</code></td><td>Full reset — stops all, wipes installs/, resets IHS</td></tr>
+</table>
+
+<footer>Made with IBM Bob</footer>
+</body>
+</html>
