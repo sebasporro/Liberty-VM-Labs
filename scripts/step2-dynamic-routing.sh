@@ -3,18 +3,18 @@
 # Prerequisites: install-controller.sh, add-member-26.sh, step1-was-plugin.sh
 #
 # What this script does:
-#   1. Ensures the controller is running HTTP/1.1 (restarts if still on HTTP/2)
-#   2. Neutralises any conflicting dynamic-routing.xml dropin on the controller
-#   3. Stops IHS; cleans stale plugin keystore files
-#   4. Runs `dynamicRouting setup` to generate plugin-key.p12 and register
-#      the webserver with the collective
-#   5. Retrieves the authoritative plugin-cfg.xml from the controller's own
-#      generated copy (not from the WORK_DIR — that file lacks the AcceptType
-#      property and often has stanzas stripped by setup)
-#   6. Injects <Property name="AcceptType" value="application/json"/> so that
-#      libodr.so sends the Accept header Liberty 26 requires
-#   7. Converts plugin-key.p12 → plugin-key.kdb (CMS) via gskcapicmd
-#   8. Installs files to IHS config/webserver1/, updates httpd.conf, restarts IHS
+#   1. Neutralises any conflicting dynamic-routing.xml dropin on the controller
+#   2. Stops IHS; cleans stale plugin keystore files
+#   3. Runs `dynamicRouting setup` to generate plugin-key.p12 and the
+#      plugin-cfg.xml with IntelligentManagement + ConnectorCluster stanzas
+#   4. Patches WORK_DIR/plugin-cfg.xml:
+#      a. Injects <Property name="AcceptType" value="application/json"/> so
+#         libodr.so sends the Accept header Liberty 26 requires
+#      b. Fixes the uri property to use a trailing slash
+#         (/ibm/api/dynamicRouting/) so Liberty 26 does not issue a 307
+#         redirect that libodr.so cannot follow
+#   5. Converts plugin-key.p12 → plugin-key.kdb (CMS) via gskcapicmd
+#   6. Installs files to IHS config/webserver1/, updates httpd.conf, restarts IHS
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
@@ -227,7 +227,17 @@ if 'AcceptType' not in content:
         flags=re.DOTALL
     )
 
-# 4. Ensure ServerCluster/VirtualHostGroup/UriGroup/Route stanzas are present.
+# 4. Fix the uri property: Liberty 26 redirects /ibm/api/dynamicRouting
+#    (no trailing slash) with HTTP 307.  libodr.so does not follow redirects,
+#    so it never gets a response and logs "Unable to find a transport".
+#    Use the trailing-slash form so Liberty serves the request directly.
+content = re.sub(
+    r'(<Property\s+name="uri"\s+value="/ibm/api/dynamicRouting)(")',
+    r'\g<1>/\g<2>',
+    content
+)
+
+# 5. Ensure ServerCluster/VirtualHostGroup/UriGroup/Route stanzas are present.
 #    The controller-generated file normally includes them, but guard anyway.
 if '<ServerCluster' not in content:
     stanzas = (
@@ -257,12 +267,16 @@ open(path, 'w').write(content)
 PYEOF
 
 grep -q 'AcceptType' "${WORK_DIR}/plugin-cfg.xml" || {
-    echo "ERROR: AcceptType injection failed. ConnectorCluster tag in controller's plugin-cfg.xml:"
-    grep -A3 'ConnectorCluster' "${WORK_DIR}/plugin-cfg.xml" || true
+    echo "ERROR: AcceptType injection failed. ConnectorCluster stanza:"
+    grep -A5 'ConnectorCluster' "${WORK_DIR}/plugin-cfg.xml" || true
     cat "${WORK_DIR}/plugin-cfg.xml"
     rm -rf "${WORK_DIR}"; exit 1
 }
-echo "      AcceptType injected OK"; echo ""
+# Confirm the trailing-slash uri fix was applied
+URI_LINE=$(grep 'name="uri"' "${WORK_DIR}/plugin-cfg.xml" 2>/dev/null | head -1)
+echo "      AcceptType injected OK"
+echo "      uri: ${URI_LINE}"
+echo ""
 
 # ---------------------------------------------------------------------------
 # Convert keystore PKCS12 → CMS (required format for the WAS plugin)
@@ -330,12 +344,21 @@ echo ""
 
 DR_NONE=$(curl -k -u admin:admin -s -o /dev/null -w "%{http_code}" \
     https://localhost:9443/ibm/api/dynamicRouting 2>/dev/null)
-DR_JSON=$(curl -k -u admin:admin -H "Accept: application/json" \
-    -s -w "%{http_code} body: %{size_download} bytes" -o /dev/null \
-    https://localhost:9443/ibm/api/dynamicRouting 2>/dev/null)
-echo "  Controller /ibm/api/dynamicRouting:"
-echo "    no Accept header : HTTP ${DR_NONE}  (500=expected; libodr.so uses AcceptType property)"
-echo "    Accept: app/json : HTTP ${DR_JSON}  (200=OK)"
+# Capture headers to detect 307 redirects and show Location
+DR_HEADERS=$(curl -k -u admin:admin -H "Accept: application/json" \
+    -s -D - -o /dev/null \
+    https://localhost:9443/ibm/api/dynamicRouting/ 2>/dev/null)
+DR_JSON_CODE=$(echo "${DR_HEADERS}" | grep -i "^HTTP" | tail -1 | awk '{print $2}')
+DR_LOCATION=$(echo "${DR_HEADERS}" | grep -i "^location:" | head -1)
+# Also follow any redirect to confirm final response
+DR_JSON_FOLLOW=$(curl -k -u admin:admin -H "Accept: application/json" \
+    -L -s -o /dev/null -w "%{http_code}" \
+    https://localhost:9443/ibm/api/dynamicRouting/ 2>/dev/null)
+echo "  Controller /ibm/api/dynamicRouting/:"
+echo "    no Accept header  : HTTP ${DR_NONE}   (500=expected)"
+echo "    Accept:app/json   : HTTP ${DR_JSON_CODE}  (200=OK; 307=redirect problem)"
+[[ -n "${DR_LOCATION}" ]] && echo "    Location          : ${DR_LOCATION}"
+echo "    following redirect: HTTP ${DR_JSON_FOLLOW}  (200=OK even if 307 above)"
 echo ""
 
 echo "  Plugin log (ODR / connect lines):"

@@ -91,20 +91,34 @@ fi
 
 # ---------------------------------------------------------------------------
 section "12. CONTROLLER: /ibm/api/dynamicRouting — HTTP status + response body"
-echo "--- Without Accept header (what the WAS plugin sends) ---" >> "${OUT}"
+echo "--- Without Accept header (no-trailing-slash) ---" >> "${OUT}"
 curl -k -u admin:admin -s -w "\nHTTP_STATUS: %{http_code}\n" \
     https://localhost:9443/ibm/api/dynamicRouting 2>&1 >> "${OUT}"
 echo "" >> "${OUT}"
-echo "--- With Accept: application/json (full response body) ---" >> "${OUT}"
+echo "--- Without Accept header (trailing-slash) ---" >> "${OUT}"
+curl -k -u admin:admin -s -w "\nHTTP_STATUS: %{http_code}\n" \
+    https://localhost:9443/ibm/api/dynamicRouting/ 2>&1 >> "${OUT}"
+echo "" >> "${OUT}"
+echo "--- With Accept: application/json, no trailing slash (full headers) ---" >> "${OUT}"
 curl -k -u admin:admin -H "Accept: application/json" \
-    -s -w "\nHTTP_STATUS: %{http_code}\n" \
+    -s -D - -o /tmp/dr-body-noslash.txt \
+    https://localhost:9443/ibm/api/dynamicRouting 2>&1 >> "${OUT}"
+echo "--- response body (first 10 lines) ---" >> "${OUT}"
+head -10 /tmp/dr-body-noslash.txt >> "${OUT}" 2>/dev/null; rm -f /tmp/dr-body-noslash.txt
+echo "" >> "${OUT}"
+echo "--- With Accept: application/json, trailing slash (full headers) ---" >> "${OUT}"
+curl -k -u admin:admin -H "Accept: application/json" \
+    -s -D - -o /tmp/dr-body-slash.txt \
+    https://localhost:9443/ibm/api/dynamicRouting/ 2>&1 >> "${OUT}"
+echo "--- response body (first 10 lines) ---" >> "${OUT}"
+head -10 /tmp/dr-body-slash.txt >> "${OUT}" 2>/dev/null; rm -f /tmp/dr-body-slash.txt
+echo "" >> "${OUT}"
+echo "--- With Accept:json + follow redirects (-L) — final HTTP status ---" >> "${OUT}"
+curl -k -u admin:admin -H "Accept: application/json" \
+    -L -s -w "HTTP_STATUS after redirects: %{http_code}\n" -o /dev/null \
     https://localhost:9443/ibm/api/dynamicRouting 2>&1 >> "${OUT}"
 echo "" >> "${OUT}"
-echo "--- Full verbose headers (no Accept) — shows HTTP/1.1 vs HTTP/2 ---" >> "${OUT}"
-curl -k -u admin:admin -s -D - -o /dev/null \
-    https://localhost:9443/ibm/api/dynamicRouting 2>&1 >> "${OUT}"
-echo "" >> "${OUT}"
-echo "--- Protocol in use on adminCenter (HTTP/1.1 required; HTTP/2 = restart needed) ---" >> "${OUT}"
+echo "--- Protocol on adminCenter ---" >> "${OUT}"
 curl -k -u admin:admin -s -D - -o /dev/null \
     https://localhost:9443/adminCenter 2>/dev/null | head -1 >> "${OUT}"
 
