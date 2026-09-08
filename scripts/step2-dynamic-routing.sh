@@ -219,19 +219,36 @@ cp "${WORK_DIR}/plugin-key.sth"  "${PLUGIN_DIR}/plugin-key.sth"
 
 rm -rf "${WORK_DIR}"
 
-# Update WebSpherePluginConfig to point at the dynamic plugin-cfg.xml.
-# Use sed with a case-insensitive, whitespace-tolerant match so it works
-# regardless of how step1 wrote the directive. The || true guards against
-# set -e killing the script if grep finds no match.
+# Update WebSpherePluginConfig in httpd.conf using Python for reliable
+# case-insensitive line replacement regardless of how step1 wrote it.
 PLUGIN_CFG_LINE="WebSpherePluginConfig ${PLUGIN_DIR}/plugin-cfg.xml"
-if grep -qi "WebSpherePluginConfig" "${HTTPD_CONF}" 2>/dev/null; then
-    sed -i "s|[Ww]eb[Ss]phere[Pp]lugin[Cc]onfig.*|${PLUGIN_CFG_LINE}|" "${HTTPD_CONF}"
-    echo "      WebSpherePluginConfig updated in httpd.conf"
-else
-    printf '\n# Dynamic routing — added by step2-dynamic-routing.sh\n%s\n' \
-        "${PLUGIN_CFG_LINE}" >> "${HTTPD_CONF}"
-    echo "      WebSpherePluginConfig added to httpd.conf"
-fi
+python3 - "${HTTPD_CONF}" "${PLUGIN_CFG_LINE}" <<'PYEOF'
+import sys
+
+conf_path = sys.argv[1]
+new_line  = sys.argv[2]
+
+with open(conf_path) as f:
+    lines = f.readlines()
+
+found = False
+out = []
+for line in lines:
+    if line.strip().lower().startswith("webspherePluginConfig".lower()):
+        out.append(new_line + "\n")
+        found = True
+    else:
+        out.append(line)
+
+if not found:
+    out.append("\n# Dynamic routing — added by step2-dynamic-routing.sh\n")
+    out.append(new_line + "\n")
+
+with open(conf_path, 'w') as f:
+    f.writelines(out)
+
+print("      WebSpherePluginConfig set to: " + new_line.split(None, 1)[1])
+PYEOF
 
 echo ""
 echo "  --- Diagnostic: WebSpherePluginConfig in httpd.conf ---"
