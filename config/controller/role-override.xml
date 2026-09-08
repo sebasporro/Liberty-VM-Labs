@@ -31,10 +31,12 @@
         <user>admin</user>
     </administrator-role>
 
-    <!-- clientAuthenticationSupported allows the IHS plugin to authenticate
-         with its collective certificate when connecting to the ODR endpoint.
-         Declared here (not in a dropin) so it is processed in the same pass
-         as appSecurity-5.0 and administrator-role. -->
-    <ssl id="defaultSSLConfig" clientAuthenticationSupported="true"/>
+    <!-- Do NOT require client certificate authentication on the default SSL config.
+         The WAS plugin connects to /ibm/api/dynamicRouting over HTTPS but does not
+         present a collective client certificate — it authenticates via the trusted
+         keystore built by dynamicRouting setup --autoAcceptCertificates.
+         clientAuthenticationSupported="true" causes unknown_ca SSL handshake failures
+         because the controller demands a cert the plugin was not issued. -->
+    <ssl id="defaultSSLConfig" clientAuthentication="false"/>
 
 </server>

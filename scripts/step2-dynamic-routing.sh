@@ -57,16 +57,24 @@ CTRL_HTTP=$(curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adm
 }
 
 # ---------------------------------------------------------------------------
-# Ensure dynamicRouting-1.0 is active on the controller.
-# The controller may have been installed before this feature was added to
-# role-override.xml. Copy the current version; Liberty picks up configDropins
-# changes live — no restart needed.
+# Ensure the controller has the correct role-override.xml:
+#   - dynamicRouting-1.0 feature declared
+#   - clientAuthentication="false" on the default SSL config
+#     (clientAuthenticationSupported="true" causes unknown_ca SSL failures
+#      because the WAS plugin does not present a collective client cert)
+# Always copy — idempotent, Liberty picks up configDropins changes live.
 # ---------------------------------------------------------------------------
+NEED_SLEEP=false
 if ! grep -q "dynamicRouting-1.0" "${CTRL_OVERRIDES}/role-override.xml" 2>/dev/null; then
-    echo "  controller role-override.xml is missing dynamicRouting-1.0 — updating..."
-    cp "${WORKSPACE_ROOT}/config/controller/role-override.xml" \
-       "${CTRL_OVERRIDES}/role-override.xml"
-    echo "  Waiting 15s for Liberty to load the feature..."
+    NEED_SLEEP=true
+fi
+if grep -q 'clientAuthenticationSupported="true"' "${CTRL_OVERRIDES}/role-override.xml" 2>/dev/null; then
+    NEED_SLEEP=true
+fi
+cp "${WORKSPACE_ROOT}/config/controller/role-override.xml" \
+   "${CTRL_OVERRIDES}/role-override.xml"
+if [[ "${NEED_SLEEP}" == "true" ]]; then
+    echo "  controller role-override.xml updated — waiting 15s for Liberty to reload..."
     sleep 15
 fi
 
