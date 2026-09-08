@@ -19,8 +19,6 @@
 # dynamicRouting-1.0 and restConnector-2.0 are already declared in
 # config/controller/role-override.xml — no controller restart is needed.
 # =============================================================================
-set -euo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
@@ -46,24 +44,19 @@ if [[ ! -x "${WLP_BIN}/dynamicRouting" ]]; then
     echo "       Run scripts/install-controller.sh first."
     exit 1
 fi
-
 if [[ ! -x "${GSKCAPICMD}" ]]; then
     echo "ERROR: gskcapicmd not found at ${GSKCAPICMD}"
     echo "       Run scripts/install-ihs.sh first."
     exit 1
 fi
-
 if [[ ! -f "${IHS_ROOT}/conf/plugin-cfg.xml" ]]; then
     echo "ERROR: ${IHS_ROOT}/conf/plugin-cfg.xml not found."
     echo "       Run scripts/step1-was-plugin.sh first."
     exit 1
 fi
-
-CTRL_STATUS=$(curl -k -s -o /dev/null -w "%{http_code}" \
-    https://localhost:9443/adminCenter 2>/dev/null)
-if [[ ! "${CTRL_STATUS}" =~ ^(200|302)$ ]]; then
-    echo "ERROR: Controller is not responding on HTTPS 9443 (got HTTP ${CTRL_STATUS})."
-    echo "       Run scripts/install-controller.sh first."
+CTRL_STATUS=$(curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adminCenter 2>/dev/null)
+if [[ "${CTRL_STATUS}" != "200" && "${CTRL_STATUS}" != "302" ]]; then
+    echo "ERROR: Controller not responding on HTTPS 9443 (HTTP ${CTRL_STATUS})."
     exit 1
 fi
 
@@ -122,14 +115,14 @@ fi
     --pluginInstallRoot="${IHS_ROOT}" \
     "${WS_FLAG}" \
     --targetPath="${WORK_DIR}" \
-    --autoAcceptCertificates
+    --autoAcceptCertificates || { echo "ERROR: dynamicRouting setup failed"; rm -rf "${WORK_DIR}"; exit 1; }
 
 echo ""
 echo "      Files produced by dynamicRouting setup in ${WORK_DIR}:"
 ls -la "${WORK_DIR}/" 2>/dev/null | sed 's/^/        /'
 
 if [[ ! -f "${WORK_DIR}/plugin-cfg.xml" || ! -f "${WORK_DIR}/plugin-key.p12" ]]; then
-    echo "ERROR: dynamicRouting setup did not produce expected output files in ${WORK_DIR}"
+    echo "ERROR: dynamicRouting setup did not produce expected output files"
     rm -rf "${WORK_DIR}"
     exit 1
 fi
@@ -147,7 +140,7 @@ echo "[3/4] Converting plugin keystore (PKCS12 → CMS)..."
     -old_format pkcs12 \
     -target "${WORK_DIR}/plugin-key.kdb" \
     -new_format cms \
-    -stash
+    -stash || { echo "ERROR: gskcapicmd keystore conversion failed"; rm -rf "${WORK_DIR}"; exit 1; }
 
 # Set the first available personal cert as default (label varies by build).
 FIRST_LABEL=$("${GSKCAPICMD}" -cert -list \
@@ -258,12 +251,13 @@ for p in 9081 9082 9083 9084; do
 done
 echo ""
 
-"${APACHECTL}" configtest
-"${APACHECTL}" start
+"${APACHECTL}" configtest || { echo "ERROR: httpd.conf syntax check failed"; exit 1; }
+"${APACHECTL}" start || true
 sleep 3
 
 if ! ss -tlnp 2>/dev/null | grep -q ":8080 "; then
     echo "ERROR: IHS failed to start. Check: ${IHS_ROOT}/logs/error_log"
+    tail -10 "${IHS_ROOT}/logs/error_log" 2>/dev/null | sed 's/^/  /'
     exit 1
 fi
 echo "      IHS running on port 8080"
