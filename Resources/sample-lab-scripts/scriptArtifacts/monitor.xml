@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<server description="Monitoring Configuration">
+  <featureManager>
+    <feature>monitor-1.0</feature>
+    <feature>transportSecurity-1.0</feature>
+  </featureManager>
+
+  <sslDefault sslRef="defaultSSLConfig" />
+</server>

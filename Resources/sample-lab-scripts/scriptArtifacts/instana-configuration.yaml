@@ -1,0 +1,1284 @@
+# Manual a-priori configuration. Configuration will be only used when the sensor
+# is actually installed by the agent.
+# The commented out example values represent example configuration and are not
+# necessarily defaults. Defaults are usually 'absent' or mentioned separately.
+# Changes are hot reloaded unless otherwise mentioned.
+
+# It is possible to create files called 'configuration-abc.yaml' which are
+# merged with this file in file system order. So 'configuration-cde.yaml' comes
+# after 'configuration-abc.yaml'. Only nested structures are merged, values are
+# overwritten by subsequent configurations.
+
+# Secret manager integration
+# The host agent can retrieve confidential data like credentials or other
+# information you do not want to put in clear text in here from secret managers.
+# HashiCorp Vault integration:
+#com.instana.configuration.integration.vault:
+#  connection_url: <vault_server_base_url> # The address (URL) of the Vault server instance(e.g. http://127.0.0.1:8200 or https://exapmle.com:8200)
+#  prefix: <optional_prefix> # Optional prefix path required if kv_version 2 is used and the /data/ must be injected further down
+#  token: <vault_access_token> # Vault access token with assigned, at least, `read` access policy to relevant Vault paths, optional if other auth providers are present
+#  github: # Optional auth method if Vault access token is not provided, has higher priority than approle if present
+#    github_token: <github_token> # Personal Access Token, must provide at least read:org scope, must be present if github is used as an auth provider
+#    auth_mount: github # Optional mount path for GitHub Auth, defaults to github
+#  approle: # Optional auth method if Vault access token or github auth is not provided
+#    role_id: <roleId> # AppRole RoleId, must be present if approle is used as an auth provider
+#    secret_id: <secretId> # AppRole SecretId, must be present if approle is used as an auth provider
+#    auth_mount: approle # Optional mount path for AppRole Auth, defaults to approle
+#  path_to_pem_file: <path_to_X.509_CA_certificate> # X.509 CA certificate (UTF8 encoded) in unencrypted PEM format, used by the Agent when communicating with Vault over HTTPS
+#  secret_refresh_rate: 24 # This configuration option allows you to account for rotating credentials, refresh rate in hours, default 24
+#  kv_version: 2 # The Key/Value secrets engine version, default is 2
+#
+# Use of Vault secrets in a plugin:
+# com.instana.plugin.someplugin:
+#   user: 'instana'
+#   password:
+#     configuration_from:
+#       type: vault
+#       secret_key:
+#         path: secret/someplugin
+#         key: top_secret
+
+# Secrets
+# To filter sensitive data from collection by the agent, all sensors respect
+# the following secrets configuration. If a key collected by a sensor matches
+# an entry from the list, the value is redacted.
+#com.instana.secrets:
+#  matcher: 'contains-ignore-case' # 'contains-ignore-case', 'contains', 'regex'
+#  list:
+#    - 'key'
+#    - 'password'
+#    - 'secret'
+
+# Ignore processes
+# To ignore any monitoring of certain processes, uncomment the
+# com.instana.ignore section and list all process names of processes that should
+# not be monitored.
+# Sometimes scripts or other jobs are started through the same command, but
+# only the execution of a single command should be ignored. In this case use
+# arguments to specify any argument that should cause a process to be ignored.
+#
+# Important Note: Process names on Windows are case-sensitive.
+#com.instana.ignore:
+#  processes:
+#    - 'java'
+#    - 'httpd'
+#  arguments:
+#    - '-batch-file=/tmp/batch.def'
+
+# Host
+# Instana will by default only monitor local filesystems. It is possible to
+# explicitly list the remote filesystems that shall be monitored.
+# The name for the config setting is the device name, that is the first column
+# in mtab / df
+#com.instana.plugin.host:
+#  tags:
+#    - 'production'
+#    - 'app1'
+#  filesystems:
+#    - 'server:/usr/local/pub'
+#    - 'tmpfs:/mount/point/path'
+#  collectInstalledSoftware: true # [true, false]
+#  collectSystemId: false
+#  aixEventsPollRate: 900 # (Optional) Only for AIX systems. Setting a value to 900 seconds or larger will enable error report event collection and removing it will stop it.
+
+# Hardware & Zone
+com.instana.plugin.generic.hardware:
+  enabled: true # disabled by default
+  availability-zone: 'Liberty VMs'
+
+# AWS Services
+# Monitoring of all AWS Service are enabled by default except for AWS XRay.
+# Default values for cloudwatch_period are in seconds and equal to AWS defaults
+# Values for include_tags/exclude_tags are comma separated list of tags in key:value format (example: env:dev,env:test)
+
+#com.instana.plugin.aws:
+#  tagged-services-poll-rate: 300
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.apigateway:
+#  enabled: false
+#  cloudwatch_period: 60
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.beanstalk:
+#  enabled: false
+#  cloudwatch_period: 60
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.dynamodb:
+#  enabled: false
+#  cloudwatch_period: 300
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.ebs:
+#  enabled: false
+#  cloudwatch_period: 300
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.ec:
+#  enabled: false
+#  cloudwatch_period: 60
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.ec2:
+#  enabled: false
+#  tags-poll-rate: 30
+
+#com.instana.plugin.aws.elb:
+#  enabled: false
+#  cloudwatch_period: 60
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.emr:
+#  enabled: false
+#  cloudwatch_period: 300
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.es:
+#  enabled: false
+#  cloudwatch_period: 300
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.kinesis:
+#  enabled: false
+#  cloudwatch_period: 300
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.lambda:
+#  enabled: false
+#  cloudwatch_period: 300
+#  include_tags:
+#  exclude_tags:
+
+#com.instana.plugin.aws.mq:
+#  enabled: false
+#  cloudwatch_period: 300
+#  PLACEHOLDER_ACTIVE_MQ_BROKER_NAME: # replace PLACEHOLDER_ACTIVE_MQ_BROKER_NAME with your ActiveMQ broker name
+#    queues:
+#      - 'queue1'
+#      - 'queue2'
+#    topics:
+#      - 'topic1'
+#      - 'topic2'
+#  PLACEHOLDER_RABBIT_MQ_BROKER_NAME: # replace PLACEHOLDER_RABBIT_MQ_BROKER_NAME with your RabbitMQ broker name
+#    queuesRegex: '.*' # Regex pattern used for matching monitored queues
+#    monitorQueues:
+#      - queue: 'queue1' # name of the queue
+#        vhost: '/' # name of the vhost, default is '/'
+#      - queue: 'queue2' # name of the queue
+#        vhost: '/' # name of the vhost, default is '/'
+#  include_tags:
+#  exclude_tags:
+
+#com.instana.plugin.aws.msk:
+#  enabled: false
+#  cloudwatch_period: 300
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.rds:
+#  enabled: false
+#  cloudwatch_period: 60
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.s3:
+#  enabled: false
+#  cloudwatch_period: 60
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.sqs:
+#  enabled: false
+#  cloudwatch_period: 300
+#  include_tags:
+#  exclude_tags:
+#  include_untagged: true
+
+#com.instana.plugin.aws.xray:
+#  enabled: false
+
+# ActiveMQ
+#com.instana.plugin.activemq:
+#  monitorQueues: # max 100 queues
+#    - 'DLQ.test-1'
+#    - 'test-queue-1'
+#    - 'ActiveMQ.DLQ'
+#  monitorTopics: #max 100 topics
+#    - 'ActiveMQ.Advisory.Topic'
+#    - 'test-topic-1'
+
+# ActiveMQ Artemis
+#com.instana.plugin.activemqartemis:
+#  monitorQueues: # max 100 queues
+#    - 'test-1'
+#    - 'test-queue-1'
+#    - 'DLQ'
+
+# Apache RocketMQ
+#com.instana.plugin.rocketmq:
+#  enabled: true
+#  poll_rate: 60
+#  nameServerClusters:
+#    - namesrvAddr: 'ip1:9876' # Name server IP:port (required)
+#      availabilityZone: 'rocketmqzone'
+#      enableACL: false # Whether enable access control. Default is false
+#      accessKey: '' # The accessKey is used to verify the identity of the user
+#      secretKey: '' # The secretKey is used to encrypt and verify the signature string
+#    - namesrvAddr: '9.30.221.222:9876'
+#      availabilityZone: 'RocketMQ Custom Zone' # cluster name will be used by default (optional)
+#      enableACL: false # Whether enable access control. Default is false
+#      accessKey: '' # The accessKey is used to verify the identity of the user
+#      secretKey: '' # The secretKey is used to encrypt and verify the signature string
+
+# Ceph
+#com.instana.plugin.ceph:
+#  ceph-executable-path: '/usr/bin/ceph'
+
+# Clickhouse
+#com.instana.plugin.clickhouse:
+#  user: default    # the username used to access ClickHouse's HTTP interface
+#  password: root   # the password used to access ClickHouse's HTTP interface
+#  protocol: http   # 'http' or 'https'
+#  host: localhost  # the host name or IP of the ClickHouse server
+#  httpPort: 8123   # the port of the ClickHouse server
+#  monitorTables    # more in-depth metrics for these tables
+#    - 'database.table1'
+#    - 'database.table2'
+#    - 'database.table3'
+
+# HashiCorp Consul
+#com.instana.plugin.consul:
+#  enabled: true   # enabled by default
+#  client: ''      # client endpoint hostname, by default sensor will parse '-client' parameter or use 'localhost'
+#  httpPort: 8500  # client endpoint HTTP port, by default sensor will parse '-http-port' parameter or use 8500
+#  token: ''       # 'token' to access consul endpoint when 'acl_default_policy' is set to 'deny'
+
+# Couchbase
+#com.instana.plugin.couchbase:
+#  user: ''
+#  password: ''
+
+# CRI-O
+#com.instana.plugin.crio:
+#  stats:
+#    interval: 10 # seconds
+
+# DB2
+com.instana.plugin.db2:
+#  # Local monitoring configuration
+  local: # multiple local configurations supported
+    - instance: 'db2inst1'
+      port: '50000'
+      user: 'db2inst1'
+      password: 'db2inst1-pwd'
+#      accessTokenType: 'JWT' #If enabled, password field takes token value as password instead of plain text. So, please enable this only for token authentication.
+#      poll_rate: 5 # seconds
+#      # TLS configuration
+#      sslTrustStorePassword: 'password'
+#      sslTrustStoreLocation: '/path/to/clientTrustStore.jks'
+      databases:
+        - 'pbw'
+#        - 'database2'
+#        - 'database3'
+#        - 'database4'
+#    - instance: 'db2inst2'
+#      port: '55000'
+#      user: 'db2inst2'
+#      password: 'password'
+#      accessTokenType: 'JWT' #If enabled, password field takes token value as password instead of plain text. So, please enable this only for token authentication.
+#      poll_rate: 5 # seconds
+#      # TLS configuration
+#      sslTrustStorePassword: 'password'
+#      sslTrustStoreLocation: '/path/to/clientTrustStore.jks'
+#      databases:
+#        - 'database1'
+#        - 'database2'
+#        - 'database3'
+#        - 'database4'
+#  # Remote monitoring configuration
+#  remote: # multiple remote configurations supported
+#    - host: 'remote.host-1.com'
+#      port: '50000'
+#      tabschema: 'SYSTOOLS'
+#      user: 'db2inst1'
+#      password: 'db2inst1'
+#      accessTokenType: 'JWT' #If enabled, password field takes token value as password instead of plain text. So, please enable this only for token authentication.
+#      sslTrustStorePassword: 'password'
+#      sslTrustStoreLocation: '/path/to/clientTrustStore.jks'
+#      availabilityZone: 'DB2 Remote Monitoring'
+#      poll_rate: 5 # seconds
+#      databases:
+#        - 'db'
+#        - 'sample'
+#    - host: 'remote.host-2.com'
+#      port: '50000'
+#      tabschema: 'SYSTOOLS'
+#      user: 'db2inst1'
+#      password: 'db2inst1'
+#      accessTokenType: 'JWT' #If enabled, password field takes token value as password instead of plain text. So, please enable this only for token authentication.
+#      sslTrustStorePassword: 'password'
+#      sslTrustStoreLocation: '/path/to/clientTrustStore.jks'
+#      availabilityZone: 'DB2 Remote Monitoring'
+#      poll_rate: 5 # seconds
+#      databases:
+#        - 'db'
+#        - 'sample'
+
+# Db2Z
+#com.instana.plugin.db2z:
+#  remote: # multiple remote configurations supported
+#    - host: '' # is the IP address of the IBM Db2 for z/OS.
+#      port: '5040' # is the port of the IBM Db2 for z/OS.
+#      availabilityZone: '' # default is 'DB2Z Remote Monitoring'
+#      poll_rate: 60 # metrics poll rate in seconds.
+#      locations: # multiple locations supported
+#        - name: '' # is the name of the location of the IBM Db2 for z/OS.
+#          user: '' # is the userid on the z/OS to be used for accessing the IBM Db2 for z/OS.
+#          password: '' # is the password of that userid.
+#        - name: '' # is the name of the location of the IBM Db2 for z/OS.
+#          user: '' # is the userid on the z/OS to be used for accessing the IBM Db2 for z/OS.
+#          password: '' # is the password of that userid.
+#    - host: '' # is the IP address of the IBM Db2 for z/OS.
+#      port: '5040' # is the port of the IBM Db2 for z/OS.
+#      availabilityZone: '' # default is 'DB2Z Remote Monitoring'
+#      poll_rate: 60 # metrics poll rate in seconds.
+#      locations: # multiple locations supported
+#        - name: '' # is the name of the location of the IBM Db2 for z/OS.
+#          user: '' # is the userid on the z/OS to be used for accessing the IBM Db2 for z/OS.
+#          password: '' # is the password of that userid.
+
+
+# Domino Sensor
+#com.instana.plugin.domino:
+#  metrics-include: '.*'
+
+# eBPF sensor
+# # eBPF is only available on Linux hosts. Requires a 4.7 or later kernel with `debugfs` mounted.
+# # Red Hat has backported BPF to RHEL 7.6 (kernel version 3.10.0-957 or later).
+#com.instana.plugin.ebpf:
+#  enabled: true
+
+# ETCD
+#com.instana.plugin.etcd:
+#  caCertificate: '' # path to CA certificate (eg. /etc/etcd/ca.crt)
+#  clientCertificate: '' # path to client certificate (eg. /etc/etcd/client.crt)
+#  clientKey: '' # path to client key (eg. /etc/etcd/client.key)
+
+# Elasticsearch
+#com.instana.plugin.elasticsearch:
+#  enabled: true
+#  indicesRegex: '.*'
+
+# Google Cloud Platform - GCP
+#com.instana.plugin.gcp:
+#  poll_rate: 60 # How often Google's monitoring API will be polled in seconds
+#  credentials_path: '/opt/instana/credentials/cred-gcp.json' # Path to Service Account credentials
+#  exclude_tags: ''
+#  include_tags: ''
+
+# Google Cloud Datastore
+#com.instana.plugin.gcp.datastore:
+#  enabled: true
+#  poll_rate: 60 # How often Google's monitoring API will be polled in seconds
+#  credentials_path: '/opt/instana/credentials/cred-gcp.json' # Path to Service Account credentials
+
+# Google Cloud Pub/Sub
+# Values for include_tags/exclude_tags are comma separated list of tags in key:value format (example: env:dev,env:test)
+#com.instana.plugin.gcp.pubsub:
+#  enabled: true
+#  poll_rate: 60 # How often Google's monitoring API will be polled in seconds
+#  credentials_path: '/opt/instana/credentials/cred-gcp.json' # Path to Service Account credentials
+#  include_tags:
+#    topic: ''
+#    subscription: ''
+#  exclude_tags:
+#    topic: ''
+#    subscription: ''
+
+# Google Cloud Run
+# Values for include_tags/exclude_tags are comma separated list of tags in key:value format (example: env:dev,env:test)
+#com.instana.plugin.gcp.run:
+#  enabled: true
+#  poll_rate: 60 # How often Google's monitoring API will be polled in seconds
+#  credentials_path: '/opt/instana/credentials/cred-gcp.json' # Path to Service Account credentials
+#  include_tags: ''
+#  exclude_tags: ''
+
+# Google Cloud SQL
+#com.instana.plugin.gcp.sql:
+#  enabled: true
+#  poll_rate: 60 # How often Google's monitoring API will be polled in seconds
+#  credentials_path: '/opt/instana/credentials/cred-gcp.json' # Path to Service Account credentials
+
+# Google Cloud Storage
+# Values for include_tags/exclude_tags are comma separated list of tags in key:value format (example: env:dev,env:test)
+#com.instana.plugin.gcp.storage:
+#  enabled: true
+#  poll_rate: 60 # How often Google's monitoring API will be polled in seconds
+#  credentials_path: '/opt/instana/credentials/cred-gcp.json' # Path to Service Account credentials
+#  include_tags: ''
+#  exclude_tags: ''
+
+# Apache Httpd
+com.instana.plugin.httpd:
+#  user: ''
+#  password: ''
+  tracing:
+#    # Enabling tracing will automatically download the HTTPd Tracing module and
+#    # load it in your Apache configuration file. You will need to manually restart
+#    # Apache HTTP Server unless you specify a restart script in notificationScript
+#    # or enable autoRestart. Disabling tracing will not remove the HTTPd Tracing module.
+#    # It will only remove the tracing module config from the Apache configuration file.
+    enabled: true
+#    # Pins the HTTPd Tracing module to download and install to a specific version.
+#    # This can be used to rollback to previous versions of the module or to test
+#    # beta versions (when asked to do so). Expects the version to be given as
+#    # major.minor.patch format, e.g. 1.0.0
+#    pinModuleVersion: x.y.z
+#    # The absolute path to the script to trigger whenever the sensor installed
+#    # a different version of the HTTPd Tracing module than is currently installed.
+#    # Works for upgrades and downgrades. Default is empty.
+#    notificationScript: /path/to/restart_apache.sh
+#    # Enabling auto-restart will let the sensor attempt a graceful restart of your
+#    # Apache HTTP Server to load the updated HTTPd Tracing module into memory.
+#    # If you specify a notificationScript, then the sensor will ignore autoRestart setting
+#    # unless the execution of.notificationScript failed.
+    autoRestart: true
+
+# IBM ACE
+#com.instana.plugin.ace:
+#  enabled: true
+#  poll_rate: 60    # Default is 60 seconds, the minimum value is 20 seconds.
+#  NodesOrServers:  # Multiple Integration node instances or multiple standalone Integration Servers can be specified
+#    BK1:     # Example1: Integration Node with MQTT(required)
+#      ######################################################################################################
+#      # Following Parameters are used to access ACE server's rest api service to retrieve status data, configuration data, etc.
+#      # Optional parameters are commented out by default. Remove the ‘#’ when needed.
+#      ######################################################################################################
+#      # host: 'aceserver.com'                          # Host of ACE server or hosts of HA with multi-instance/RDQM system for remote monitoring. For HA, seperate multiple hosts by comma. (optional)
+#      restApiPort: '4414'                              # ACE server's rest api port (required)
+#      aceUsername: 'viewer'                            # ACE rest api service username if security is enabled (optional)
+#      acePassword: 'viewerPassword'                    # ACE rest api service password if security is enabled (optional)
+#      # keystore: '/tmp/server_keystore.jks'           # Keystore path for HTTPS connection (required only when HTTPS is enabled)
+#      # keystorePassword: 'password'                   # Keystore password for HTTPS connection (required only when HTTPS is enabled)
+#      # excludedServers: '<INTEGRATION_SERVER_NAMES>'  # Integration server name to be excluded from monitoring. You can separate multiple names by comma (optional)
+#      # availabilityZone: 'IBM ACE Custom Zone'        # Broker name will be used by default (optional)
+#      #######################################################################################################
+#      # Following parameters are used to access ACE server's pub/sub service, to retrieve performance statistics data
+#      # Optional parameters are commented out by default. Remove the ‘#’ when needed.
+#      # Note: if MQTT is used, then keep mqport only and comment out other MQ parameters.
+#      #######################################################################################################
+#      # mqHost: 'mqserver.com'                         # MQ host/IP address to access channel, which can be reached only by using the external IP address (optional)
+#      mqport: '11883'                                  # Set the port for the MQTT server or remote administration IBM MQ channel port (required)
+#      # queuemanagerName: 'QM1'                        # Queue Manager name (required for IBM MQ)
+#      # channel: 'SYSTEM.DEF.SVRCONN'                  # Remote administration channel (required for IBM MQ)
+#      # mqUsername: 'mqUser'                           # MQ channel authentication's username if security is enabled (optional for IBM MQ)
+#      # mqPassword: 'mqPassword'                       # MQ channel authentication's password if security is enabled (optional for IBM MQ)
+#      # mqKeystore: '<MQ_KEYSTORE_PATH>'               # Keystore path for TLS connection (optional for IBM MQ. Required only when TLS is enabled for remote monitoring)
+#      # mqKeystorePassword: '<MQ_KEYSTORE_PASSWORD>'   # Keystore password for TLS connection (optional for IBM MQ. Required only when TLS is enabled for remote monitoring)
+#      # mqCipherSuite: '<MQ_CIPHER_SUITE>'             # Cipher suite for TLS connection (optional for IBM MQ. Required only when TLS is enabled for remote monitoring)
+#    IS1:     # Example2: High Availability integration Node with MQ configured.(required)
+#      ######################################################################################################
+#      # Following Parameters are used to access ACE server's rest api service to retrieve status data, configuration data, etc.
+#      # Optional parameters are commented out by default. Remove the ‘#’ when needed.
+#      ######################################################################################################
+#      host: 'ha-instance1.com,ha-instance2.com'        # Host of ACE server or hosts of HA with multi-instance/RDQM system for remote monitoring. For HA, seperate multiple hosts by comma. (optional)
+#      restApiPort: '4414'                              # ACE server's rest api port (required)
+#      aceUsername: 'viewer'                            # ACE rest api service username if security is enabled (optional)
+#      acePassword: 'viewerPassword'                    # ACE rest api service password if security is enabled (optional)
+#      # keystore: '/tmp/server_keystore.jks'           # Keystore path for HTTPS connection (required only when HTTPS is enabled)
+#      # keystorePassword: 'password'                   # Keystore password for HTTPS connection (required only when HTTPS is enabled)
+#      # excludedServers: '<INTEGRATION_SERVER_NAMES>'  # Integration server name to be excluded from monitoring. You can separate multiple names by comma (optional)
+#      # availabilityZone: 'IBM ACE Custom Zone'        # Broker name will be used by default (optional)
+#      #######################################################################################################
+#      # Following parameters are used to access ACE server's pub/sub service, to retrieve performance statistics data
+#      # Optional parameters are commented out by default. Remove the ‘#’ when needed.
+#      #######################################################################################################
+#      # mqHost: 'mqserver.com'                         # MQ host or IP address to access channel, which can be reached only by using the external IP address (optional)
+#      mqport: '1414'                                   # Set the port for the MQTT server or remote administration IBM MQ channel port (required)
+#      queuemanagerName: 'QM2'                          # Queue Manager name (required for IBM MQ)
+#      channel: 'SYSTEM.DEF.SVRCONN'                    # Remote administration channel (required for IBM MQ)
+#      mqUsername: 'mqUser'                             # MQ channel authentication's username if security is enabled (optional for IBM MQ)
+#      mqPassword: 'mqPassword'                         # MQ channel authentication's password if security is enabled (optional for IBM MQ)
+#      # mqKeystore: '<MQ_KEYSTORE_PATH>'               # Keystore path for TLS connection (optional for IBM MQ. Required only when TLS is enabled for remote monitoring)
+#      # mqKeystorePassword: '<MQ_KEYSTORE_PASSWORD>'   # Keystore password for TLS connection (optional for IBM MQ. Required only when TLS is enabled for remote monitoring)
+#      # mqCipherSuite: '<MQ_CIPHER_SUITE>'             # Cipher suite for TLS connection (optional for IBM MQ. Required only when TLS is enabled for remote monitoring)
+#    BK1:2:   # Example3: Same broker names on different hosts, such as BK1, BK1:1, BK1:2, BK1:n, etc.
+#      ######################################################################################################
+#      # Following Parameters are used to access ACE server's rest api service to retrieve status data, configuration data, etc.
+#      # Optional parameters are commented out by default. Remove the ‘#’ when needed.
+#      ######################################################################################################
+#      host: 'aceserver.com'                            # Host of ACE server or hosts of HA with multi-instance/RDQM system for remote monitoring. For HA, seperate multiple hosts by comma. (optional)
+#      restApiPort: '4414'                              # ACE server's rest api port (required)
+#      aceUsername: 'viewer'                            # ACE rest api service username if security is enabled (optional)
+#      acePassword: 'viewerPassword'                    # ACE rest api service password if security is enabled (optional)
+#      # keystore: '/tmp/server_keystore.jks'           # Keystore path for HTTPS connection (required only when HTTPS is enabled)
+#      # keystorePassword: 'password'                   # Keystore password for HTTPS connection (required only when HTTPS is enabled)
+#      # excludedServers: '<INTEGRATION_SERVER_NAMES>'  # Integration server name to be excluded from monitoring. You can separate multiple names by comma (optional)
+#      # availabilityZone: 'IBM ACE Custom Zone'        # Broker name will be used by default (optional)
+#      #######################################################################################################
+#      # Following parameters are used to access ACE server's pub/sub service, to retrieve performance statistics data
+#      # Optional parameters are commented out by default. Remove the ‘#’ when needed.
+#      # Note: if MQTT is used, then keep mqport only and comment out other MQ parameters.
+#      #######################################################################################################
+#      mqHost: 'mqserver.com'                           # MQ host/IP address to access channel, which can be reached only by using the external IP address (optional)
+#      mqport: '1414'                                   # Set the port for the MQTT server or remote administration IBM MQ channel port (required)
+#      queuemanagerName: 'QM1'                          # Queue Manager name (required for IBM MQ)
+#      channel: 'SYSTEM.DEF.SVRCONN'                    # Remote administration channel (required for IBM MQ)
+#      mqUsername: 'mqUser'                             # MQ channel authentication's username if security is enabled (optional for IBM MQ)
+#      mqPassword: 'mqPassword'                         # MQ channel authentication's password if security is enabled (optional for IBM MQ)
+#      # mqKeystore: '<MQ_KEYSTORE_PATH>'               # Keystore path for TLS connection (optional for IBM MQ. Required only when TLS is enabled for remote monitoring)
+#      # mqKeystorePassword: '<MQ_KEYSTORE_PASSWORD>'   # Keystore password for TLS connection (optional for IBM MQ. Required only when TLS is enabled for remote monitoring)
+#      # mqCipherSuite: '<MQ_CIPHER_SUITE>'             # Cipher suite for TLS connection (optional for IBM MQ. Required only when TLS is enabled for remote monitoring)
+
+# IBM APM-Proxy
+#com.instana.plugin.ibmapmproxy:
+#  enabled: true
+#  host: '<INSERT_HOST_HERE>' # APM-Proxy host
+#  port: 443 # APM-Proxy port Default
+#  datainterval: 1 # Default
+#  heartbeatinterval: 15 # Default
+#  protocol: https # Default
+
+# IBM Cloud Platform Services
+#com.instana.plugin.ibmcloud:
+#  enabled: true
+#  locations: # Support multiple IBM Cloud locations. Add location configuration below.
+#    - location_endpoint: '<INSERT_ENDPOINT_HERE>' # IBM Cloud Monitoring endpoint. For example, https://us-south.monitoring.cloud.ibm.com
+#      apikey: '<INSERT_APIKEY_HERE>' # IBM Cloud Monitoring API Key for this location.
+#    - location_endpoint: '<INSERT_ENDPOINT_HERE>' # IBM Cloud Monitoring endpoint. For example, https://us-east.monitoring.cloud.ibm.com
+#      apikey: '<INSERT_APIKEY_HERE>' # IBM Cloud Monitoring API Key for this location.
+
+# IBM i Series
+#com.instana.plugin.ibmiseries:
+#  enabled: true
+#  remote: # multiple configurations supported
+#    - host: 'remote.host-1.com'
+#      user: 'username'
+#      password: 'password'
+#      availabilityZone: 'Db2 on i Remote Monitoring'
+#      poll_rate: 15 # seconds
+#    - host: 'remote.host-2.com'
+#      user: 'username'
+#      password: 'password'
+#      availabilityZone: 'Db2 on i Remote Monitoring'
+#      poll_rate_configuration: #Values are in seconds.
+#        os_poll_rate: 15 #This is default OS poll rate. Provide the values in seconds.
+#        db2_poll_rate: 15 #This is default DB2 poll rate. Provide the values in seconds.
+#        custom_poll_rate: #Multiple Poll Rate is supported. (Optional)
+#          poll_rate_1:
+#            polling_rate: 'Custom Poll Rate value' #Values in seconds. Example- 30
+#            components: 'Components/Grid Names in comma(,) separated way' #Refer documentation for components name.
+#            events: 'Names of the events in comma(,) separated way' #Refer documentation for events name.
+#          poll_rate_2:
+#            polling_rate: 'Custom Poll Rate value' #Values in seconds. Example- 60
+#            components: 'Components/Grid Names in comma(,) separated way' #Refer documentation for components name.
+#            events: 'Names of the events in comma(,) separated way' #Refer documentation for events name.
+#      user_specification: # For user inputs (Optional)
+#        activeJobs:
+#          jobs: 'comma separated list of job names' # example - '100345/QUSER/QZDASOINIT,QLWISVR/ADMIN2'
+#          event:
+#            identicalJobs:
+#              jobName/user: 'Provide JOB_NAME_SHORT/JOB_USER values in comma(,) separated way. Use * in user part as wild card character' # example - 'CT_AGENT/QAUTOMON,QZDASOINIT/*'
+#              threshold: 5 # Event will be triggered if jobs with same name & user in the running status is less than threshold value.
+#            runningStatus: 'Provide JobStatus/Subsystem values in comma(,) separated way. You can use * in subsystem part as wild card' # example - 'SIGW/QHTTPSVR,DSC/*,DEQW/QAUTOMON'
+#            inactiveJobs:  'Provide JOB_NAME in comma(,) separated way'  # example - '141714/QSYS/QAUTOMON , 137640/QSYS/QBATCH'
+#            enableInactiveJOBQStatus: #Allowed value 'true' or 'false'. Alert will be triggered for the inactive jobs if JOB_QUEUE_STATUS is 'RELEASED' or 'SCHEDULED' and JOB_STATUS is 'JOBQ'.
+#        messageQueue:
+#          filter: # User defined filter for Message Queue table
+#            library/queueName: 'Lib-1/queueName1,Lib-2/queueName2'  ## Provide values in comma(,) separated way. (Default Value : 'QSYS/QSYSOPR')
+#            timeFrame: '10 HOURS'  ## Format is : {value} MINUTES/HOURS/DAYS (Default Value : '10 MINUTES')
+#          event: # User defined filter for Message Queue table
+#            messageQueueIdEvent:
+#              Lib-1/queueName1: 'messageId-1,messageId-2' ## Provide values in comma(,) separated way.example: QSYS/QSYSOPR: 'CPC1E1D, CPI1E23'
+#              Lib-2/queueName2: 'messageId-3,messageId-4'
+#              Lib-3/queueName3: 'messageId-5,messageId-6,messageId-7'
+#              Lib-n/queueNamen: 'messageId-n'
+#            timeFrame: '1000 DAYS'  ## Format is : {value} MINUTES/HOURS/DAYS (Default Value : '10 MINUTES')
+#            messageQueueTextEvent:
+#              Lib-1/queueName1: 'Provide fully or partial message text' ## example:  QMTESTMQM/QMQMMSG: 'disconnected'
+#              Lib-2/queueName2: 'Provide fully or partial message text' ## example:  QSYS/QSYSOPR: 'Queued Publish/Subscribe Daemon'
+#              Lib-3/queueName3: 'Provide fully or partial message text' ## example:  QSYS/QAUTOMON: 'Cleanup'
+#            timeFrameText: '1000 DAYS'  ## Format is : {value} MINUTES/HOURS/DAYS (Default Value : '10 MINUTES')
+#        historyLog:
+#          filter:
+#            timeFrame: '1 DAYS'  ## Format is : {value} MINUTES / HOURS / DAYS (Default Value : '10 MINUTES')
+#        subsystem:
+#          subsystem_list: 'Provide SUBSYSTEM_DESCRIPTION_LIBRARY/SUBSYSTEM_DESCRIPTION in comma(,) separated way'   # example- 'QDEVELOP/RATS,QINMEDIA/QBASE'
+#        netstatEventInfo:
+#          port/address: 'Provide LOCAL_PORT/LOCAL_ADDRESS in comma(,) separated way. You can use * in LOCAL_ADDRESS as wild card.'  #example- '427/9.5.105.61 ,38695/* ,8475/9.51.151.81' [Alert will be triggered if TCP state is not LISTEN or Null]
+# IBM MQ
+#com.instana.plugin.ibmmq:
+#  enabled: true
+#  poll_rate: 60 # Default is 60 seconds
+#  queueManagers: # Multiple Queue Manager instances can be specified for both local and remote. For Instana agent on OCP, only local Queue Manager can be monitored.
+#    QUEUE_MANAGER_NAME_1: # If there are queue managers with the same name, it is required to append '-<host>' in the queue manager name to distinguish them.
+#      host: '<INSERT_HOST_HERE>' # Queue Manager host, required for remote monitor. Remove it for local monitor or when Instana agent is on OCP. (Optional)
+#      port: '<INSERT_PORT_HERE>' # Remote administration channel port, required for remote monitor. Remove it for local monitor or when Instana agent is on OCP. (Optional)
+#      channel: '<INSERT_CHANNEL_HERE>' # Remote administration channel. (Optional)
+#      username: '<INSERT_USERNAME_HERE>' # User ID to connect to MQ. (Optional)
+#      password: '<INSERT_PASSWORD_HERE>' # User password to connect to MQ. (Optional)
+#      #Inclusive or Exclusive list is a regex expression. If both defined, exclusive list will have priority over inclusive list.
+#      queuesIncludeRegex: '.*' # Regex for filtering inclusive queues. (Optional)
+#      queuesExcludeRegex: '' # Regex for filtering exclusive queues. (Optional)
+#      availabilityZone: 'IBM MQ Custom Zone' (Optional)
+#      keystore: '<INSERT_KEYSTORE_PATH_HERE>' # Keystore path for TLS connection (required only when TLS is enabled for remote monitor. Optional)
+#      keystorePassword: '<INSERT_KEYSTORE_PASSWORD_HERE>' # Keystore password for TLS connection (required only when TLS is enabled for remote monitor. Optional)
+#      cipherSuite: '<INSERT_CIPHER_SUITE_HERE>' # TLS cipher suite for TLS connection (required only when TLS is enabled for remote monitor. Optional)
+#      customEventQueues: 'SYSTEM.ADMIN.PERFM.EVENT, SYSTEM.ADMIN.CHANNEL.EVENT, SYSTEM.ADMIN.QMGR.EVENT' # User defined queue names to read performance/channel/qmgr events. Separated by comma. (Optional)
+#      poll_rate: 60 # Metrics poll rate in seconds. (Optional)
+#    QUEUE_MANAGER_NAME_2: # If there are queue managers with the same name, it is required to append '-<host>' in the queue manager name to distinguish them.
+#      host: '<INSERT_HOST_HERE>' # Queue Manager host, required for remote monitor. Remove it for local monitor or when Instana agent is on OCP. (Optional)
+#      port: '<INSERT_PORT_HERE>' # Remote administration channel port, required for remote monitor. Remove it for local monitor or when Instana agent is on OCP. (Optional)
+#      channel: '<INSERT_CHANNEL_HERE>' # Remote administration channel. (Optional)
+#      username: '<INSERT_USERNAME_HERE>' # User ID to connect to MQ. (Optional)
+#      password: '<INSERT_PASSWORD_HERE>' # User password to connect to MQ. (Optional)
+#      #Inclusive or Exclusive list is a regex expression. If both defined, exclusive list will have priority over inclusive list.
+#      queuesIncludeRegex: '.*' # Regex for filtering inclusive queues. (Optional)
+#      queuesExcludeRegex: '' # Regex for filtering exclusive queues. (Optional)
+#      availabilityZone: 'IBM MQ Custom Zone' (Optional)
+#      keystore: '<INSERT_KEYSTORE_PATH_HERE>' # Keystore path for TLS connection (required only when TLS is enabled for remote monitor. Optional)
+#      keystorePassword: '<INSERT_KEYSTORE_PASSWORD_HERE>' # Keystore password for TLS connection (required only when TLS is enabled for remote monitor. Optional)
+#      cipherSuite: '<INSERT_CIPHER_SUITE_HERE>' # TLS cipher suite for TLS connection (required only when TLS is enabled for remote monitor. Optional)
+#      customEventQueues: 'SYSTEM.ADMIN.PERFM.EVENT, SYSTEM.ADMIN.CHANNEL.EVENT, SYSTEM.ADMIN.QMGR.EVENT' # User defined queue names to read performance/channel/qmgr events. Separated by comma. (Optional)
+#      poll_rate: 60 # Metrics poll rate in seconds. (Optional)
+
+# IBM MQ Managed File Transfer
+#com.instana.plugin.ibmmqmft:
+#  enabled: true
+#  poll_rate: 10 # Default is 10 seconds
+#  instances:
+#    <INSERT_INSTANCE_NAME_HERE>: # Your MFT instance name must be in <COORDINATION_QUEUE_MANAGER_NAME>-<HOST> format
+#      coordinationQueueManager:
+#        name: '<INSERT_COORDINATION_QUEUE_MANAGER_NAME_HERE>' # Coordination queue manager name
+#        host: '<INSERT_HOST_HERE>' # Coordination Queue Manager host
+#        port: '<INSERT_PORT_HERE>' # Remote server connection channel port
+#        channel: '<INSERT_CHANNEL_HERE>' # Remote server connection channel
+#        username: '<INSERT_USERNAME_HERE>' # User ID to connect to the remote queue manager (optional)
+#        password: '<INSERT_PASSWORD_HERE>' # User password to connect to remote queue manager (optional)
+#        keystore: '<INSERT_KEYSTORE_PATH_HERE>' # Keystore path for TLS connection (required only when TLS is enabled)
+#        keystorePassword: '<INSERT_KEYSTORE_PASSWORD_HERE>' # Keystore password for TLS connection (required only when TLS is enabled)
+#        cipherSuite: '<INSERT_CIPHER_SUITE_HERE>' # TLS cipher suite for TLS connection (required only when TLS is enabled)
+#      commandQueueManager:
+#        name: '<INSERT_COMMAND_QUEUE_MANAGER_NAME_HERE>' # Command queue manager name
+#        host: '<INSERT_HOST_HERE>' # Command Queue Manager host
+#        port: '<INSERT_PORT_HERE>' # Remote server connection channel port
+#        channel: '<INSERT_CHANNEL_HERE>' # Remote server connection channel
+#        username: '<INSERT_USERNAME_HERE>' # User ID to connect to the remote queue manager (optional)
+#        password: '<INSERT_PASSWORD_HERE>' # User password to connect to remote queue manager (optional)
+#        keystore: '<INSERT_KEYSTORE_PATH_HERE>' # Keystore path for TLS connection (required only when TLS is enabled)
+#        keystorePassword: '<INSERT_KEYSTORE_PASSWORD_HERE>' # Keystore password for TLS connection (required only when TLS is enabled)
+#        cipherSuite: '<INSERT_CIPHER_SUITE_HERE>' # TLS cipher suite for TLS connection (required only when TLS is enabled)
+
+# IBM DataPower
+#com.instana.plugin.ibmdatapower:
+#  enabled: true
+#  poll_rate: 60 # Default is 60 seconds
+#  instances: # Multiple DataPower instances can be specified
+#    DATAPOWER_INSTANCE_HOST_1: # Remote DataPower Host or IP address
+#      port: '<INSERT_PORT_HERE>' # DataPower instance REST management interface port
+#      username: '<INSERT_USERNAME_HERE>' # User account to connect to DataPower
+#      password: '<INSERT_PASSWORD_HERE>' # User password to connect to DataPower
+#      cluster: '<INSERT_CLUSTER_HERE>' # The cluster to group multiple DataPower instances (optional)
+#    DATAPOWER_INSTANCE_HOST_2: # Remote DataPower Host or IP address
+#      port: '<INSERT_PORT_HERE>' # DataPower instance REST management interface port
+#      username: '<INSERT_USERNAME_HERE>' # User account to connect to DataPower
+#      password: '<INSERT_PASSWORD_HERE>' # User password to connect to DataPower
+#      cluster: '<INSERT_CLUSTER_HERE>' # The cluster to group multiple DataPower instances (optional)
+#    local: # Local monitoring configuration
+#      port: '<INSERT_PORT_HERE>' # Local DataPower REST management interface port
+#      username: '<INSERT_USERNAME_HERE>' # User account to connect to DataPower
+#      password: '<INSERT_PASSWORD_HERE>' # User password to connect to DataPower
+
+# Custom processes
+# To enable low level metric and availability monitoring for not automatically
+# discovered processes, uncomment the com.instana.plugin.process section and
+# list all process names of processes that should be monitored.
+# Sometimes scripts or other jobs are started through the same command, but
+# only the execution of a single command should be monitored. In this case use
+# arguments to specify any argument that should cause a process to be monitored.
+#com.instana.plugin.process:
+#  processes:
+#    - 'sshd'
+#    - 'slapd'
+#  arguments:
+#    - '/opt/script.sh'
+#  services:
+#    - 'nginx'
+#    - 'windows-service'
+
+# JBoss AS:
+#com.instana.plugin.jbossas:
+#  metrics-interval: 5 # seconds
+#  monitor-ejb-deployments: true
+#  monitor-ejb-deployments-regex: '' # provide regex for ejb deployment you want to monitor i.e xyz*
+#  monitor-web-deployments-regex: '' # provide regex for web deployment you want to monitor i.e xyz*
+#  monitor-data-source-config-regex: '' # provide regex for data source configuration you want to monitor i.e xyz*
+#  monitor-connector-regex: '' # provide regex for connectors configuration you want to monitor i.e xyz*
+
+# Jenkins
+#com.instana.plugin.jenkins:
+#  user: '' #default is 'user'
+#  password: '' #default is 'user'
+
+# Kafka
+#com.instana.plugin.kafka:
+#  topicsRegex: '.*'
+#  brokerPropertiesFilePath: ''
+#  collectLagData: '' # true or false. The default value is true
+#  sslTrustStore: '/path/to/truststore.jks'
+#  sslTrustStorePassword: 'kafkaTsPassword'
+#  sslKeyStore: '/path/to/sslKeyStoreFile.jks'
+#  sslKeyStorePassword: 'kafkaKsPassword'
+
+# MariaDB
+#com.instana.plugin.mariadb:
+#  user: ''
+#  password: ''
+
+# Memcached
+#com.instana.plugin.memcached:
+#  user: ''
+#  password: ''
+
+# MongoDB
+#com.instana.plugin.mongodb:
+#  user: ''
+#  source: '' # database where the user is defined
+#  password: ''
+#  sslTrustStore: '/path/to/truststore.jks'
+#  sslTrustStorePassword: 'mongoTsPassword'
+#  sslKeyStore: '/path/to/sslKeyStoreFile.jks'
+#  sslKeyStorePassword: 'mongoKsPassword'
+#  atlas:
+#    - publicKey: ''
+#      privateKey: ''
+#    - publicKey: ''
+#      privateKey: ''
+
+# Mssql
+#com.instana.plugin.mssql:
+#  user: ''
+#  password: ''
+#  port: ''
+
+# Mysql
+#com.instana.plugin.mysql:
+#  user: ''
+#  password: ''
+#  schema_excludes: ['INFORMATION_SCHEMA', 'PERFORMANCE_SCHEMA']
+#  sslTrustStore: '/path/to/truststore.jks'
+#  sslTrustStorePassword: 'mysqlTsPassword'
+#  sslKeyStore: '/path/to/sslKeyStoreFile.jks'
+#  sslKeyStorePassword: 'mysqlKsPassword'
+#  disableSslHostnameVerification: false
+
+# Nomad
+#com.instana.plugin.nomad:
+#  caCertificate: '' # path to CA certificate (eg. /etc/nomad/ca.crt)
+#  clientCertificate: '' # path to client certificate (eg. /etc/nomad/client.crt)
+#  clientKey: '' # path to client key (eg. /etc/nomad/client.key)
+
+# OpenLDAP
+#com.instana.plugin.openldap:
+#  user: '' # query like 'cn=Manager,dc=example,dc=com'
+#  password: '' # password for 'simple' authentication
+#  port: 10389 # default is 389
+#  schemaPath: '' # path to schema files
+
+# OracleDB
+#com.instana.plugin.oracledb:
+#  # Local monitoring configuration
+#  password: ''
+#  user: '' #default is 'sys as sysdba'
+#  port: '' #default '1521'
+#  host: '' #default is 'localhost'
+#  poll_rate: 1 # in seconds
+#  customPolling: # Restricted to maximum 3 non-zero poll rates
+#    - poll_rate: 30 # in seconds
+#      metrics:
+#        - TOP_CPU_CONSUMING_SESSION_LAST_10_MIN
+#        - ACTIVE_SESSIONS_RUNNING_MORE_THAN_600_SECS
+#        - LIBRARY_CACHE_HIT_RATIO
+#        - CURRENT_BLOCKING_SESSIONS
+#    - poll_rate: 60 # in seconds
+#      metrics:
+#        - TOP_ELAPSED_TIME_QUERIES
+#        - TOP_TEN_CPU_CONSUMING_SESSION
+#        - SQL_ID_CONSUMING_MORE_CPU
+#        - USER_FOREGROUND_SESSIONS
+#        - TOP_10_SQL_HIGH_IO_LAST_1_HR
+#        - ACTIVE_SESSION_HISTORY
+#    - poll_rate: 3600 # in seconds
+#      metrics:
+#        - TOP_10_SQL_HIGH_IO_LAST_24_HR
+#        - TOP_CPU_QUERIES_LAST_24_HRS
+#        - QUERIES_NOT_USING_BINDING_VARIABLES
+#  # Remote monitoring configuration
+#  remote: # multiple configurations supported
+#    - host: ''
+#      port: ''
+#      databaseSID: ''
+#      user: '' #default is 'sys as sysdba'
+#      password: ''
+#      availabilityZone: '' #default is 'Remote Monitoring'
+#      poll_rate: 1 # in seconds
+#      customPolling: # Restricted to maximum 3 non-zero poll rates
+#        - poll_rate: 30 # in seconds
+#          metrics:
+#            - TOP_CPU_CONSUMING_SESSION_LAST_10_MIN
+#            - ACTIVE_SESSIONS_RUNNING_MORE_THAN_600_SECS
+#            - LIBRARY_CACHE_HIT_RATIO
+#            - CURRENT_BLOCKING_SESSIONS
+#        - poll_rate: 60 # in seconds
+#          metrics:
+#            - TOP_ELAPSED_TIME_QUERIES
+#            - TOP_TEN_CPU_CONSUMING_SESSION
+#            - SQL_ID_CONSUMING_MORE_CPU
+#            - USER_FOREGROUND_SESSIONS
+#            - TOP_10_SQL_HIGH_IO_LAST_1_HR
+#            - ACTIVE_SESSION_HISTORY
+#        - poll_rate: 3600 # in seconds
+#          metrics:
+#            - TOP_10_SQL_HIGH_IO_LAST_24_HR
+#            - TOP_CPU_QUERIES_LAST_24_HRS
+#            - QUERIES_NOT_USING_BINDING_VARIABLES
+#    - host: ''
+#      port: ''
+#      databaseSID: ''
+#      user: '' #default is 'sys as sysdba'
+#      password: ''
+#      availabilityZone: '' #default is 'Remote Monitoring'
+#      poll_rate: 1 # in seconds
+#      customPolling: # Restricted to maximum 3 non-zero poll rates
+#        - poll_rate: 30 # in seconds
+#          metrics:
+#            - TOP_CPU_CONSUMING_SESSION_LAST_10_MIN
+#            - ACTIVE_SESSIONS_RUNNING_MORE_THAN_600_SECS
+#            - LIBRARY_CACHE_HIT_RATIO
+#            - CURRENT_BLOCKING_SESSIONS
+#        - poll_rate: 60 # in seconds
+#          metrics:
+#            - TOP_ELAPSED_TIME_QUERIES
+#            - TOP_TEN_CPU_CONSUMING_SESSION
+#            - SQL_ID_CONSUMING_MORE_CPU
+#            - USER_FOREGROUND_SESSIONS
+#            - TOP_10_SQL_HIGH_IO_LAST_1_HR
+#            - ACTIVE_SESSION_HISTORY
+#        - poll_rate: 3600 # in seconds
+#          metrics:
+#            - TOP_10_SQL_HIGH_IO_LAST_24_HR
+#            - TOP_CPU_QUERIES_LAST_24_HRS
+#            - QUERIES_NOT_USING_BINDING_VARIABLES
+
+# Synthetic Ping
+# com.instana.plugin.ping:
+#  endpoints:
+#    NAME: # example 'DC_EAST'
+#      type: '' # supported types : 'icmp', 'http'
+#      target: '' # host address
+
+# PostgreSQL
+#com.instana.plugin.postgresql:
+#  user: ''
+#  password: ''
+#  database: '' # by default PostgreSQL will use 'user' as database to connect to.
+
+
+#PowerHMC
+#com.instana.plugin.powerhmc:
+#  remote: # multiple hosts supported
+#    - host: ''# hostname or IP of PowerHMC server
+#      port: ''# default port is '12443' of PowerHMC API Server
+#      user: '' # username to access the PowerHMC server
+#      password: '' # password to access the PowerHMC server
+#      availabilityZone: 'PowerHMC Remote Monitoring'
+#      poll_rate: 300 # Poll rate in seconds. Poll rate can not be lesser than 300 seconds. If it is configured below 300 seconds then default value (300 seconds) will be set.
+#      eventsPollRate: 900 # Poll rate in seconds. Poll rate can not be lesser than 900 seconds. If it is configured below 900 seconds then default value (900 seconds) will be set.
+#      connectionTimeout: 50 # It is the timeout until a connection with the server is established. Default is 50 seconds.
+#      connectionRequestTimeout: 50 # It is the time to fetch a connection from the connection pool. Default is 50 seconds.
+#      socketTimeout: 50 # It is socket read time out. Default is 50 seconds.
+
+#IBMOpenStack
+#com.instana.plugin.ibmopenstack:
+#  remote: # multiple configurations supported
+#    - host: '' # hostname or IP of IBM OpenStack
+#      port: ' '# port number to connect to IBM OpenStack
+#      user: '' # username to access the IBM OpenStack
+#      password: '' # password to access the IBM OpenStack
+#      project: ''# project to access the IBM Openstack
+#      poll_rate: 15 # in seconds. The default is 15 seconds, if a lower value is specified, the default will be used.
+
+
+# Java Profiling
+#com.instana.plugin.profiling.java:
+#  enabled: false
+
+# Prometheus
+#com.instana.plugin.prometheus:
+#  # Global (all) endpoints username/password configuration (optional)
+#  username: ''
+#  password: ''
+#  customMetricSources: # list metric sources
+#   # Kubernetes configuration(s)
+#  - url: '/prometheus/endpoints/metrics'     # metrics endpoint, the IP and port are auto-discovered
+#    metricNameIncludeRegex: '.*'             # regular expression to filter metrics
+#    username: ''                             # endpoint specific username/password configuration
+#    password: ''
+#    # Static configuration(s)
+#  - url: 'http://localhost:8080/prometheus'
+#    metricNameIncludeRegex: 'abc+'           # regular expression to filter metrics
+#    username: ''                             # endpoint specific username/password configuration
+#    password: ''
+#  - url: 'http://223.58.1.10:9000/metrics'
+#    metricNameIncludeRegex: '[A-Z].*'
+
+
+# RabbitMq
+#com.instana.plugin.rabbitmq:
+#  user: 'guest'
+#  password: 'guest'
+#  queuesRegex: '.*' # Regex pattern used for matching monitored queues
+#  monitorQueues:
+#    - queue: 'queueName' #name of the queue
+#      vhost: '/' #name of the vhost, default is '/'
+
+# Redis
+#com.instana.plugin.redis:
+#  username: '' # Used when Redis 6 ACL applied
+#  password: ''
+## Instana requires the CONFIG command and it must not be disabled on the Redis side.
+## If it was renamed using 'rename-command', eg: rename-command CONFIG NEWCONFIG
+## this setting can be used to tell Instana the new command name
+#  config-command: 'NEWCONFIG'
+##  Monitor certain values in Redis
+#  monitor:
+#    - db: 0 # db number - defaults to 0 if absent
+#      key: 'logstash' # key of value, given as string
+
+# Redis Enterprise
+#com.instana.plugin.redisenterprise:
+#  enabled: true
+#  host: '<INSERT_CLUSTER_HOST_HERE>'
+#  port: '<INSERT_CLUSTER_PORT_HERE'
+#  email: '<INSERT_EMAIL_HERE>'
+#  password: '<INSERT_PASSWORD_HERE>'
+
+# Sap HANA
+#com.instana.plugin.saphana:
+#  singleContainer:
+#    user: '' #default is 'SYSTEM'
+#    password: ''
+#  multiContainer:
+#    DATABASE_NAME_1: #example 'HXE'
+#      user: '' #default is 'SYSTEM'
+#      password: ''
+#    DATABASE_NAME_2:
+#      user: '' #default is 'SYSTEM'
+#      password: ''
+
+# SpringBoot
+#com.instana.plugin.springboot:
+#  metrics-interval: 1
+#  health-interval: 30
+
+# StatsD
+#com.instana.plugin.statsd:
+#  enabled: true
+#  ports:
+#    udp: 8125
+#    mgmt: 8126
+#  bind-ip: "0.0.0.0" # all ips by default
+#  flush-interval: 10 # in seconds
+
+# Sybase SQL Anywhere
+#com.instana.plugin.sybase:
+#  servers:
+#    SERVER_NAME_1: #example 'server1'
+#      port: '' #default '2638'
+#      database: '' #default is 'demo'
+#      user: '' #default is 'DBA'
+#      password: '' #default is 'sql'
+
+# TibcoEMS
+#com.instana.plugin.tibcoems:
+#  hostname: '' # default hostname is: '127.0.0.1'
+#  port: '' # default port is: '7222'
+#  user: '' # username for the server. Default is: 'admin'
+#  password: '' # password for the server. Default is: ''
+#  topicsRegex: '' # provide regex for topics you want to monitor
+#  queuesRegex: '' # provide regex for queues you want to monitor
+
+# Traefik
+#com.instana.plugin.traefik:
+#  enabled: true
+#  poll_rate: 1 # seconds
+
+# HashiCorp Vault
+#com.instana.plugin.vault:
+#  token: '<INSERT_TOKEN_HERE>'
+#  enabled: true
+
+# VMware vSphere
+#com.instana.plugin.vsphere:
+#  host: https://<INSERT_HOST_HERE>/sdk
+#  username: <INSERT_USERNAME_HERE>
+#  password: <INSERT_PASSWORD_HERE>
+#  enabled: true
+#  poll_rate: 20 # metrics poll rate in seconds
+
+#ZHMC
+#com.instana.plugin.zhmc:
+#  remote: # multiple configurations supported
+#    - host: ''# hostname or IP of zHMC server
+#      port: ''# default port is '6794' of zHMC API Server
+#      user: '' # username to access the zHMC server
+#      password: '' # password to access the zHMC server
+#      availabilityZone: 'zHMC Remote Monitoring'
+#      poll_rate: 15 #  poll rate in seconds
+#      eventsPollRate: 60 # event poll rate in seconds (optional)
+
+
+# Java & Custom JMX
+#com.instana.plugin.java:
+#  jmx:
+#    # JMX is NOT hot-reloaded and needs to be set before a JVM is discovered.
+#    # Supported attribute types are Number and Boolean
+#    # delta calculation is only supported for Number
+#    - object_name: 'java.lang:type=Compilation'
+#      metrics:
+#        - attributes: 'TotalCompilationTime'
+#          type: 'delta' # delta will report the change to the previous second
+#    - object_name: 'java.lang:type=ClassLoading'
+#      metrics:
+#        - attributes: 'LoadedClassCount'
+#          type: 'absolute' # absolute will report the value as-is
+#  dropwizardMetricCollection:
+#    enabled: true
+#    limit: 200
+#  micrometerMetricCollection:
+#    enabled: true
+#    limit: 200
+
+# General Tracing Settings
+#com.instana.tracing:
+#  extra-http-headers:
+#    # List of extra headers that should be captured by Instana.
+#    # Will be matched using case-insensitive match.
+#    - 'x-loadtest-id'
+
+# Java Tracing
+#com.instana.plugin.javatrace:
+#  instrumentation:
+#    # Lightweight Bytecode Instrumentation, enabled by default
+#    # Disabling currently requires an agent restart
+#    enabled: true
+#    # OpenTracing instrumentation, disabled by default
+#    # Enabling requires an agent restart
+#    opentracing: false
+#    # To enable using the SDK, provide a list of packages that should be
+#    # scanned for SDK annotations. All subpackages are scanned, as it is a
+#    # starts-with prefix matching.
+#    # Scanning a large amount of classes slows down agent attach and requires
+#    # more CPU for parsing, therefore it is recommended to limit to packages
+#    # actually using SDK annotations.
+#    # By default no packages are scanned for SDK annotations.
+#    sdk:
+#      packages:
+#        - 'com.instana.backend'
+#        - 'com.instana.frontend'
+
+# OpenTelemetry Collector
+#com.instana.plugin.opentelemetry:
+#  enabled: true
+
+
+# PHP Tracing
+#com.instana.plugin.php:
+#  # Lightweight PHP Tracing. Requires the Instana Tracing extension. Enabled by default.
+#  tracing:
+#    # Enabling tracing will automatically download the Instana Tracing
+#    # extension and enable it in your php.ini. If you are using preforked
+#    # PHP workers, like PHP-FPM, you will need to restart them. Disabling
+#    # tracing again will not remove the extension. It will only disable the
+#    # tracing sensor.
+#    enabled: true
+#    # Whether to install the PHP Tracing extension. Default is true. Disabling
+#    # the installation will still create the TraceAcceptor daemon though.
+#    installExtension: true
+#    # The filename to use when querying Apache or PHP-CGI installations for
+#    # environment data such as version, architecture, etc. By default, this
+#    # is "instana." + Math.random(). + ".php". Uncommenting the setting
+#    # below will force a static filename instead.
+#    phpInfoFilename: instana.php
+#    # Pins the PHP Tracing extension to download and install to a specific
+#    # version. This can be used to rollback to previous versions of the
+#    # extension or to test beta versions (when asked to do so). Expects
+#    # the version to be given as major.minory.patch, e.g. 0.3.7
+#    pinExtensionVersion: x.y.z
+#    # The absolute path to the script to trigger whenever the sensor installed
+#    # a different version of the PHP tracing extension than is currently
+#    # installed. Works for upgrades and downgrades. Default is empty.
+#    notificationScript: /path/to/restart_php.sh
+#    # The number of executor threads to use for processing traces. This setting
+#    # can be used to fine tune the PHP sensor for specific load environments.
+#    # Defaults to the number of available logical processors or 8 (whichever is less).
+#    # In general, you don't need to touch this setting unless advised to do so.
+#    executorThreads: n
+#    # The maximum number of traces the sensor is allowed to keep in the backlog
+#    # for processing. Can be used in conjunction with executorThreads to fine tune
+#    # the sensor for specific load environments. In general, you don't need to touch
+#    # this setting unless advised to do so. Defaults to 1000.
+#    executorQueueLimit: 1000
+#    # Port on which the sensor is listening for traces. Changing this setting will
+#    # not automatically update any .ini files created for the PHP Tracing extension.
+#    # In general, you don't need to touch this setting unless advised to do so.
+#    # Defaults to port 16816.
+#    port: 16816
+#    # Whether to remove values in SQL queries to prevent sensitive data from
+#    # reaching our backend. This can help to improve agent performance in certain
+#    # setups. In general, you don't need to touch this setting unless advised to do so.
+#    sanitizeSql: true
+
+# .NET Full Framework tracing
+#com.instana.plugin.clr:
+#  # Tracing for .NET Full Framework CLR. Enabled by default
+#  tracing:
+#    # Enabling tracing will instruct the agent to register the IL-rewriting components for .NET
+#    # alongside with the instrumentation-libraries.
+#    # It will also set the environment-variables for any IIS hosted .NET applications.
+#    # Non-IIS hosted applications which you want to trace need these env-vars to be set
+#    # manually before starting the actual process
+#    # (see the docs here: https://docs.instana.io/ecosystem/dot-net/#enabling-tracing-for-non-iis-hosted-applications)
+#    enabled: true
+#    # The absolute path to a batch-file that should be executed when the tracing-components for
+#    # NET Full Framework (Windows) have been updated. You can use this script to automate tasks
+#    # that should be executed when new tracing-components get installed. This usually will be
+#    # process-restarts or issuing an iisreset command, so that the processes can pickup the new components.
+#    # The commands issued in the script should be executed asynchronously (start /b <cmd>) in order to not
+#    # slow down the startup-time of InstanaPCP. In case of long-running synchronous tasks (like iisreset) you might
+#    # see warnings in the log concerning the unavailability of InstanaPCP for the duration of the execution.
+#    update_script: <absolute_path_to_batchfile>
+#  # Memory-limits for InstanaPCP.
+#  # You can specify these limits to account for high expected load and/or a lot of
+#  # infrastructure-components being monitored. Values are in mega-bytes.
+#  pcp_warn_limit: 150
+#  pcp_stop_limit: 250
+
+#com.instana.plugin.python:
+#  # Python AutoTrace will automatically find and instrument Python processes.
+#  # This is supported on Linux 64bit Python processes.
+#  autotrace:
+#    # Valid values: true, false (true by default, when not set)
+#    enabled: false
+#
+#    # The AutoTrace includes list is used to identify python processes.  It is applied
+#    # _before_ the excludes list to get a list of potential candidate processes.  The includes
+#    # list is used to create a list of processes that contain the following strings in
+#    # their command line.  Items specified here will _override_ the defaults.
+#    includes:
+#      - 'python'
+#      - 'uwsgi'
+#
+#    # The AutoTrace excludes list is used to identify processes to ignore.  It is applied
+#    # _after_ the includes list.  Any processes that have the following strings in their
+#    # command line will be ignored.  Items specified here will be added to the built
+#    # in defaults.
+#    excludes:
+#      - 'pipenv'
+#      - 'setup.py'
+
+#com.instana.plugin.azure:
+#  enabled: true
+#  # Subscription & Tenant ID
+#  subscription: '[Your-Subscription-Id]'
+#  tenant: '[Your-Tenant-Id]'
+#  # List of service principals that we can use to connect to the Azure
+#  # Each service principal has a limit of 12000 requests per hour.
+#  # Secret is a base64 encoded. If you are getting it directly from the Azure web,
+#  # it will already be encoded, so there is no need to encode it again.
+#  principals:
+#    - id: '[Your-Service-Principal-Account-Id]'
+#      secret: '[Your-Service-Principal-Secret]'
+#  # The optional filtering of services and their instances is based on tags and the resource groups
+#  # Include and Exclude categories are comma separated list of tags in key:value format
+#  include_tags:
+#  exclude_tags:
+#  include_resource_groups:
+#  exclude_resource_groups:
+
+#com.instana.plugin.azure.apimanagement:
+#  # To filter specific APIs per API Management Service you can use this list.
+#  monitorApiList:
+#    # Service name represents the name of the API Management Service
+#    - serviceName: '[Your-API-Management-Service-Name]'
+#      # Inclusive or Exclusive list is a regex expression. If both defined, exclusive
+#      # list will have priority.
+#      inclusiveApiRegex: ''
+#      exclusiveApiRegex: ''
+
+# Alibaba Cloud monitoring
+# Note: To monitor Alibaba Cloud services, the Alicloud plugin must be enabled in the configuration since Alicloud sensor version 1.0.5.
+#com.instana.plugin.alicloud:
+#  enabled: true
+#  # Alibaba Cloud AccessKey ID  is used to verify the identity of the user
+#  accessKeyId: ''
+#  # Alibaba Cloud AccessKey secret is used to encrypt and verify the signature string
+#  accessKeySecret: ''
+#com.instana.plugin.alicloud.rocketmq:
+#  enabled: true
+#  # Alibaba Cloud AccessKey ID  is used to verify the identity of the user
+#  accessKeyId: ''
+#  # Alibaba Cloud AccessKey secret is used to encrypt and verify the signature string
+#  accessKeySecret: ''
+#  # Metrics poll rate, in seconds
+#  poll_rate: 60
+#com.instana.plugin.alicloud.rds.mysql:
+#  enabled: true
+#  # Alibaba Cloud AccessKey ID  is used to verify the identity of the user
+#  accessKeyId: ''
+#  # Alibaba Cloud AccessKey secret is used to encrypt and verify the signature string
+#  accessKeySecret: ''
+#  # Metrics poll rate, in seconds
+#  poll_rate: 60
+#com.instana.plugin.alicloud.oss:
+#  enabled: true
+#  # Alibaba Cloud AccessKey ID  is used to verify the identity of the user
+#  accessKeyId: ''
+#  # Alibaba Cloud AccessKey secret is used to encrypt and verify the signature string
+#  accessKeySecret: ''
+#  Metrics poll rate, in seconds
+#  poll_rate: 60
+
+#IBM WebSphere Application Server
+#com.instana.plugin.websphere:
+#  # The necessary PMI statistics will be enabled by default.
+#  # If the enable_pmi is set as true or is not set, the PMI statistics will be enabled.
+#  # If the enable_pmi is set as false, the PMI statistic will be not be set and keep the original setting.
+#  enable_pmi: true # true or false. The default value is true.
+#  Metrics poll rate, in seconds
+#  poll_rate: 5

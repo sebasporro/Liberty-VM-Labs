@@ -1,0 +1,42 @@
+<server description="Demonstrates HTTP Session Persistence Configuration">
+
+    <featureManager>
+        <feature>sessionDatabase-1.0</feature>
+    </featureManager>
+
+<dataSource id="SessionDS" jdbcDriverRef="DB2_Universal_JDBC_Driver_Provider_rhel9-baseNode01_tWAS_85515_server_JDBCProvider_1673316098332" jndiName="SessionDS" 
+
+                    transactional="true" 
+
+                    type="javax.sql.DataSource" 
+
+                statementCacheSize="10" 
+
+                isolationLevel="TRANSACTION_READ_COMMITTED"
+
+                commitOrRollbackOnCleanup="commit" 
+
+                syncQueryTimeoutWithTransactionTimeout="true" 
+
+                supplementalJDBCTrace="false">
+    <properties.db2.jcc user="db2inst1" password="db2inst1-pwd"
+                        databaseName="sdb" driverType="4" portNumber="50000" serverName="server0.gym.lan"/>
+<connectionManager maxPoolSize="100" 
+
+                           minPoolSize="10" 
+
+                           purgePolicy="ValidateAllConnections"
+
+                           connectionTimeout="10s" 
+
+                                                   maxIdleTime="30m"
+
+                           agedTimeout="30m"/>
+</dataSource>
+
+<httpSessionDatabase id="SessionDB" dataSourceRef="SessionDS" scheduleInvalidation="true" />
+
+
+<httpSession storageRef="SessionDB" cloneId="${wlp.server.name}" />
+
+</server>

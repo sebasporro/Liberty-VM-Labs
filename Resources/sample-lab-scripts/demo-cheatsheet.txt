@@ -1,0 +1,63 @@
+
+###### Build server packages #########
+
+./mavenBuild.sh -v 22.0.0.8
+./mavenBuild.sh -v 22.0.0.12
+
+
+###### Create Collective #########
+
+./createController.sh
+
+--> Launch Admin Center in Browser
+
+
+###### Deploy Liberty / apps to Collective #########
+
+./deploy-22.0.0.8.sh 
+       #./addMember.sh -n appServer1 -v 22.0.0.8 -p 9081:9441 -h server0.gym.lan
+       #./addMember.sh -n appServer2 -v 22.0.0.8 -p 9082:9442 -h server1.gym.lan
+
+
+# start the servers and run WhereAmI
+-->   https://server0.gym.lan:9441/WhereAmI
+
+
+###### Dynamic Routing #########
+
+./setupDynamicRouting.sh
+
+-->  https://server0.gym.lan:8443             (http server)
+-->  https://server0.gym.lan:8443/WhereAmI  
+
+
+###### Zero-Migration Liberty upgrade #########
+
+
+./deploy-22.0.0.12.sh 
+      #./addMember.sh -n appServer1 -v 22.0.0.12 -p 9083:9443 -h server0.gym.lan
+      #./addMember.sh -n appServer2 -v 22.0.0.12 -p 9084:9444 -h server1.gym.lan
+
+
+# route to 22.0.0.12 servers only 
+./demo-applyRoutingRules.sh -s all
+
+
+ --> Stop 22.0.0.8 servers from admin center
+
+
+###### Session Persistence #########
+
+-->  https://server0.gym.lan:8443/PlantsByWebSphere
+        #Test app without session persistence
+
+./applyOverrides.sh -n appServer1 -v 22.0.0.12 -h server0.gym.lan SESSIONDB
+./applyOverrides.sh -n appServer2 -v 22.0.0.12 -h server1.gym.lan SESSIONDB
+
+
+-->  https://server0.gym.lan:8443/PlantsByWebSphere
+        #Test app with session persistence
+
+
+
+

@@ -1,0 +1,18 @@
+<server description="Demonstrates Dynamic Routing Feature">
+    <featureManager>
+        <feature>dynamicRouting-1.0</feature>
+    </featureManager>
+  
+  <dynamicRouting>
+   <routingRules webServers="webserver1">
+     <routingRule order="100" matchExpression="URI LIKE '/WhereAmI%'">
+       <permitAction>
+          <loadBalanceEndPoints>
+               <endpoint destination="server=*,*,*,appServer1"/>
+          </loadBalanceEndPoints>
+       </permitAction>
+     </routingRule>
+   </routingRules>
+</dynamicRouting>
+
+</server>
