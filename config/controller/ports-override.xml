@@ -3,7 +3,14 @@
     <httpEndpoint id="defaultHttpEndpoint"
                   host="*"
                   httpPort="9080"
-                  httpsPort="9443"/>
+                  httpsPort="9443">
+        <!-- Disable HTTP/2 on the controller HTTPS endpoint.
+             The WAS plugin's libodr.so uses HTTP/1.1 for its interests POST
+             to /ibm/api/dynamicRouting. Liberty 26 defaults to HTTP/2 and
+             returns 307 when an HTTP/1.1 client POSTs without an upgrade,
+             causing libodr.so to abort with NULL proxy errors. -->
+        <httpOptions http2Enabled="false"/>
+    </httpEndpoint>
     <keyStore id="defaultKeyStore" password="${keystore.password}"/>
     <collectiveController>
         <collectiveTrustManagers>

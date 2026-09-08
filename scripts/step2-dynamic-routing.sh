@@ -78,6 +78,8 @@ if ! grep -q "dynamicRouting-1.0" "${CTRL_OVERRIDES}/role-override.xml" 2>/dev/n
 fi
 cp "${WORKSPACE_ROOT}/config/controller/role-override.xml" \
    "${CTRL_OVERRIDES}/role-override.xml"
+cp "${WORKSPACE_ROOT}/config/controller/ports-override.xml" \
+   "${CTRL_OVERRIDES}/ports-override.xml"
 
 # Strip clientAuthenticationSupported ssl element from collective-create.xml
 if grep -q 'clientAuthenticationSupported' "${CTRL_OVERRIDES}/collective-create.xml" 2>/dev/null; then
@@ -201,16 +203,26 @@ cp "${WORK_DIR}/plugin-key.sth"  "${PLUGIN_DIR}/plugin-key.sth"
 [[ -f "${WORK_DIR}/plugin-key.rdb" ]] && cp "${WORK_DIR}/plugin-key.rdb" "${PLUGIN_DIR}/plugin-key.rdb"
 rm -rf "${WORK_DIR}"
 
-# Update WebSpherePluginConfig in httpd.conf to point at the dynamic-routing location
+# Update WebSpherePluginConfig in httpd.conf — replace all existing lines,
+# keeping only one. The append fallback only runs if no line exists yet.
 python3 - "${HTTPD_CONF}" "WebSpherePluginConfig ${PLUGIN_DIR}/plugin-cfg.xml" <<'PYEOF'
 import sys
 path, directive = sys.argv[1], sys.argv[2]
 lines = open(path).readlines()
-out = [directive + '\n' if l.strip().lower().startswith('webspherepluginconfig') else l for l in lines]
-if out == lines:
+found = False
+out = []
+for l in lines:
+    if l.strip().lower().startswith('webspherepluginconfig'):
+        if not found:
+            out.append(directive + '\n')
+            found = True
+        # skip duplicates
+    else:
+        out.append(l)
+if not found:
     out.append('\n' + directive + '\n')
 open(path, 'w').writelines(out)
-print('      httpd.conf → ' + directive)
+print('      httpd.conf -> ' + directive)
 PYEOF
 
 "${APACHECTL}" configtest || { echo "ERROR: httpd.conf syntax check failed"; exit 1; }
