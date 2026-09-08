@@ -226,14 +226,28 @@ cp "${WORK_DIR}/plugin-key.sth"  "${PLUGIN_DIR}/plugin-key.sth"
 
 rm -rf "${WORK_DIR}"
 
+# Update WebSpherePluginConfig to point at the dynamic plugin-cfg.xml.
+# Use sed with a case-insensitive, whitespace-tolerant match so it works
+# regardless of how step1 wrote the directive. The || true guards against
+# set -e killing the script if grep finds no match.
+PLUGIN_CFG_LINE="WebSpherePluginConfig ${PLUGIN_DIR}/plugin-cfg.xml"
+if grep -qi "WebSpherePluginConfig" "${HTTPD_CONF}" 2>/dev/null; then
+    sed -i "s|[Ww]eb[Ss]phere[Pp]lugin[Cc]onfig.*|${PLUGIN_CFG_LINE}|" "${HTTPD_CONF}"
+    echo "      WebSpherePluginConfig updated in httpd.conf"
+else
+    printf '\n# Dynamic routing — added by step2-dynamic-routing.sh\n%s\n' \
+        "${PLUGIN_CFG_LINE}" >> "${HTTPD_CONF}"
+    echo "      WebSpherePluginConfig added to httpd.conf"
+fi
+
 echo ""
+echo "  --- Diagnostic: WebSpherePluginConfig in httpd.conf ---"
+grep -i "WebSpherePluginConfig" "${HTTPD_CONF}" || echo "  (not found)"
+echo ""
+
 echo "  --- Diagnostic: installed plugin-cfg.xml ---"
 cat "${PLUGIN_DIR}/plugin-cfg.xml"
 echo "  --- End plugin-cfg.xml ---"
-echo ""
-
-echo "  --- Diagnostic: WebSpherePluginConfig in httpd.conf ---"
-grep "WebSpherePluginConfig" "${HTTPD_CONF}" || echo "  (not found)"
 echo ""
 
 echo "  --- Diagnostic: members reachable directly ---"
@@ -243,14 +257,6 @@ for p in 9081 9082 9083 9084; do
     [[ "${code}" != "000" ]] && echo "      port ${p}: HTTP ${code}"
 done
 echo ""
-
-PLUGIN_CFG_LINE="WebSpherePluginConfig ${PLUGIN_DIR}/plugin-cfg.xml"
-if grep -q "^WebSpherePluginConfig" "${HTTPD_CONF}"; then
-    sed -i "s|^WebSpherePluginConfig .*|${PLUGIN_CFG_LINE}|" "${HTTPD_CONF}"
-else
-    printf '\n# Dynamic routing — added by step2-dynamic-routing.sh\n%s\n' \
-        "${PLUGIN_CFG_LINE}" >> "${HTTPD_CONF}"
-fi
 
 "${APACHECTL}" configtest
 "${APACHECTL}" start
