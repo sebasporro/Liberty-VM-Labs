@@ -164,10 +164,19 @@ echo ""
 # 4. Install plugin files and start IHS
 # ---------------------------------------------------------------------------
 echo "[4/4] Installing plugin files and starting IHS..."
-cp "${WORK_DIR}/plugin-cfg.xml" "${PLUGIN_DIR}/plugin-cfg.xml"
-cp "${WORK_DIR}/plugin-key.kdb" "${PLUGIN_DIR}/plugin-key.kdb"
-cp "${WORK_DIR}/plugin-key.sth" "${PLUGIN_DIR}/plugin-key.sth"
+cp "${WORK_DIR}/plugin-cfg.xml"  "${PLUGIN_DIR}/plugin-cfg.xml"
+cp "${WORK_DIR}/plugin-key.kdb"  "${PLUGIN_DIR}/plugin-key.kdb"
+cp "${WORK_DIR}/plugin-key.sth"  "${PLUGIN_DIR}/plugin-key.sth"
 [[ -f "${WORK_DIR}/plugin-key.rdb" ]] && cp "${WORK_DIR}/plugin-key.rdb" "${PLUGIN_DIR}/plugin-key.rdb"
+
+# odr-trace.xml is written by dynamicRouting setup alongside plugin-cfg.xml.
+# The ODR library (ws_odrlib) looks for it at the ROOT of pluginInstallRoot
+# ($IHS_ROOT/odr-trace.xml), not inside config/webserver1/.
+# Without it, every IHS worker logs "Failed to open odr-trace.xml" and
+# "Failed to create ODR environment" — dynamic routing never starts.
+[[ -f "${WORK_DIR}/odr-trace.xml" ]] && cp "${WORK_DIR}/odr-trace.xml" "${IHS_ROOT}/odr-trace.xml" \
+    && echo "      odr-trace.xml → ${IHS_ROOT}/odr-trace.xml"
+
 rm -rf "${WORK_DIR}"
 
 PLUGIN_CFG_LINE="WebSpherePluginConfig ${PLUGIN_DIR}/plugin-cfg.xml"
