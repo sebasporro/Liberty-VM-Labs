@@ -29,9 +29,13 @@
         <user>admin</user>
     </administrator-role>
 
-    <!-- clientAuthentication="false": the WAS plugin connects to
-         /ibm/api/dynamicRouting over HTTPS without presenting a client cert.
-         Setting clientAuthenticationSupported="true" causes unknown_ca failures. -->
-    <ssl id="defaultSSLConfig" clientAuthentication="false"/>
+    <!-- Collective PKI keystores + clientAuthentication="false" so both
+         collective members (with client certs) and the WAS plugin (without client certs)
+         can connect to port 9443 -->
+    <ssl id="defaultSSLConfig"
+         keyStoreRef="defaultKeyStore"
+         trustStoreRef="defaultTrustStore"
+         clientAuthentication="false"
+         clientAuthenticationSupported="true"/>
 
 </server>
