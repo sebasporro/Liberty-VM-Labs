@@ -7,10 +7,10 @@
 # The WAS plugin parser (mod_was_ap24_http.so) aborts with:
 #   "configDestroy: Destroyed the config"
 #   "Failed to load the config file"
-# when it finds a <ServerCluster> with no <Server> children — even in ODR
-# (dynamic routing) mode where the live server list is built at runtime.
-# This script adds a placeholder Server entry that satisfies the parser.
-# ODR overwrites the routing table once it connects to the controller.
+# when it finds a <ServerCluster> with no <Server> children — even in dynamic
+# routing mode where the WAS plugin builds the live server list at runtime by
+# polling /ibm/api/dynamicRouting. This script adds a placeholder Server entry
+# that satisfies the parser; the plugin replaces it once it connects.
 #
 # Usage:
 #   bash scripts/fix-plugin-cfg.sh

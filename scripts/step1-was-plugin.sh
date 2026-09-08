@@ -113,7 +113,7 @@ cat > "${PLUGIN_CFG}" <<EOF
       group name that dynamicRouting setup (step 3b) writes into the
       <IntelligentManagement> stanza and uses to identify this collective's
       members at runtime.  The <Route> below must reference the same name
-      so ODR's live routing table is served for the correct route.
+      so the plugin's live routing table is served for the correct route.
     -->
     <ServerCluster CloneSeparatorChange="false" GetDWLMTable="false"
                    IgnoreAffinityRequests="true" LoadBalance="Round Robin"

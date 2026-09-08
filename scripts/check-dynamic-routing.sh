@@ -55,13 +55,25 @@ for ext in kdb sth; do
 done
 echo ""
 
-# ── 5. ODR REST endpoint on controller ────────────────────────────────────
-echo "5. Controller ODR endpoint (https://localhost:9443/ibm/api/dynamicRouting):"
+# ── 5. Controller dynamic routing endpoint ────────────────────────────────
+echo "5. Controller /ibm/api/dynamicRouting endpoint (https://localhost:9443):"
 ODR=$(curl -k -s -o /dev/null -w "%{http_code}" \
     -u admin:admin "https://localhost:9443/ibm/api/dynamicRouting" 2>/dev/null)
 [[ "${ODR}" == "200" ]] \
-    && echo "${PASS} HTTP ${ODR} — ODR REST endpoint reachable" \
-    || echo "${FAIL} HTTP ${ODR} — controller not serving ODR endpoint (check dynamicRouting-1.0 feature loaded)"
+    && echo "${PASS} HTTP ${ODR} — endpoint reachable, WAS plugin can connect" \
+    || echo "${FAIL} HTTP ${ODR} — endpoint not available (dynamicRouting-1.0 feature loaded?)"
+
+if [[ "${ODR}" != "200" ]]; then
+    CTRL_LOG="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/logs/messages.log"
+    echo ""
+    echo "     Controller features loaded (from messages.log):"
+    grep "CWWKF0012I" "${CTRL_LOG}" 2>/dev/null | tail -1 | sed 's/^/     /'
+    echo ""
+    echo "     Controller errors (last 10 lines with ERROR/CWWK):"
+    grep -E "ERROR|CWWK[A-Z][0-9]+E" "${CTRL_LOG}" 2>/dev/null \
+        | tail -10 | sed 's/^/     /' \
+        || echo "     (no errors found or log not accessible)"
+fi
 echo ""
 
 # ── 6. IHS via plugin ─────────────────────────────────────────────────────
@@ -72,9 +84,9 @@ IHS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/server-info/ 
     || echo "${FAIL} HTTP ${IHS}"
 echo ""
 
-# ── 7. Plugin log — last ODR-related lines ────────────────────────────────
+# ── 7. Plugin log — last relevant lines ──────────────────────────────────
 echo "7. Plugin log — last relevant lines:"
-grep -i "ODR\|transport\|connect\|routing\|app server" \
+grep -i "transport\|connect\|routing\|app server\|intelligent" \
     "${IHS_ROOT}/logs/webserver1/http_plugin.log" 2>/dev/null \
     | tail -8 | sed 's/^/     /' \
     || echo "     (log not found)"

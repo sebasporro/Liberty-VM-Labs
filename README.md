@@ -611,14 +611,14 @@ How it works:
 - `gskcapicmd` converts `plugin-key.p12` → CMS `plugin-key.kdb` (required format for the WAS plugin)
 - `plugin-key.kdb` + `.sth` are placed at `$IHS_ROOT/config/webserver1/`; `plugin-cfg.xml` is installed alongside them
 - `WebSpherePluginConfig` in `httpd.conf` is updated to point at the new location; IHS is restarted
-- `fix-odr-connector.sh` patches the ODR connector to HTTP:9080 to avoid collective CA trust issues
+- `fix-odr-connector.sh` is retired (no-op); connector patching is no longer required
 
 Steps performed:
 1. Pre-flight: verifies `dynamicRouting` binary, `gskcapicmd`, and controller on HTTPS 9443
 2. Runs `dynamicRouting setup --port=9443 --user=admin --password=admin --pluginInstallRoot=$IHS_ROOT --webServerNames=webserver1 --autoAcceptCertificates` (output lands in `$SCRATCH_DIR`)
 3. Runs `gskcapicmd -keydb -convert` (PKCS12 → CMS) + `-cert -setdefault -label default`; `chown`s `.kdb`/`.rdb`/`.sth` to the IHS `User:Group` read from `httpd.conf` (per IBM docs)
 4. Copies `.kdb`/`.rdb`/`.sth` to `$IHS_ROOT/config/webserver1/` and `plugin-cfg.xml` to the `WebSpherePluginConfig` target; restarts IHS
-5. Calls `fix-odr-connector.sh` to switch the ODR `<Connector>` to `http://localhost:9080` — avoids collective CA trust issues on this single-VM lab
+5. ~~Calls `fix-odr-connector.sh`~~ — retired; the generated `plugin-cfg.xml` with HTTPS connector is correct as-is
 
 **Usage:**
 ```bash
