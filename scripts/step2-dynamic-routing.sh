@@ -59,21 +59,19 @@ CTRL_HTTP=$(curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adm
 }
 
 # ---------------------------------------------------------------------------
-# [0/4] Ensure controller is ready: correct config + HTTP/1.1 confirmed
+# [0/4] Ensure controller config dropins are correct before setup runs.
 #
 # collective-create.xml: strip clientAuthenticationSupported ssl element so
 #   role-override.xml exclusively owns the SSL config.  Liberty merges same-id
-#   elements across all dropins, so even one file with clientAuthenticationSupported
-#   causes unknown_ca for the WAS plugin (which never sends a client cert).
+#   elements across all dropins — even one dropin with clientAuthenticationSupported
+#   causes unknown_ca for the WAS plugin (which never presents a client cert).
 #
 # dynamic-routing.xml: an unmanaged dropin may exist from a prior manual run.
-#   If it overrides <ssl> or <httpEndpoint> it will conflict with our overrides.
+#   If it contains <ssl> or <httpEndpoint> it conflicts with our overrides.
 #
 # ports-override.xml / role-override.xml: always sync from repo.
-#
-# http2Enabled="false" is an HTTP channel property — it takes effect only after
-# a full server restart, not a config reload.  We detect the live protocol and
-# restart the controller when needed.
+# Neither file changes ports, keystores, or collective PKI — collective and
+# static routing are unaffected.
 # ---------------------------------------------------------------------------
 echo "[0/4] Verifying controller config..."
 
