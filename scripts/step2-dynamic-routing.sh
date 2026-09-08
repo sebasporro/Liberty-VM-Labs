@@ -164,6 +164,56 @@ echo "      Keystore conversion complete"
 echo ""
 
 # ---------------------------------------------------------------------------
+# 4. Patch plugin-cfg.xml — inject required static stanzas if missing
+#
+# dynamicRouting setup outputs ONLY the <IntelligentManagement> stanza plus
+# global <Property> elements — it does NOT preserve the <ServerCluster>,
+# <UriGroup>, <VirtualHostGroup>, or <Route> from the merge base.
+# The WAS plugin parser requires all four to be present in the static XML
+# even in ODR (dynamic routing) mode; without them every request returns 404.
+# ---------------------------------------------------------------------------
+if ! grep -q "<ServerCluster" "${WORK_DIR}/plugin-cfg.xml"; then
+    echo "      Injecting required static stanzas into plugin-cfg.xml..."
+    python3 - "${WORK_DIR}/plugin-cfg.xml" <<'PYEOF'
+import sys, re
+
+path = sys.argv[1]
+with open(path) as f:
+    content = f.read()
+
+stanzas = """\
+<ServerCluster CloneSeparatorChange="false" GetDWLMTable="false"
+               IgnoreAffinityRequests="true" LoadBalance="Round Robin"
+               Name="defaultCollective" PostSizeLimit="-1"
+               RemoveSpecialHeaders="true" RetryInterval="60">
+    <Server CloneID="placeholder" ConnectTimeout="5" ExtendedHandshake="false"
+            MaxConnections="-1" Name="placeholder" ServerIOTimeout="900"
+            WaitForContinue="false">
+        <Transport Hostname="localhost" Port="9081" Protocol="http"/>
+    </Server>
+    <PrimaryServers>
+        <Server Name="placeholder"/>
+    </PrimaryServers>
+</ServerCluster>
+<VirtualHostGroup Name="defaultCollective_Hosts">
+    <VirtualHost Name="*:8080"/>
+</VirtualHostGroup>
+<UriGroup Name="defaultCollective_URIs">
+    <Uri AffinityCookie="JSESSIONID" AffinityURLIdentifier="jsessionid" Name="/*"/>
+</UriGroup>
+<Route ServerCluster="defaultCollective"
+       UriGroup="defaultCollective_URIs"
+       VirtualHostGroup="defaultCollective_Hosts"/>
+"""
+
+patched = content.replace('</Config>', stanzas + '</Config>')
+with open(path, 'w') as f:
+    f.write(patched)
+print("      Static stanzas injected (ServerCluster/VirtualHostGroup/UriGroup/Route)")
+PYEOF
+fi
+
+# ---------------------------------------------------------------------------
 # 4. Install plugin files and start IHS
 # ---------------------------------------------------------------------------
 echo "[4/4] Installing plugin files and starting IHS..."
@@ -171,15 +221,8 @@ cp "${WORK_DIR}/plugin-cfg.xml"  "${PLUGIN_DIR}/plugin-cfg.xml"
 cp "${WORK_DIR}/plugin-key.kdb"  "${PLUGIN_DIR}/plugin-key.kdb"
 cp "${WORK_DIR}/plugin-key.sth"  "${PLUGIN_DIR}/plugin-key.sth"
 [[ -f "${WORK_DIR}/plugin-key.rdb" ]] && cp "${WORK_DIR}/plugin-key.rdb" "${PLUGIN_DIR}/plugin-key.rdb"
-
-# odr-trace.xml must live at the ROOT of pluginInstallRoot.
-# The ODR library (ws_odrlib) looks for it at $IHS_ROOT/odr-trace.xml.
-if [[ -f "${WORK_DIR}/odr-trace.xml" ]]; then
-    cp "${WORK_DIR}/odr-trace.xml" "${IHS_ROOT}/odr-trace.xml"
-    echo "      odr-trace.xml → ${IHS_ROOT}/odr-trace.xml"
-else
-    echo "      WARNING: odr-trace.xml not produced by dynamicRouting setup"
-fi
+[[ -f "${WORK_DIR}/odr-trace.xml" ]] && cp "${WORK_DIR}/odr-trace.xml" "${IHS_ROOT}/odr-trace.xml" \
+    && echo "      odr-trace.xml → ${IHS_ROOT}/odr-trace.xml"
 
 rm -rf "${WORK_DIR}"
 
