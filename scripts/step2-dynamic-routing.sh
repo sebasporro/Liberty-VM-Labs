@@ -124,9 +124,12 @@ fi
     --targetPath="${WORK_DIR}" \
     --autoAcceptCertificates
 
+echo ""
+echo "      Files produced by dynamicRouting setup in ${WORK_DIR}:"
+ls -la "${WORK_DIR}/" 2>/dev/null | sed 's/^/        /'
+
 if [[ ! -f "${WORK_DIR}/plugin-cfg.xml" || ! -f "${WORK_DIR}/plugin-key.p12" ]]; then
     echo "ERROR: dynamicRouting setup did not produce expected output files in ${WORK_DIR}"
-    ls -la "${WORK_DIR}/" 2>/dev/null
     rm -rf "${WORK_DIR}"
     exit 1
 fi
@@ -169,15 +172,34 @@ cp "${WORK_DIR}/plugin-key.kdb"  "${PLUGIN_DIR}/plugin-key.kdb"
 cp "${WORK_DIR}/plugin-key.sth"  "${PLUGIN_DIR}/plugin-key.sth"
 [[ -f "${WORK_DIR}/plugin-key.rdb" ]] && cp "${WORK_DIR}/plugin-key.rdb" "${PLUGIN_DIR}/plugin-key.rdb"
 
-# odr-trace.xml is written by dynamicRouting setup alongside plugin-cfg.xml.
-# The ODR library (ws_odrlib) looks for it at the ROOT of pluginInstallRoot
-# ($IHS_ROOT/odr-trace.xml), not inside config/webserver1/.
-# Without it, every IHS worker logs "Failed to open odr-trace.xml" and
-# "Failed to create ODR environment" — dynamic routing never starts.
-[[ -f "${WORK_DIR}/odr-trace.xml" ]] && cp "${WORK_DIR}/odr-trace.xml" "${IHS_ROOT}/odr-trace.xml" \
-    && echo "      odr-trace.xml → ${IHS_ROOT}/odr-trace.xml"
+# odr-trace.xml must live at the ROOT of pluginInstallRoot.
+# The ODR library (ws_odrlib) looks for it at $IHS_ROOT/odr-trace.xml.
+if [[ -f "${WORK_DIR}/odr-trace.xml" ]]; then
+    cp "${WORK_DIR}/odr-trace.xml" "${IHS_ROOT}/odr-trace.xml"
+    echo "      odr-trace.xml → ${IHS_ROOT}/odr-trace.xml"
+else
+    echo "      WARNING: odr-trace.xml not produced by dynamicRouting setup"
+fi
 
 rm -rf "${WORK_DIR}"
+
+echo ""
+echo "  --- Diagnostic: installed plugin-cfg.xml ---"
+cat "${PLUGIN_DIR}/plugin-cfg.xml"
+echo "  --- End plugin-cfg.xml ---"
+echo ""
+
+echo "  --- Diagnostic: WebSpherePluginConfig in httpd.conf ---"
+grep "WebSpherePluginConfig" "${HTTPD_CONF}" || echo "  (not found)"
+echo ""
+
+echo "  --- Diagnostic: members reachable directly ---"
+for p in 9081 9082 9083 9084; do
+    code=$(curl -s -o /dev/null -w "%{http_code}" \
+        "http://localhost:${p}/server-info/" 2>/dev/null)
+    [[ "${code}" != "000" ]] && echo "      port ${p}: HTTP ${code}"
+done
+echo ""
 
 PLUGIN_CFG_LINE="WebSpherePluginConfig ${PLUGIN_DIR}/plugin-cfg.xml"
 if grep -q "^WebSpherePluginConfig" "${HTTPD_CONF}"; then
@@ -224,7 +246,14 @@ if [[ "${HTTP_CODE}" == "200" ]]; then
     echo "    bash scripts/apply-routing-rules.sh -s member1"
     echo ""
 else
+    echo "  --- Diagnostic: plugin log (last 40 lines) ---"
+    tail -40 "${IHS_ROOT}/logs/webserver1/http_plugin.log" 2>/dev/null \
+        | sed 's/^/  /' \
+        || echo "  (plugin log not found)"
+    echo ""
+    echo "  --- Diagnostic: IHS error log (last 10 lines) ---"
+    tail -10 "${IHS_ROOT}/logs/error_log" 2>/dev/null | sed 's/^/  /'
+    echo ""
     echo "  ERROR: ODR did not start routing within 60s."
-    echo "  Plugin log:  tail -30 ${IHS_ROOT}/logs/webserver1/http_plugin.log"
     exit 1
 fi
