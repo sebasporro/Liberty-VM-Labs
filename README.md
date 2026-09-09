@@ -171,6 +171,7 @@ There are two sub-steps: static routing first, then dynamic routing.
 #### Step 4a — Static WAS plugin routing (Round Robin)
 
 Discover all running members, write plugin-cfg.xml, add WebSpherePluginConfig, start IHS
+
 scripts/step1-was-plugin.sh
 ```
 
