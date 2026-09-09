@@ -7,6 +7,11 @@ sed -i 's/Listen 80/Listen 1080/g' conf/httpd.conf
 
 bin/apachectl -version
 
+# Install WAS Plugin
+unzip /home/itzuser/software/IHS/PLG/9.0.5-WS-PLG-ARCHIVE-linux-x86_64-FP025.zip -d ~/usr/IBM/IHS/plugin
+cd ~/usr/IBM/IHS/plugin/
+./postinstall.sh
+
 #Copy the plugin from the current IHS installation
 cp ~/IBM/HTTPServer/conf/plugin-cfg.xml /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/
 # Adjust the HTTP port from 8080 to 1080
