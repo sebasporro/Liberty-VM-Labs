@@ -8,14 +8,14 @@ sed -i 's/Listen 80/Listen 1080/g' conf/httpd.conf
 bin/apachectl -version
 
 # Setup WAS Plugin configuration directory
-mkdir -p /home/itzuser/IBM/HTTPServer/plugin/config/webserver1
-mkdir -p /home/itzuser/IBM/HTTPServer/plugin/logs/webserver1
+mkdir -p /home/itzuser/usr/IBM/IHS/plugin/config/webserver1
+mkdir -p /home/itzuser/usr/IBM/IHS/plugin/logs/webserver1
 
 # Generate plugin-cfg.xml
-cat > /home/itzuser/IBM/HTTPServer/plugin/config/webserver1/plugin-cfg.xml <<'EOF'
+cat > /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <Config ASDisableNagle="false" AcceptAllContent="false" AppServerPortPreference="HostHeader" ChunkedResponse="false" FIPSEnable="false" IISDisableNagle="false" IISPluginPriority="High" IgnoreDNSFailures="false" RefreshInterval="60" ResponseChunkSize="64" SSLConsolidatedConfig="false" TrustedProxyEnable="false" VHostMatchingCompat="false">
-    <Log LogLevel="Error" Name="/home/itzuser/IBM/HTTPServer/plugin/logs/webserver1/http_plugin.log"/>
+    <Log LogLevel="Error" Name="/home/itzuser/usr/IBM/IHS/plugin/logs/webserver1/http_plugin.log"/>
     <Property Name="ESIEnable" Value="false"/>
     <Property Name="ESIMaxCacheSize" Value="1024"/>
     <Property Name="ESIInvalidationMonitor" Value="false"/>
@@ -39,15 +39,20 @@ cat > /home/itzuser/IBM/HTTPServer/plugin/config/webserver1/plugin-cfg.xml <<'EO
 </Config>
 EOF
 
-# Ensure httpd.conf loads WAS plugin and references plugin-cfg.xml
+# Ensure httpd.conf loads WAS plugin binary (from /home/itzuser/usr/IBM/IHS/plugin/bin/64bits/mod_was_ap24_http.so)
 if ! grep -q "mod_was_ap24_http.so" conf/httpd.conf; then
-    echo "LoadModule was_ap24_module modules/mod_was_ap24_http.so" >> conf/httpd.conf
+    if [[ -f "/home/itzuser/usr/IBM/IHS/plugin/bin/64bits/mod_was_ap24_http.so" ]]; then
+        echo "LoadModule was_ap24_module /home/itzuser/usr/IBM/IHS/plugin/bin/64bits/mod_was_ap24_http.so" >> conf/httpd.conf
+    else
+        echo "LoadModule was_ap24_module modules/mod_was_ap24_http.so" >> conf/httpd.conf
+    fi
 fi
 
+# Ensure WebSpherePluginConfig points to the plugin configuration file
 if grep -q "^WebSpherePluginConfig" conf/httpd.conf; then
-    sed -i 's|^WebSpherePluginConfig .*|WebSpherePluginConfig /home/itzuser/IBM/HTTPServer/plugin/config/webserver1/plugin-cfg.xml|' conf/httpd.conf
+    sed -i 's|^WebSpherePluginConfig .*|WebSpherePluginConfig /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml|' conf/httpd.conf
 else
-    echo "WebSpherePluginConfig /home/itzuser/IBM/HTTPServer/plugin/config/webserver1/plugin-cfg.xml" >> conf/httpd.conf
+    echo "WebSpherePluginConfig /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml" >> conf/httpd.conf
 fi
 
 # Start IHS
