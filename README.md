@@ -105,46 +105,27 @@ grep WORKSPACE_ROOT scripts/00-set-env.sh
 
 ---
 
-### Step 0b — Install IBM HTTP Server (IHS)
+### Step 1 — Install IBM HTTP Server (IHS)
 
 IHS is the front-end HTTP server that load-balances requests across the Liberty collective
 members. Install it once before running the lab steps.
 
-```bash
-scripts/install-ihs.sh
-```
+unzip /home/itzuser/software/IHS/WAS/9.0.5-WS-IHS-ARCHIVE-linux-x86_64-FP025.zip  -d ~/usr/IBM
+cd ~/usr/IBM/IHS/
+./postinstall.sh 
+sed -i 's/Listen 80/Listen 1080/g' conf/httpd.conf
+bin/apachectl -version
 
-This script:
-1. Removes any previous IHS install at `/home/itzuser/IBM/HTTPServer`
-2. Extracts `9.0.5-WS-IHS-ARCHIVE-linux-x86_64-FP025.zip` from `/home/itzuser/software/IHS/` → moves it into place
-3. Patches `@@SERVERROOT@@` and `@@SHLIBPATH_ENVAR@@` tokens in `bin/` scripts (the ARCHIVE ZIP ships these unresolved; IBM IM substitutes them — we replicate that here)
-4. Creates `gsk8 → .gsk8` symlink (GSKit binaries are stored in a hidden `.gsk8/` directory in the ARCHIVE but wrapper scripts reference `gsk8/`)
-5. Sets execute permission on GSKit binaries (shipped as `644` in the ARCHIVE)
-6. Installs the WAS plugin (`mod_was_ap24_http.so`) into `modules/`
-7. Writes a baseline `httpd.conf`, `logs/`, and `htdocs/` (the ARCHIVE ZIP ships none of these)
-8. Generates an `apachectl` wrapper (the ARCHIVE format ships `httpd` only — no `apachectl`)
-9. Appends `/home/itzuser/IBM/HTTPServer/bin` to `~/.bashrc`
+#Copy the plugin from the current IHS installation
+cp ~/IBM/HTTPServer/conf/plugin-cfg.xml /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/
+# Adjust the HTTP port from 8080 to 1080
+sed -i 's/8080/1080/g' /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml
 
-Then reload PATH in your current terminal and verify:
+# Start IHS
+/home/itzuser/usr/IBM/IHS/bin/apachectl start 
 
-```bash
-source ~/.bashrc
-apachectl -v
-# Expected: Server version: IBM_HTTP_Server/...
-```
-
-> **If the ZIP is at a different path**, override before running:
-> ```bash
-> export IHS_INSTALLER_DIR=/path/to/dir/containing/ihs-zip
-> scripts/install-ihs.sh
-> ```
-
-> **Already have IHS installed from a previous ZIP?** Run the patch script instead of reinstalling:
-> ```bash
-> scripts/patch-ihs-serverroot.sh
-> ```
-
-> **To stop IHS** at any point: `apachectl stop`
+# Verify that round robin works
+curl -s http://localhost:1080/server-info/
 
 ---
 
