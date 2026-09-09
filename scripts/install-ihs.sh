@@ -7,11 +7,15 @@ sed -i 's/Listen 80/Listen 1080/g' conf/httpd.conf
 
 bin/apachectl -version
 
+# Setup IHS static document root with index.html for direct testing
+mkdir -p /home/itzuser/usr/IBM/IHS/htdocs
+echo "<html><body><h1>IBM HTTP Server is running!</h1></body></html>" > /home/itzuser/usr/IBM/IHS/htdocs/index.html
+
 # Setup WAS Plugin configuration directory
 mkdir -p /home/itzuser/usr/IBM/IHS/plugin/config/webserver1
 mkdir -p /home/itzuser/usr/IBM/IHS/plugin/logs/webserver1
 
-# Generate plugin-cfg.xml
+# Generate plugin-cfg.xml matching only /server-info/* (so / is served directly by IHS)
 cat > /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <Config ASDisableNagle="false" AcceptAllContent="false" AppServerPortPreference="HostHeader" ChunkedResponse="false" FIPSEnable="false" IISDisableNagle="false" IISPluginPriority="High" IgnoreDNSFailures="false" RefreshInterval="60" ResponseChunkSize="64" SSLConsolidatedConfig="false" TrustedProxyEnable="false" VHostMatchingCompat="false">
@@ -32,7 +36,7 @@ cat > /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml <<'EOF'
     </ServerCluster>
 
     <UriGroup Name="defaultCollective_URIs">
-        <Uri AffinityCookie="JSESSIONID" AffinityURLIdentifier="jsessionid" Name="/*"/>
+        <Uri AffinityCookie="JSESSIONID" AffinityURLIdentifier="jsessionid" Name="/server-info/*"/>
     </UriGroup>
 
     <VirtualHostGroup Name="defaultCollective_Hosts">
@@ -60,8 +64,9 @@ else
     echo "WebSpherePluginConfig /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml" >> conf/httpd.conf
 fi
 
-# Start IHS
+# Restart IHS to apply config changes
+bin/apachectl stop 2>/dev/null || true
 bin/apachectl start 
 
-# Verify that round robin works
-curl -s http://localhost:1080/server-info/
+# Verify IHS static response
+curl -i http://localhost:1080/
