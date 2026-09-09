@@ -28,6 +28,7 @@ cd "${CONTROLLER_BIN}"
 
 # 2. Stage files
 mkdir -p ~/temp/dynamicRouting
+rm -f ~/temp/dynamicRouting/plugin-key.*  # Clear previous keys to make gskcapicmd conversion idempotent on reruns
 mv "${CONTROLLER_BIN}/plugin-cfg.xml" ~/temp/dynamicRouting/
 mv "${CONTROLLER_BIN}/plugin-key.p12" ~/temp/dynamicRouting/
 
