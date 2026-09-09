@@ -96,14 +96,26 @@ if [[ ! -f "${PACKAGE}" ]]; then
 fi
 echo "      Package: found"
 
-CTRL_STATUS=$(curl -k -s -o /dev/null -w "%{http_code}" \
-    https://${CONTROLLER_HOST}:${CONTROLLER_HTTPS}/adminCenter 2>/dev/null)
+echo "      Waiting for Collective Controller to be fully responsive on HTTPS port ${CONTROLLER_HTTPS}..."
+MAX_CTRL_WAIT=30
+CTRL_WAITED=0
+CTRL_STATUS=""
+while [[ ${CTRL_WAITED} -lt ${MAX_CTRL_WAIT} ]]; do
+    CTRL_STATUS=$(curl -k -s -o /dev/null -w "%{http_code}" \
+        https://${CONTROLLER_HOST}:${CONTROLLER_HTTPS}/adminCenter 2>/dev/null)
+    if [[ "${CTRL_STATUS}" == "200" || "${CTRL_STATUS}" == "302" ]]; then
+        break
+    fi
+    sleep 2
+    (( CTRL_WAITED += 2 ))
+done
+
 if [[ "${CTRL_STATUS}" != "200" && "${CTRL_STATUS}" != "302" ]]; then
-    echo "  ERROR: Collective Controller is not running (HTTP ${CTRL_STATUS})."
-    echo "  Run scripts/install-controller.sh first."
+    echo "  ERROR: Collective Controller is not running or not responding (HTTP ${CTRL_STATUS})."
+    echo "  Run scripts/install-controller.sh first and ensure it is healthy."
     exit 1
 fi
-echo "      Controller: running (HTTP ${CTRL_STATUS})"
+echo "      Controller: running and responsive (HTTP ${CTRL_STATUS})"
 
 # Check for per-member config overrides; create generic ones if missing
 if [[ ! -d "${CONFIG_SRC}" ]]; then
