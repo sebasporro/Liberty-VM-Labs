@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<server description="Dynamic Routing features — Liberty 26">
-    <featureManager>
-        <feature>dynamicRouting-1.0</feature>
-        <!-- restConnector-2.0 is required in Liberty 26 for the dynamicRouting setup CLI
-             to reach the DynamicRouting MBean via the REST JMX bridge. -->
-        <feature>restConnector-2.0</feature>
-    </featureManager>
-</server>

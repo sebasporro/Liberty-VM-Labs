@@ -114,7 +114,7 @@ bash scripts/install-ihs.sh
 
 ---
 
-### Step 1 — Build (run once per version)
+### Step 2 — Build (run once per version)
 
 Build both golden packages before deploying anything. Only needs to be repeated if the
 template configuration or application changes.
@@ -150,7 +150,7 @@ scripts/03-build-package-25.sh
 
 ---
 
-### Step 2 — Deploy Controller and 26.0.0.8 Members
+### Step 3 — Deploy Controller and 26.0.0.8 Members
 
 ```bash
 scripts/install-controller.sh      # Deploy + start controller
@@ -163,22 +163,14 @@ member1 at `http://localhost:9081/server-info/`, member2 at `http://localhost:90
 
 ---
 
-### Step 3 — Configure IHS with WAS Plugin Routing
+### Step 4 — Configure IHS with WAS Plugin Routing
 
 The lab uses the Liberty WAS plugin (`mod_was_ap24_http.so`) for IHS routing.
 There are two sub-steps: static routing first, then dynamic routing.
 
-#### Step 3a — Static WAS plugin routing (Round Robin)
+#### Step 4a — Static WAS plugin routing (Round Robin)
 
-Reset IHS to a clean baseline, then wire the plugin to all running members.
-The script **auto-discovers** every member listening on ports 9081–9089 at
-run time and writes one `<Server>` entry per member — no hardcoded list.
-
-```bash
-# Reset httpd.conf to clean baseline, remove any stale plugin-cfg.xml
-scripts/reset-ihs.sh
-
-# Discover all running members, write plugin-cfg.xml, add WebSpherePluginConfig, start IHS
+Discover all running members, write plugin-cfg.xml, add WebSpherePluginConfig, start IHS
 scripts/step1-was-plugin.sh
 ```
 
@@ -192,19 +184,17 @@ script to regenerate the static config. That limitation is what step 3b solves.
 for i in $(seq 8); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
 ```
 
-#### Step 3b — Dynamic routing (Intelligent Management)
-
-Work in progress - script fails, debug needed 
+#### Step 4b — Dynamic routing (Intelligent Management)
 
 ```bash
-scripts/sstep2-dynamic-routing.sh
+scripts/step2-dynamic-routing.sh
 ```
 ```bash
 # Verify dynamic routing — responses should rotate across all running members
 for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
 ```
 
-#### Step 3c — Dynamic Routing Rules (optional)
+#### Step 4c — Dynamic Routing Rules (optional)
 
 Once dynamic routing is active you can pin specific URIs to individual members using Liberty routing rules. The controller picks up dropin changes live — no restart needed.
 
@@ -216,7 +206,7 @@ scripts/apply-routing-rules.sh -s all       # remove pin — restore round-robin
 
 ---
 
-### Step 4 — Add 25.0.0.1 Members
+### Step 5 — Add 25.0.0.1 Members
 
 With Intelligent Management active, member3 and member4 are automatically added to the routing
 table as soon as they join — no IHS config changes or script re-run required.
@@ -231,7 +221,7 @@ scripts/add-member-25.sh member4   # Deploy member4 (25.0.0.1), join collective
 
 ---
 
-### Step 5 — Validate
+### Step 6 — Validate
 
 ```bash
 scripts/07-validate.sh
