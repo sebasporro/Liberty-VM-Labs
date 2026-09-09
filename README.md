@@ -197,7 +197,7 @@ for i in $(seq 8); do curl -s http://localhost:8080/server-info/ | grep -o 'memb
 Work in progress - script fails, debug needed 
 
 ```bash
-scripts/setup-dynamic-routing.sh
+scripts/sstep2-dynamic-routing.sh
 ```
 ```bash
 # Verify dynamic routing — responses should rotate across all running members

@@ -13,23 +13,38 @@ echo "============================================================="
 echo ""
 
 # ---------------------------------------------------------------------------
-# Helper function to stop a server safely
+# Helper function to stop a server safely and force-kill if needed
 # ---------------------------------------------------------------------------
 stop_server() {
     local name="$1"
     local server_bin="${WORKSPACE_ROOT}/installs/${name}/wlp/bin/server"
     if [[ -x "${server_bin}" ]]; then
-        echo "Stopping server ${name}..."
+        echo "Stopping server ${name} gracefully..."
         "${server_bin}" stop "${name}" 2>/dev/null || true
+        sleep 1
+    fi
+    # Force kill fallback if the process is still running
+    if pgrep -f "ws-server.jar.*${name}" >/dev/null 2>&1; then
+        echo "Force-killing remaining process for ${name}..."
+        pkill -9 -f "ws-server.jar.*${name}" 2>/dev/null || true
     fi
 }
 
-# 1. Stop running servers
-echo "[1/4] Stopping any running controller and member instances..."
+# 1. Stop running servers and clear target ports
+echo "[1/4] Stopping running controller and member instances..."
 stop_server "member1"
 stop_server "member2"
 stop_server "controller"
-echo "      Stopped."
+
+echo "Ensuring collective ports are clear..."
+for port in 9080 9443 9081 9082 9444 9445; do
+    pid=$(lsof -t -iTCP:$port -sTCP:LISTEN 2>/dev/null)
+    if [[ -n "${pid}" ]]; then
+        echo "  Port ${port} in use by process ${pid} — force-killing..."
+        kill -9 ${pid} 2>/dev/null || true
+    fi
+done
+echo "      All servers stopped and ports cleared."
 echo ""
 
 # 2. Clean up previous deployments
