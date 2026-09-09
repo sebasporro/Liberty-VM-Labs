@@ -1,7 +1,41 @@
 #!/bin/bash
 # =============================================================================
 # setup-dynamic-routing.sh
-# Minimal, robust script to enable Liberty Dynamic Routing (Intelligent Management).
+# Enables Liberty Dynamic Routing (Intelligent Management) for a Liberty
+# collective. Follows the IBM documentation procedure:
+#   https://www.ibm.com/docs/en/was-liberty/nd?topic=collectives-setting-up-dynamic-routing-single-liberty-collective
+#
+# Steps performed (single-VM variant — controller and IHS on the same host):
+#
+#   Step 1 — Enable dynamicRouting-1.0 on the controller
+#             (pre-requisite: already declared in configDropins/overrides/role-override.xml)
+#
+#   Step 2 — Start / verify the controller is running
+#             (pre-requisite: controller must be started before running this script)
+#
+#   Step 3 — Run 'dynamicRouting setup' on the controller to generate
+#             plugin-key.p12 and plugin-cfg.xml
+#
+#   Step 4 — Copy generated files to a temporary directory on the web server host
+#             (single-VM: TEMP_DIR serves as both source and staging area)
+#
+#   Step 5 — Run gskcapicmd to convert plugin-key.p12 (PKCS12) to CMS format
+#             (.kdb / .sth) as required by the WebSphere plug-in
+#
+#   Step 6 — Set the personal certificate as default in the CMS keystore
+#
+#   Step 7 — Copy plugin-key.kdb, plugin-key.rdb, plugin-key.sth to
+#             $IHS/config/webserver1/
+#
+#   Step 8 — Copy plugin-cfg.xml to the directory referenced by the
+#             WebSpherePluginConfig directive in httpd.conf
+#
+#   Step 9 — Start the web server and begin routing to the collective
+#
+#   (Liberty 26 extras applied automatically after Step 3):
+#     - Inject AcceptType=application/json into ConnectorCluster
+#     - Ensure trailing slash on /ibm/api/dynamicRouting URI
+#     - Patch Keyfile/Stashfile paths to final plugin target directory
 #
 # Prerequisites:
 #   - Controller running on HTTPS 9443 with dynamicRouting-1.0 feature
