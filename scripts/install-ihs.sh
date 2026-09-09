@@ -23,7 +23,12 @@ cat > /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml <<'EOF'
     <Property Name="ESIMaxRecursiveIncludeDepth" Value="10"/>
 
     <ServerCluster CloneSeparatorChange="false" GetDWLMTable="false" IgnoreAffinityRequests="true" LoadBalance="Round Robin" Name="defaultCollective" PostSizeLimit="-1" RemoveSpecialHeaders="true" RetryInterval="60">
-        <PrimaryServers/>
+        <Server CloneID="placeholder" ConnectTimeout="5" ExtendedHandshake="false" MaxConnections="-1" Name="placeholder" ServerIOTimeout="900" WaitForContinue="false">
+            <Transport Hostname="localhost" Port="9081" Protocol="http"/>
+        </Server>
+        <PrimaryServers>
+            <Server Name="placeholder"/>
+        </PrimaryServers>
     </ServerCluster>
 
     <UriGroup Name="defaultCollective_URIs">
