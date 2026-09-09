@@ -56,11 +56,11 @@ if 'AcceptType' not in content:
         content
     )
 
-# 3. Inject RoutingPolicy under IntelligentManagement if absent
+# 3. Inject RoutingPolicy under Config if absent
 if 'RoutingPolicy' not in content:
     content = re.sub(
-        r'(<IntelligentManagement\b[^>]*>)',
-        r'\1\n    <Property name="RoutingPolicy" value="RoundRobin"/>',
+        r'(<Config\b[^>]*>)',
+        r'\1\n    <Property Name="RoutingPolicy" Value="RoundRobin"/>',
         content
     )
 
