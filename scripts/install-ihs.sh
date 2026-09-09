@@ -23,16 +23,7 @@ cat > /home/itzuser/IBM/HTTPServer/plugin/config/webserver1/plugin-cfg.xml <<'EO
     <Property Name="ESIMaxRecursiveIncludeDepth" Value="10"/>
 
     <ServerCluster CloneSeparatorChange="false" GetDWLMTable="false" IgnoreAffinityRequests="true" LoadBalance="Round Robin" Name="defaultCollective" PostSizeLimit="-1" RemoveSpecialHeaders="true" RetryInterval="60">
-        <Server CloneID="member1" ConnectTimeout="5" ExtendedHandshake="false" MaxConnections="-1" Name="member1_9081" ServerIOTimeout="900" WaitForContinue="false">
-            <Transport Hostname="localhost" Port="9081" Protocol="http"/>
-        </Server>
-        <Server CloneID="member2" ConnectTimeout="5" ExtendedHandshake="false" MaxConnections="-1" Name="member2_9082" ServerIOTimeout="900" WaitForContinue="false">
-            <Transport Hostname="localhost" Port="9082" Protocol="http"/>
-        </Server>
-        <PrimaryServers>
-            <Server Name="member1_9081"/>
-            <Server Name="member2_9082"/>
-        </PrimaryServers>
+        <PrimaryServers/>
     </ServerCluster>
 
     <UriGroup Name="defaultCollective_URIs">
