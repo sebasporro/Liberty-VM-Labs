@@ -19,7 +19,7 @@
 # with "Failed to parse the config file plugin-cfg.xml".
 # =============================================================================
 
-IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/usr/IBM/IHS}"
 PLUGIN_CFG="${IHS_ROOT}/config/webserver1/plugin-cfg.xml"
 
 echo ""
@@ -107,10 +107,10 @@ echo "  Starting IHS..."
 "${IHS_ROOT}/bin/apachectl" start
 sleep 3
 
-if ss -tlnp 2>/dev/null | grep -q ":8080 "; then
-    echo "  IHS running on port 8080 ✓"
+if ss -tlnp 2>/dev/null | grep -q ":1080 "; then
+    echo "  IHS running on port 1080 ✓"
     echo ""
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/server-info/ 2>/dev/null)
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:1080/server-info/ 2>/dev/null)
     echo "  GET /server-info/ → HTTP ${HTTP_CODE}"
 else
     echo "  ERROR: IHS failed to start"

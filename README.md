@@ -29,7 +29,7 @@ wlp-nd-all-26.0.0.8.jar
           └─────────────┴──────────────┘
                         │
                IBM HTTP Server (IHS)
-                    (port 8080)
+                    (port 1080)
 ```
 
 Each deployed instance receives its identity by dropping XML files into
@@ -105,15 +105,17 @@ grep WORKSPACE_ROOT scripts/00-set-env.sh
 
 ---
 
-### Step 1 — Install IBM HTTP Server (IHS)
+### Initial Setup — Install IBM HTTP Server (IHS)
 
 IHS is the front-end HTTP server that load-balances requests across the Liberty collective
 members. Install it once before running the lab steps.
 
+```bash
 bash scripts/install-ihs.sh
 
 # Verify that round robin works
 curl -s http://localhost:1080
+```
 
 ---
 
@@ -185,26 +187,25 @@ scripts/reset-ihs.sh
 scripts/step1-was-plugin.sh
 ```
 
-**Expected state:** `http://localhost:8080/server-info/` returns `200` and
+**Expected state:** `http://localhost:1080/server-info/` returns `200` and
 round-robins across **all members that were running when the script executed**.
 Members added or removed after the script runs are NOT reflected — rerun the
 script to regenerate the static config. That limitation is what step 3b solves.
 
 ```bash
 # Verify round robin across all members
-for i in $(seq 8); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
+for i in $(seq 8); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
 ```
 
 #### Step 3b — Dynamic routing (Intelligent Management)
 
-Work in progress - script fails, debug needed 
+Enable native Liberty dynamic routing:
 
 ```bash
-scripts/setup-dynamic-routing.sh
-```
-```bash
+scripts/step2-dynamic-routing.sh
+
 # Verify dynamic routing — responses should rotate across all running members
-for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
+for i in $(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
 ```
 
 #### Step 3c — Dynamic Routing Rules (optional)
@@ -230,7 +231,7 @@ scripts/add-member-25.sh member4   # Deploy member4 (25.0.0.1), join collective
 ```
 
 **Expected state:** All four members visible in Admin Center. IHS at
-`http://localhost:8080/server-info/` now rotates across all four members.
+`http://localhost:1080/server-info/` now rotates across all four members.
 
 ---
 
@@ -250,7 +251,7 @@ curl http://localhost:9081/server-info/   # member1 (26.0.0.8)
 curl http://localhost:9082/server-info/   # member2 (26.0.0.8)
 curl http://localhost:9083/server-info/   # member3 (25.0.0.1)
 curl http://localhost:9084/server-info/   # member4 (25.0.0.1)
-curl http://localhost:8080/server-info/   # IHS → dynamic routing
+curl http://localhost:1080/server-info/   # IHS → dynamic routing
 ```
 
 ---
@@ -307,8 +308,8 @@ scripts/reset-ihs.sh
 | Member2 app (direct) | `http://localhost:9082/server-info/` | — |
 | Member3 app (direct) | `http://localhost:9083/server-info/` | — |
 | Member4 app (direct) | `http://localhost:9084/server-info/` | — |
-| IHS load balancer | `http://localhost:8080/server-info/` | — |
-| Balancer Manager | `http://localhost:8080/balancer-manager` | localhost only |
+| IHS load balancer | `http://localhost:1080/server-info/` | — |
+| Balancer Manager | `http://localhost:1080/balancer-manager` | localhost only |
 
 ---
 
@@ -379,7 +380,7 @@ Liberty-VM-Labs/
 | member2 | 9082 | 9445 | 26.0.0.8 ND | collectiveMember |
 | member3 | 9083 | 9446 | 25.0.0.1 Base | collectiveMember |
 | member4 | 9084 | 9447 | 25.0.0.1 Base | collectiveMember |
-| IHS | 8080 | — | — | mod_proxy_balancer front-end |
+| IHS | 1080 | — | — | mod_proxy_balancer front-end |
 
 ---
 
@@ -552,7 +553,7 @@ Member servers must be running on ports 9081 and 9082.
 ```bash
 # Should alternate between port 9081 and 9082
 for i in 1 2 3 4; do
-  curl -s http://localhost:8080/server-info/ | grep -o "PORT.*[0-9]\{4\}"
+  curl -s http://localhost:1080/server-info/ | grep -o "PORT.*[0-9]\{4\}"
 done
 ```
 
@@ -631,10 +632,10 @@ scripts/apply-routing-rules.sh -s all       # remove rule — restore round-robi
 **Verify:**
 ```bash
 # With -s member1: every response should show member1
-for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
+for i in $(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
 
 # With -s all: responses should alternate across members
-for i in $(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done
+for i in $(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
 ```
 
 > **Reference:** See [`config/controller/routing-rules.xml`](config/controller/routing-rules.xml) for the annotated template.
@@ -717,7 +718,7 @@ Checks performed:
 - Member2 (26.0.0.8): directory, port 9082, app response, configDropins
 - Member3 (25.0.0.1): directory, port 9083, app response, configDropins
 - Member4 (25.0.0.1): directory, port 9084, app response, configDropins
-- Apache/IHS front-end reachable on port 8080
+- Apache/IHS front-end reachable on port 1080
 
 Exits 0 if all checks pass, exits 1 if any fail. Each failure prints the fix command.
 
@@ -840,7 +841,7 @@ installs/member3/wlp/bin/server status member3
 installs/member4/wlp/bin/server status member4
 
 # Check ports
-for port in 9080 9081 9082 9083 9084 9443 8080; do
+for port in 9080 9081 9082 9083 9084 9443 1080; do
   lsof -iTCP:$port -sTCP:LISTEN 2>/dev/null && echo "PORT $port IN USE" || echo "PORT $port free"
 done
 

@@ -8,7 +8,7 @@
 #   - Both golden packages
 #   - Controller (directory, port, Admin Center, configDropins)
 #   - All 4 members (directory, port, app response, configDropins)
-#   - Apache HTTP front-end (:8080)
+#   - Apache HTTP front-end (:1080)
 #
 # Exit 0 = all pass | Exit 1 = one or more failures
 # =============================================================================
@@ -99,7 +99,7 @@ check_admin_center() {
 
 check_apache() {
     local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/server-info/")
+    code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:1080/server-info/")
     [[ "${code}" == "200" ]]
 }
 
@@ -223,7 +223,7 @@ run_check "Member4 configDropins/overrides populated" \
     check_dropins "member4/wlp/usr/servers/member4"
 
 # --- Apache front-end ---
-run_check "IHS/Apache front-end reachable (:8080/server-info/)" \
+run_check "IHS/Apache front-end reachable (:1080/server-info/)" \
     "Fix: scripts/start-apache.sh then apachectl graceful" \
     check_apache
 
@@ -263,7 +263,7 @@ if [[ "${fail_count}" -eq 0 ]]; then
     echo "    Member2:       http://localhost:9082/server-info/"
     echo "    Member3:       http://localhost:9083/server-info/"
     echo "    Member4:       http://localhost:9084/server-info/"
-    echo "    Apache LB:     http://localhost:8080/server-info/"
+    echo "    Apache LB:     http://localhost:1080/server-info/"
     echo ""
     exit 0
 else

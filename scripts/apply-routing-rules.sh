@@ -65,7 +65,7 @@ fi
 # ---------------------------------------------------------------------------
 CTRL_OVERRIDES="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/configDropins/overrides"
 RULES_FILE="${CTRL_OVERRIDES}/routing-rules.xml"
-IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/usr/IBM/IHS}"
 APACHECTL="${IHS_ROOT}/bin/apachectl"
 
 echo ""
@@ -131,7 +131,7 @@ echo ""
 echo "  Routing rule now active: -s ${TARGET_SERVER}"
 echo ""
 echo "  Verify:"
-echo "    for i in \$(seq 6); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done"
+echo "    for i in \$(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done"
 echo ""
 echo "============================================================="
 echo ""

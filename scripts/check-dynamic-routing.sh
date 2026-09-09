@@ -5,7 +5,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/usr/IBM/IHS}"
 PLUGIN_DIR="${IHS_ROOT}/config/webserver1"
 HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
 
@@ -78,7 +78,7 @@ echo ""
 
 # ── 6. IHS via plugin ─────────────────────────────────────────────────────
 echo "6. Request through IHS → plugin → member:"
-IHS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/server-info/ 2>/dev/null)
+IHS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:1080/server-info/ 2>/dev/null)
 [[ "${IHS}" == "200" ]] \
     && echo "${PASS} HTTP ${IHS} — dynamic routing is working" \
     || echo "${FAIL} HTTP ${IHS}"

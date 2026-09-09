@@ -5,7 +5,7 @@
 # collective members using a static plugin-cfg.xml (Round Robin).
 #
 # Architecture:
-#   Browser → IHS:8080 → mod_was_ap24_http.so → member1:9081 / member2:9082
+#   Browser → IHS:1080 → mod_was_ap24_http.so → member1:9081 / member2:9082
 #                                                / member3:9083 / member4:9084
 #
 # What this script does:
@@ -16,9 +16,9 @@
 #   5. Verifies routing with a test request
 # =============================================================================
 
-IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/usr/IBM/IHS}"
 HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
-PLUGIN_CFG="${IHS_ROOT}/conf/plugin-cfg.xml"
+PLUGIN_CFG="${IHS_ROOT}/plugin/config/webserver1/plugin-cfg.xml"
 APACHECTL="${IHS_ROOT}/bin/apachectl"
 
 echo ""
@@ -34,8 +34,8 @@ if [[ ! -f "${HTTPD_CONF}" ]]; then
     exit 1
 fi
 
-if [[ ! -f "${IHS_ROOT}/modules/mod_was_ap24_http.so" ]]; then
-    echo "ERROR: mod_was_ap24_http.so not found in ${IHS_ROOT}/modules/"
+if [[ ! -f "${IHS_ROOT}/modules/mod_was_ap24_http.so" && ! -f "${IHS_ROOT}/plugin/bin/64bits/mod_was_ap24_http.so" ]]; then
+    echo "ERROR: mod_was_ap24_http.so not found."
     echo "       Run scripts/install-ihs.sh first."
     exit 1
 fi
@@ -130,7 +130,7 @@ $(printf "${PRIMARY_LIST}")        </PrimaryServers>
     </UriGroup>
 
     <VirtualHostGroup Name="defaultCollective_Hosts">
-        <VirtualHost Name="*:8080"/>
+        <VirtualHost Name="*:1080"/>
     </VirtualHostGroup>
 
     <Route ServerCluster="defaultCollective"
@@ -175,15 +175,15 @@ echo "[4/4] Starting IHS..."
 # "not running" if the PID file is missing while the process is still alive.
 "${APACHECTL}" stop 2>/dev/null; sleep 2
 pkill -9 -f "${IHS_ROOT}/bin/httpd" 2>/dev/null; sleep 1
-if ss -tlnp 2>/dev/null | grep -q ":8080 "; then
-    echo "ERROR: port 8080 still in use after stop — cannot start IHS"
-    ss -tlnp | grep ":8080"
+if ss -tlnp 2>/dev/null | grep -q ":1080 "; then
+    echo "ERROR: port 1080 still in use after stop — cannot start IHS"
+    ss -tlnp | grep ":1080"
     exit 1
 fi
 "${APACHECTL}" start
 sleep 1
 
-if ! ss -tlnp 2>/dev/null | grep -q ":8080 "; then
+if ! ss -tlnp 2>/dev/null | grep -q ":1080 "; then
     echo "ERROR: IHS failed to start. Check: ${IHS_ROOT}/logs/error_log"
     tail -20 "${IHS_ROOT}/logs/error_log"
     exit 1
@@ -194,7 +194,7 @@ echo "=== Step 3a complete ==="
 echo ""
 echo "  Static Round Robin across: ${MEMBER_NAMES[*]}"
 echo "  Verify:"
-echo "    for i in \$(seq 8); do curl -s http://localhost:8080/server-info/ | grep -o 'member[0-9]*'; done"
+echo "    for i in \$(seq 8); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done"
 echo ""
 echo "  IHS plugin log:"
 echo "    tail -f ${IHS_ROOT}/logs/plugin.log"

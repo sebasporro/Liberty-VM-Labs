@@ -13,7 +13,7 @@
 # Usage:  scripts/uninstall-ihs.sh
 # =============================================================================
 
-IHS_INSTALL_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
+IHS_INSTALL_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/usr/IBM/IHS}"
 IHS_STAGING="${HOME}/Liberty-VM-Labs/_ihs_staging"
 
 echo ""

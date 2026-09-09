@@ -7,7 +7,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/usr/IBM/IHS}"
 CTRL_SERVER="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller"
 PLUGIN_DIR="${IHS_ROOT}/config/webserver1"
 OUT="/tmp/liberty-debug-$(date +%Y%m%d-%H%M%S).txt"

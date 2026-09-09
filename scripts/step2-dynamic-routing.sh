@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# setup-dynamic-routing.sh
+# step2-dynamic-routing.sh
 # Enables Liberty Dynamic Routing (Intelligent Management) for a Liberty
 # collective. Follows the IBM documentation procedure:
 #   https://www.ibm.com/docs/en/was-liberty/nd?topic=collectives-setting-up-dynamic-routing-single-liberty-collective

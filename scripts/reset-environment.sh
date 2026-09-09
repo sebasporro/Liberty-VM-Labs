@@ -29,7 +29,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
-IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/IBM/HTTPServer}"
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/usr/IBM/IHS}"
 HTTPD_CONF="${IHS_ROOT}/conf/httpd.conf"
 APACHECTL="${IHS_ROOT}/bin/apachectl"
 IHS_LIB="${IHS_ROOT}/lib"
@@ -106,7 +106,7 @@ echo "[3/7] Resetting IHS httpd.conf to clean baseline..."
 
 if [[ -f "${HTTPD_CONF}" ]]; then
     # Stop IHS outright (not graceful) — we are replacing httpd.conf wholesale
-    if ss -tlnp 2>/dev/null | grep -q ":8080 "; then
+    if ss -tlnp 2>/dev/null | grep -q ":1080 "; then
         echo "      Stopping IHS..."
         "${APACHECTL}" stop 2>/dev/null || true
         sleep 2
@@ -120,8 +120,8 @@ if [[ -f "${HTTPD_CONF}" ]]; then
 # Reset by reset-environment.sh — safe to regenerate via scripts/reset-ihs.sh
 # =============================================================================
 ServerRoot "${IHS_ROOT}"
-Listen 8080
-ServerName localhost:8080
+Listen 1080
+ServerName localhost:1080
 ServerAdmin admin@localhost
 
 LoadModule mpm_worker_module      modules/mod_mpm_worker.so
