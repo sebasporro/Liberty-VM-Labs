@@ -21,7 +21,7 @@
     The KeyRing attribute below must point at that file.
 
   Architecture:
-    Browser → IHS:8080 ──(mod_was_ap24_http.so)──► controller:9443/wr
+    Browser → IHS:1080 ──(mod_was_ap24_http.so)──► controller:9443/wr
                                                          │
                                           live route table from collective
                                                          │
@@ -79,7 +79,7 @@
     </UriGroup>
 
     <VirtualHostGroup Name="CollectiveHosts">
-        <VirtualHost Name="*:8080"/>
+        <VirtualHost Name="*:1080"/>
     </VirtualHostGroup>
 
     <Route ServerCluster="CollectiveCluster"

@@ -9,7 +9,7 @@
 ## Architecture (confirmed)
 
 ```
-Browser -> IHS:8080 -> mod_was_ap24_http.so + libodr.so
+Browser -> IHS:1080 -> mod_was_ap24_http.so + libodr.so
                               |
                     POST /ibm/api/dynamicRouting  (interests body, Accept: application/json required)
                               |
@@ -36,7 +36,7 @@ Browser -> IHS:8080 -> mod_was_ap24_http.so + libodr.so
 | VM hostname | `vm-1`, user `itzuser` |
 | Workspace | `/home/itzuser/Liberty-VM-Labs` |
 | Liberty version | WebSphere Liberty ND 26.0.0.8 |
-| IHS | `/home/itzuser/IBM/HTTPServer`, port 8080 |
+| IHS | `/home/itzuser/IBM/HTTPServer`, port 1080 |
 | IHS plugin version | WAS plugin 9.0.5.24, built Apr 21 2025 |
 | Controller | `installs/controller/wlp`, HTTP 9080, HTTPS 9443 |
 | Plugin dir | `$IHS/config/webserver1/` |

@@ -28,47 +28,8 @@ cd "${CONTROLLER_BIN}"
 
 # 2. Stage files
 mkdir -p ~/temp/dynamicRouting
-rm -f ~/temp/dynamicRouting/plugin-key.*  # Clear previous keys to make gskcapicmd conversion idempotent on reruns
 mv "${CONTROLLER_BIN}/plugin-cfg.xml" ~/temp/dynamicRouting/
 mv "${CONTROLLER_BIN}/plugin-key.p12" ~/temp/dynamicRouting/
-
-# Patch plugin-cfg.xml to:
-#  1. Ensure trailing slash on dynamicRouting uri (fixes HTTP 307 redirect issue)
-#  2. Inject AcceptType under Connector (fixes HTTP 500 error on Liberty 26)
-#  3. Inject RoutingPolicy under IntelligentManagement (forces strict RoundRobin load-balancing)
-python3 - ~/temp/dynamicRouting/plugin-cfg.xml <<'PYEOF'
-import sys, re
-path = sys.argv[1]
-with open(path) as f:
-    content = f.read()
-
-# 1. Ensure trailing slash on dynamicRouting uri
-content = re.sub(
-    r'(<Property\s+name="uri"\s+value="/ibm/api/dynamicRouting)(")',
-    r'\g<1>/\g<2>',
-    content
-)
-
-# 2. Inject AcceptType under Connector if absent
-if 'AcceptType' not in content:
-    content = re.sub(
-        r'(<Connector\b[^>]*>)',
-        r'\1\n            <Property name="AcceptType" value="application/json"/>',
-        content
-    )
-
-# 3. Inject RoutingPolicy under Config if absent
-if 'RoutingPolicy' not in content:
-    content = re.sub(
-        r'(<Config\b[^>]*>)',
-        r'\1\n    <Property Name="RoutingPolicy" Value="RoundRobin"/>',
-        content
-    )
-
-with open(path, 'w') as f:
-    f.write(content)
-PYEOF
-
 cp ~/temp/dynamicRouting/plugin-cfg.xml "${IHS_ROOT}/plugin/config/webserver1/"
 
 # 3. Convert keystore and set default certificate
