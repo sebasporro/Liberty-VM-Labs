@@ -73,28 +73,35 @@ path, target = sys.argv[1], sys.argv[2]
 with open(path) as f:
     content = f.read()
 
-if target == "all":
-    # Pure round-robin: ignore any session cookie, distribute evenly
-    patched = re.sub(r'LoadBalance="[^"]*"', 'LoadBalance="RoundRobin"', content)
-    patched = re.sub(r'IgnoreAffinityRequests="[^"]*"', 'IgnoreAffinityRequests="true"', patched)
-    label = "round-robin across all members"
-else:
-    # Pin: keep round-robin algorithm but honour affinity cookie so all
-    # requests from a session stick to the same member
-    patched = re.sub(r'LoadBalance="[^"]*"', 'LoadBalance="RoundRobin"', content)
-    patched = re.sub(r'IgnoreAffinityRequests="[^"]*"', 'IgnoreAffinityRequests="false"', patched)
-    label = f"pinned to {target} (via session affinity)"
+ignore_val = "true" if target == "all" else "false"
+label      = "round-robin across all members" if target == "all" \
+             else f"pinned to {target} (via session affinity)"
+
+def set_attr(text, attr, value):
+    """Replace attr="..." if present, otherwise inject it into <ServerCluster ...>."""
+    pattern = rf'{attr}="[^"]*"'
+    replacement = f'{attr}="{value}"'
+    if re.search(pattern, text):
+        return re.sub(pattern, replacement, text)
+    # Attribute absent — inject before the closing > of every <ServerCluster ...> tag
+    return re.sub(
+        r'(<ServerCluster\b[^>]*?)(\s*/>|>)',
+        lambda m: f'{m.group(1)} {replacement}{m.group(2)}',
+        text
+    )
+
+patched = set_attr(content,  "LoadBalance",            "RoundRobin")
+patched = set_attr(patched,  "IgnoreAffinityRequests", ignore_val)
 
 if patched == content:
-    print("  WARNING: no LoadBalance/IgnoreAffinityRequests attributes found to patch.")
-    print("           Add them to <ServerCluster> in plugin-cfg.xml first.")
+    print("  ERROR: could not locate <ServerCluster> in plugin-cfg.xml.")
     sys.exit(1)
 
 with open(path, 'w') as f:
     f.write(patched)
 
-print(f"  LoadBalance         = RoundRobin")
-print(f"  IgnoreAffinityRequests = {'true' if target == 'all' else 'false'}")
+print(f"  LoadBalance            = RoundRobin")
+print(f"  IgnoreAffinityRequests = {ignore_val}")
 print(f"  Mode: {label}")
 PYEOF
 
