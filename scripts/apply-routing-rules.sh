@@ -77,19 +77,20 @@ ignore_val = "true" if target == "all" else "false"
 label      = "round-robin across all members" if target == "all" \
              else f"pinned to {target} (via session affinity)"
 
+# Detect which cluster tag this plugin-cfg.xml uses:
+#   <ConnectorCluster> — IntelligentManagement format (dynamicRouting setup)
+#   <ServerCluster>    — static format
+tag = "ConnectorCluster" if re.search(r'<ConnectorCluster\b', content) else "ServerCluster"
+if not re.search(rf'<{tag}\b', content):
+    print("  ERROR: neither <ConnectorCluster> nor <ServerCluster> found in plugin-cfg.xml.")
+    sys.exit(1)
+
 def set_attr(text, attr, value):
-    """Replace attr="..." if present on <ConnectorCluster> or <ServerCluster>,
-    otherwise inject it into whichever tag exists."""
+    """Set attr=value on the cluster tag — replace if present, inject if absent."""
     pattern = rf'{attr}="[^"]*"'
     replacement = f'{attr}="{value}"'
     if re.search(pattern, text):
         return re.sub(pattern, replacement, text)
-    # Inject into <ConnectorCluster ...> if present (IntelligentManagement format),
-    # otherwise fall back to <ServerCluster ...> (static format).
-    tag = "ConnectorCluster" if re.search(r'<ConnectorCluster\b', text) else "ServerCluster"
-    if not re.search(rf'<{tag}\b', text):
-        print(f"  ERROR: neither <ConnectorCluster> nor <ServerCluster> found in plugin-cfg.xml.")
-        sys.exit(1)
     return re.sub(
         rf'(<{tag}\b[^>]*?)(\s*/>|>)',
         lambda m: f'{m.group(1)} {replacement}{m.group(2)}',
@@ -98,10 +99,6 @@ def set_attr(text, attr, value):
 
 patched = set_attr(content,  "LoadBalance",            "RoundRobin")
 patched = set_attr(patched,  "IgnoreAffinityRequests", ignore_val)
-
-if patched == content:
-    print("  ERROR: could not locate <ConnectorCluster> or <ServerCluster> in plugin-cfg.xml.")
-    sys.exit(1)
 
 with open(path, 'w') as f:
     f.write(patched)
