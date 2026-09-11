@@ -6,6 +6,7 @@
 TARGET="$1"
 PLUGIN_CFG="/home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml"
 KDB="/home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-key.kdb"
+DROPIN="/home/itzuser/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/configDropins/overrides/routing-affinity.xml"
 M1_BIN="/home/itzuser/Liberty-VM-Labs/installs/member1/wlp/bin/server"
 M2_BIN="/home/itzuser/Liberty-VM-Labs/installs/member2/wlp/bin/server"
 APACHECTL="/home/itzuser/usr/IBM/IHS/bin/apachectl"
@@ -15,11 +16,11 @@ if [[ "$TARGET" != "on" && "$TARGET" != "off" ]]; then
     exit 1
 fi
 
-# IgnoreAffinityRequests must be on <ConnectorCluster> — not a <Property> element.
-# true  = plug-in ignores JSESSIONID cookie → every request rotates (round-robin)
-# false = plug-in pins client to first member via cookie → single server
 [[ "$TARGET" == "on" ]] && AFFINITY="true" || AFFINITY="false"
 
+# ---------------------------------------------------------------------------
+# 1. Rewrite plugin-cfg.xml with correct IntelligentManagement structure
+# ---------------------------------------------------------------------------
 cat > "$PLUGIN_CFG" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <Config ASDisableNagle="false" AcceptAllContent="false"
@@ -50,22 +51,45 @@ cat > "$PLUGIN_CFG" <<EOF
 
 </Config>
 EOF
+echo "plugin-cfg.xml → IgnoreAffinityRequests=${AFFINITY}"
 
-echo "plugin-cfg.xml rewritten — IgnoreAffinityRequests=${AFFINITY}, LoadBalance=RoundRobin"
+# ---------------------------------------------------------------------------
+# 2. Controller dropin: overrideAffinity tells the dynamic routing publisher
+#    to stop enforcing session affinity in the routing table it serves to the
+#    plug-in. Written on 'on', removed on 'off'.
+# ---------------------------------------------------------------------------
+if [[ "$TARGET" == "on" ]]; then
+    cat > "$DROPIN" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<server>
+    <routingRules overrideAffinity="true"/>
+</server>
+EOF
+    echo "controller dropin → overrideAffinity=true"
+else
+    rm -f "$DROPIN"
+    echo "controller dropin → removed"
+fi
 
+# ---------------------------------------------------------------------------
+# 3. Start/stop members
+# ---------------------------------------------------------------------------
 case "$TARGET" in
     on)
-        echo "Round-robin ON — starting all members..."
+        echo "Starting all members..."
         "$M1_BIN" start member1 2>/dev/null
         "$M2_BIN" start member2 2>/dev/null
         ;;
     off)
-        echo "Round-robin OFF — stopping member2, member1 answers all requests..."
-        echo "(If member1 goes down, member2 will take over automatically)"
+        echo "Stopping member2..."
         "$M2_BIN" stop member2
+        echo "(If member1 goes down, member2 will take over automatically)"
         ;;
 esac
 
+# ---------------------------------------------------------------------------
+# 4. Restart IHS to pick up the new plugin-cfg.xml immediately
+# ---------------------------------------------------------------------------
 "$APACHECTL" graceful
 echo ""
 echo "Test: for i in \$(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done"
