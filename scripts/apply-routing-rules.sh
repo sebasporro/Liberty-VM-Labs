@@ -1,104 +1,50 @@
 #!/bin/bash
-# =============================================================================
-# apply-routing-rules.sh  —  Liberty Collective Dynamic Routing Rules
-#
-# Pins /server-info/* to a specific collective member, or restores round-robin
-# across all members, by writing (or removing) a routing-rules.xml dropin into
-# the controller's configDropins/overrides/ directory.
-#
-# In IntelligentManagement mode the WAS plug-in fetches its routing table from
-# the controller's /ibm/api/dynamicRouting endpoint. Controller-side
-# <routingRules> are the correct mechanism to influence that table — patching
-# plugin-cfg.xml attributes has no effect in this mode.
-#
 # Usage:
-#   scripts/apply-routing-rules.sh -s member1   # pin /server-info/* to member1
-#   scripts/apply-routing-rules.sh -s member2   # pin /server-info/* to member2
-#   scripts/apply-routing-rules.sh -s all       # remove pin → round-robin
-# =============================================================================
+#   scripts/apply-routing-rules.sh member1   # pin to member1
+#   scripts/apply-routing-rules.sh member2   # pin to member2
+#   scripts/apply-routing-rules.sh all       # round-robin (remove pin)
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/00-set-env.sh"
+TARGET="$1"
+DROPIN="/home/itzuser/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/configDropins/overrides/routing-rules.xml"
+WLP="/home/itzuser/Liberty-VM-Labs/installs/controller/wlp/bin/server"
 
-# ---------------------------------------------------------------------------
-# Arguments
-# ---------------------------------------------------------------------------
-TARGET_SERVER=""
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -s|--server) TARGET_SERVER="$2"; shift 2 ;;
-        *) shift ;;
-    esac
-done
-
-if [[ -z "${TARGET_SERVER}" ]]; then
-    echo "Usage: $0 -s <member1 | member2 | all>"
+if [[ "$TARGET" != "member1" && "$TARGET" != "member2" && "$TARGET" != "all" ]]; then
+    echo "Usage: $0 <member1 | member2 | all>"
     exit 1
 fi
 
-if [[ "${TARGET_SERVER}" != "member1" && \
-      "${TARGET_SERVER}" != "member2" && \
-      "${TARGET_SERVER}" != "all" ]]; then
-    echo "ERROR: -s must be: member1 | member2 | all"
-    exit 1
-fi
-
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-CTRL_OVERRIDES="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/configDropins/overrides"
-RULES_FILE="${CTRL_OVERRIDES}/routing-rules.xml"
-
-[[ -d "${CTRL_OVERRIDES}" ]] \
-    || { echo "ERROR: ${CTRL_OVERRIDES} not found. Run scripts/install-controller.sh first."; exit 1; }
-
-echo ""
-echo "=== Apply Routing Rules ==="
-echo ""
-
-# ---------------------------------------------------------------------------
-# Write or remove the routing-rules dropin
-# ---------------------------------------------------------------------------
-if [[ "${TARGET_SERVER}" == "all" ]]; then
-    if [[ -f "${RULES_FILE}" ]]; then
-        rm -f "${RULES_FILE}"
-        echo "  Routing rule removed — controller will round-robin across all members."
-    else
-        echo "  No routing rule active — already round-robin."
-    fi
+if [[ "$TARGET" == "all" ]]; then
+    rm -f "$DROPIN"
+    echo "Removed routing rule — round-robin restored."
 else
-    cat > "${RULES_FILE}" <<XML
+    cat > "$DROPIN" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
-<server description="Dynamic Routing Rules">
-
-    <!--
-      Pins /server-info/* to ${TARGET_SERVER}.
-      destination pattern: server=<collective>,<host>,<userdir>,<serverName>
-      Wildcards (*) match any collective / host / userdir in this single-VM lab.
-    -->
-    <dynamicRouting>
-        <routingRules webServers="webserver1">
-            <routingRule order="100" matchExpression="URI LIKE '/server-info%'">
-                <permitAction>
-                    <loadBalanceEndPoints>
-                        <endpoint destination="server=*,*,*,${TARGET_SERVER}"/>
-                    </loadBalanceEndPoints>
-                </permitAction>
-            </routingRule>
-        </routingRules>
-    </dynamicRouting>
-
+<server>
+  <dynamicRouting>
+    <routingRules webServers="webserver1">
+      <routingRule order="100" matchExpression="URI LIKE '/server-info%'">
+        <permitAction>
+          <loadBalanceEndPoints>
+            <endpoint destination="server=*,*,*,${TARGET}"/>
+          </loadBalanceEndPoints>
+        </permitAction>
+      </routingRule>
+    </routingRules>
+  </dynamicRouting>
 </server>
-XML
-    echo "  Routing rule written → /server-info/* pinned to ${TARGET_SERVER}"
-    echo "  File: ${RULES_FILE}"
+EOF
+    echo "Written: $DROPIN"
+    echo "Pinned to: $TARGET"
 fi
 
+# Notify Liberty to reload config now (no restart)
 echo ""
-echo "  Liberty picks up the dropin dynamically — no controller restart needed."
-echo "  The plug-in refreshes its routing table within RefreshInterval (60s)."
-echo "  Force immediate pickup with: apachectl graceful"
+echo "Triggering config refresh..."
+"$WLP" pause controller --timeout=1 2>/dev/null; "$WLP" resume controller 2>/dev/null
+# pause/resume is a soft signal — Liberty re-reads dropins on resume
+# If that doesn't work, a stop/start is needed:
+#   $WLP stop controller && $WLP start controller
+
 echo ""
-echo "  Verify:"
-echo "    for i in \$(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done"
-echo ""
+echo "Test:"
+echo "  for i in \$(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done"
