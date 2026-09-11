@@ -78,14 +78,20 @@ label      = "round-robin across all members" if target == "all" \
              else f"pinned to {target} (via session affinity)"
 
 def set_attr(text, attr, value):
-    """Replace attr="..." if present, otherwise inject it into <ServerCluster ...>."""
+    """Replace attr="..." if present on <ConnectorCluster> or <ServerCluster>,
+    otherwise inject it into whichever tag exists."""
     pattern = rf'{attr}="[^"]*"'
     replacement = f'{attr}="{value}"'
     if re.search(pattern, text):
         return re.sub(pattern, replacement, text)
-    # Attribute absent — inject before the closing > of every <ServerCluster ...> tag
+    # Inject into <ConnectorCluster ...> if present (IntelligentManagement format),
+    # otherwise fall back to <ServerCluster ...> (static format).
+    tag = "ConnectorCluster" if re.search(r'<ConnectorCluster\b', text) else "ServerCluster"
+    if not re.search(rf'<{tag}\b', text):
+        print(f"  ERROR: neither <ConnectorCluster> nor <ServerCluster> found in plugin-cfg.xml.")
+        sys.exit(1)
     return re.sub(
-        r'(<ServerCluster\b[^>]*?)(\s*/>|>)',
+        rf'(<{tag}\b[^>]*?)(\s*/>|>)',
         lambda m: f'{m.group(1)} {replacement}{m.group(2)}',
         text
     )
@@ -94,7 +100,7 @@ patched = set_attr(content,  "LoadBalance",            "RoundRobin")
 patched = set_attr(patched,  "IgnoreAffinityRequests", ignore_val)
 
 if patched == content:
-    print("  ERROR: could not locate <ServerCluster> in plugin-cfg.xml.")
+    print("  ERROR: could not locate <ConnectorCluster> or <ServerCluster> in plugin-cfg.xml.")
     sys.exit(1)
 
 with open(path, 'w') as f:
