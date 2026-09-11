@@ -41,7 +41,7 @@ fi
 # Paths — plugin-cfg.xml is owned by IHS/plug-in, not the controller
 # ---------------------------------------------------------------------------
 IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/usr/IBM/IHS}"
-PLUGIN_CFG="${IHS_ROOT}/config/webserver1/plugin-cfg.xml"
+PLUGIN_CFG="${IHS_ROOT}/plugin/config/webserver1/plugin-cfg.xml"
 
 [[ -f "${PLUGIN_CFG}" ]] \
     || { echo "ERROR: ${PLUGIN_CFG} not found. Run step2-dynamic-routing.sh first."; exit 1; }
