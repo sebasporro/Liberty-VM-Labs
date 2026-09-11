@@ -107,12 +107,13 @@ grep WORKSPACE_ROOT scripts/00-set-env.sh
 
 ### Step 1 — Install IBM HTTP Server (IHS)
 
-IHS is the front-end HTTP server that load-balances requests across the Liberty collective
-members. Install it once before running the lab steps.
-
 ```bash
 bash scripts/install-ihs.sh
 ```
+
+IHS is the front-end HTTP server that load-balances requests across the Liberty collective
+members. Install it once before running the lab steps.
+**Expected result:** IHS installed under `ihs/` and ready to be configured.
 
 ---
 
@@ -160,7 +161,8 @@ scripts/add-member-26.sh member1   # Deploy member1, join collective
 scripts/add-member-26.sh member2   # Deploy member2, join collective
 ```
 
-**Expected state:** Admin Center at `https://localhost:9443/adminCenter` (admin/admin),
+Controller and both members are deployed, registered in the collective, and started.
+**Expected result:** Admin Center at `https://localhost:9443/adminCenter` (admin/admin),
 member1 at `http://localhost:9081/server-info/`, member2 at `http://localhost:9082/server-info/`.
 
 ---
@@ -172,16 +174,15 @@ There are two sub-steps: static routing first, then dynamic routing.
 
 #### Step 4a — Static WAS plugin routing (Round Robin)
 
-Discover all running members, write plugin-cfg.xml, add WebSpherePluginConfig, start IHS
-
 ```bash
 scripts/step1-was-plugin.sh
 ```
 
-**Expected state:** `http://localhost:1080/server-info/` returns `200` and
+Discovers all running members, writes `plugin-cfg.xml`, adds `WebSpherePluginConfig`, and starts IHS.
+**Expected result:** `http://localhost:1080/server-info/` returns `200` and
 round-robins across **all members that were running when the script executed**.
 Members added or removed after the script runs are NOT reflected — rerun the
-script to regenerate the static config. That limitation is what step 3b solves.
+script to regenerate the static config. That limitation is what Step 4b solves.
 
 ```bash
 # Verify round robin across all members
@@ -193,6 +194,10 @@ for i in $(seq 8); do curl -s http://localhost:1080/server-info/ | grep -o 'memb
 ```bash
 scripts/step2-dynamic-routing.sh
 ```
+
+Enables Intelligent Management so IHS automatically discovers members as they join or leave.
+**Expected result:** Responses rotate across all running members without any static config change.
+
 ```bash
 # Verify dynamic routing — responses should rotate across all running members
 for i in $(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
@@ -200,28 +205,24 @@ for i in $(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'memb
 
 #### Step 4c — Dynamic Routing Rules (optional)
 
-Once dynamic routing is active you can pin specific URIs to individual members using Liberty routing rules. The controller picks up dropin changes live — no restart needed.
+> **Work in progress** — routing rule automation is not yet complete.
 
 ```bash
-scripts/apply-routing-rules.sh -s member1   # pin /server-info/* to member1
-scripts/apply-routing-rules.sh -s member2   # pin /server-info/* to member2
-scripts/apply-routing-rules.sh -s all       # remove pin — restore round-robin
+scripts/apply-routing-rules.sh
 ```
 
 ---
 
-### Step 5 — Add 25.0.0.1 Members
-
-With Intelligent Management active, member3 and member4 are automatically added to the routing
-table as soon as they join — no IHS config changes or script re-run required.
+### Step 5 — Add Liberty 25.0.0.1 Members
 
 ```bash
 scripts/add-member-25.sh member3   # Deploy member3 (25.0.0.1), join collective
 scripts/add-member-25.sh member4   # Deploy member4 (25.0.0.1), join collective
 ```
 
-**Expected state:** All four members visible in Admin Center. IHS at
-`http://localhost:1080/server-info/` now rotates across all four members.
+With Intelligent Management active, member3 and member4 are automatically added to the routing
+table as soon as they join — no IHS config changes or script re-run required.
+**Expected result:** All four members visible in Admin Center. IHS at `http://localhost:1080/server-info/` now rotates across all four members.
 
 ---
 
