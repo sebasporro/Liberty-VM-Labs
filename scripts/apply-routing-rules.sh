@@ -1,14 +1,20 @@
 #!/bin/bash
 # =============================================================================
-# apply-routing-rules.sh  —  Liberty Collective Round-Robin / Pin routing
+# apply-routing-rules.sh  —  Liberty Collective Dynamic Routing Rules
 #
-# Toggles load-balancing in plugin-cfg.xml (the only place that controls
-# how the WAS plug-in distributes requests in IntelligentManagement mode).
+# Pins /server-info/* to a specific collective member, or restores round-robin
+# across all members, by writing (or removing) a routing-rules.xml dropin into
+# the controller's configDropins/overrides/ directory.
+#
+# In IntelligentManagement mode the WAS plug-in fetches its routing table from
+# the controller's /ibm/api/dynamicRouting endpoint. Controller-side
+# <routingRules> are the correct mechanism to influence that table — patching
+# plugin-cfg.xml attributes has no effect in this mode.
 #
 # Usage:
-#   scripts/apply-routing-rules.sh -s member1   # pin all traffic to member1
-#   scripts/apply-routing-rules.sh -s member2   # pin all traffic to member2
-#   scripts/apply-routing-rules.sh -s all       # round-robin across all members
+#   scripts/apply-routing-rules.sh -s member1   # pin /server-info/* to member1
+#   scripts/apply-routing-rules.sh -s member2   # pin /server-info/* to member2
+#   scripts/apply-routing-rules.sh -s all       # remove pin → round-robin
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,86 +44,60 @@ if [[ "${TARGET_SERVER}" != "member1" && \
 fi
 
 # ---------------------------------------------------------------------------
-# Paths — plugin-cfg.xml is owned by IHS/plug-in, not the controller
+# Paths
 # ---------------------------------------------------------------------------
-IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/usr/IBM/IHS}"
-PLUGIN_CFG="${IHS_ROOT}/plugin/config/webserver1/plugin-cfg.xml"
+CTRL_OVERRIDES="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/configDropins/overrides"
+RULES_FILE="${CTRL_OVERRIDES}/routing-rules.xml"
 
-[[ -f "${PLUGIN_CFG}" ]] \
-    || { echo "ERROR: ${PLUGIN_CFG} not found. Run step2-dynamic-routing.sh first."; exit 1; }
+[[ -d "${CTRL_OVERRIDES}" ]] \
+    || { echo "ERROR: ${CTRL_OVERRIDES} not found. Run scripts/install-controller.sh first."; exit 1; }
 
 echo ""
 echo "=== Apply Routing Rules ==="
-echo "    File: ${PLUGIN_CFG}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Patch plugin-cfg.xml in-place using Python (avoids sed quoting edge-cases)
-#
-# Round-robin (all):  LoadBalance="RoundRobin"  IgnoreAffinityRequests="true"
-# Pin to memberN:     LoadBalance="RoundRobin"  IgnoreAffinityRequests="false"
-#                     + AffinityCookie ties the session; only memberN is listed
-#                     in PrimaryServers so new sessions also land there.
-#
-# NOTE: In IntelligentManagement mode the WAS plug-in rebuilds the live
-#       <Server> list by polling /ibm/api/dynamicRouting on the controller.
-#       The <ServerCluster> attributes (LoadBalance, IgnoreAffinityRequests)
-#       are preserved across those refreshes and are the ONLY knobs that
-#       control distribution policy.
+# Write or remove the routing-rules dropin
 # ---------------------------------------------------------------------------
-python3 - "${PLUGIN_CFG}" "${TARGET_SERVER}" <<'PYEOF'
-import sys, re
+if [[ "${TARGET_SERVER}" == "all" ]]; then
+    if [[ -f "${RULES_FILE}" ]]; then
+        rm -f "${RULES_FILE}"
+        echo "  Routing rule removed — controller will round-robin across all members."
+    else
+        echo "  No routing rule active — already round-robin."
+    fi
+else
+    cat > "${RULES_FILE}" <<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<server description="Dynamic Routing Rules">
 
-path, target = sys.argv[1], sys.argv[2]
+    <!--
+      Pins /server-info/* to ${TARGET_SERVER}.
+      destination pattern: server=<collective>,<host>,<userdir>,<serverName>
+      Wildcards (*) match any collective / host / userdir in this single-VM lab.
+    -->
+    <dynamicRouting>
+        <routingRules webServers="webserver1">
+            <routingRule order="100" matchExpression="URI LIKE '/server-info%'">
+                <permitAction>
+                    <loadBalanceEndPoints>
+                        <endpoint destination="server=*,*,*,${TARGET_SERVER}"/>
+                    </loadBalanceEndPoints>
+                </permitAction>
+            </routingRule>
+        </routingRules>
+    </dynamicRouting>
 
-with open(path) as f:
-    content = f.read()
+</server>
+XML
+    echo "  Routing rule written → /server-info/* pinned to ${TARGET_SERVER}"
+    echo "  File: ${RULES_FILE}"
+fi
 
-ignore_val = "true" if target == "all" else "false"
-label      = "round-robin across all members" if target == "all" \
-             else f"pinned to {target} (via session affinity)"
-
-# Detect which cluster tag this plugin-cfg.xml uses:
-#   <ConnectorCluster> — IntelligentManagement format (dynamicRouting setup)
-#   <ServerCluster>    — static format
-tag = "ConnectorCluster" if re.search(r'<ConnectorCluster\b', content) else "ServerCluster"
-if not re.search(rf'<{tag}\b', content):
-    print("  ERROR: neither <ConnectorCluster> nor <ServerCluster> found in plugin-cfg.xml.")
-    sys.exit(1)
-
-def set_attr(text, attr, value):
-    """Set attr=value on the cluster tag — replace if present, inject if absent."""
-    pattern = rf'{attr}="[^"]*"'
-    replacement = f'{attr}="{value}"'
-    if re.search(pattern, text):
-        return re.sub(pattern, replacement, text)
-    return re.sub(
-        rf'(<{tag}\b[^>]*?)(\s*/>|>)',
-        lambda m: f'{m.group(1)} {replacement}{m.group(2)}',
-        text
-    )
-
-patched = set_attr(content,  "LoadBalance",            "RoundRobin")
-patched = set_attr(patched,  "IgnoreAffinityRequests", ignore_val)
-
-with open(path, 'w') as f:
-    f.write(patched)
-
-print(f"  LoadBalance            = RoundRobin")
-print(f"  IgnoreAffinityRequests = {ignore_val}")
-print(f"  Mode: {label}")
-PYEOF
-
-[[ $? -ne 0 ]] && { echo "ERROR: patch failed."; exit 1; }
-
-# ---------------------------------------------------------------------------
-# Graceful restart — forces immediate re-read of plugin-cfg.xml
-# ---------------------------------------------------------------------------
 echo ""
-echo "  Restarting IHS..."
-"${IHS_ROOT}/bin/apachectl" graceful
-sleep 2
-
+echo "  Liberty picks up the dropin dynamically — no controller restart needed."
+echo "  The plug-in refreshes its routing table within RefreshInterval (60s)."
+echo "  Force immediate pickup with: apachectl graceful"
 echo ""
 echo "  Verify:"
 echo "    for i in \$(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done"
