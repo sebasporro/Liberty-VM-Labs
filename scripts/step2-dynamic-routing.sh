@@ -35,10 +35,30 @@ mkdir -p ~/temp/dynamicRouting
 mv "${CONTROLLER_BIN}/plugin-key.p12" ~/temp/dynamicRouting/
 rm -f "${CONTROLLER_BIN}/plugin-cfg.xml"
 
-# 3. Write a correct plugin-cfg.xml with:
+# 3. Convert keystore FIRST so the .kdb/.sth files exist before the XML references them
+"${IHS_ROOT}/bin/gskcapicmd" -keydb -convert \
+  -pw "Liberty26ctrl!" \
+  -db ~/temp/dynamicRouting/plugin-key.p12 \
+  -old_format pkcs12 \
+  -target ~/temp/dynamicRouting/plugin-key.kdb \
+  -new_format cms \
+  -stash
+
+"${IHS_ROOT}/bin/gskcapicmd" -cert -setdefault \
+  -pw "Liberty26ctrl!" \
+  -db ~/temp/dynamicRouting/plugin-key.kdb \
+  -label default
+
+# 4. Copy certificates to the plugin config directory
+cp ~/temp/dynamicRouting/plugin-key.kdb "${IHS_ROOT}/plugin/config/webserver1/"
+cp ~/temp/dynamicRouting/plugin-key.sth "${IHS_ROOT}/plugin/config/webserver1/"
+
+# 5. Write a correct plugin-cfg.xml with:
 #    - <ServerCluster> pointing at the controller (dynamic routing format)
 #    - IgnoreAffinityRequests="true"  → no session pinning
 #    - No AffinityCookie / AffinityURLIdentifier on <Uri>  → true round-robin
+#    NOTE: PluginInstallRoot is NOT a valid <Property> inside the XML — it is
+#    resolved by the plugin binary from the LoadModule path in httpd.conf.
 PLUGIN_CFG="${IHS_ROOT}/plugin/config/webserver1/plugin-cfg.xml"
 KDB="${IHS_ROOT}/plugin/config/webserver1/plugin-key.kdb"
 STH="${IHS_ROOT}/plugin/config/webserver1/plugin-key.sth"
@@ -54,7 +74,6 @@ cat > "${PLUGIN_CFG}" <<EOF
 
     <Log LogLevel="Error" Name="${IHS_ROOT}/plugin/logs/webserver1/http_plugin.log"/>
 
-    <Property Name="PluginInstallRoot"           Value="${IHS_ROOT}/plugin"/>
     <Property Name="ESIEnable"                   Value="false"/>
     <Property Name="ESIMaxCacheSize"             Value="1024"/>
     <Property Name="ESIInvalidationMonitor"      Value="false"/>
@@ -71,8 +90,8 @@ cat > "${PLUGIN_CFG}" <<EOF
                 MaxConnections="-1" Name="controller_9443"
                 ServerIOTimeout="900" WaitForContinue="false">
             <Transport Hostname="localhost" Port="9443" Protocol="https">
-                <Property name="keyring"   value="${KDB}"/>
-                <Property name="stashfile" value="${STH}"/>
+                <Property Name="keyring"   Value="${KDB}"/>
+                <Property Name="stashfile" Value="${STH}"/>
             </Transport>
         </Server>
         <PrimaryServers>
@@ -95,24 +114,6 @@ cat > "${PLUGIN_CFG}" <<EOF
 </Config>
 EOF
 echo "plugin-cfg.xml written with IgnoreAffinityRequests=true and no affinity cookie."
-
-# 4. Convert keystore and set default certificate
-"${IHS_ROOT}/bin/gskcapicmd" -keydb -convert \
-  -pw "Liberty26ctrl!" \
-  -db ~/temp/dynamicRouting/plugin-key.p12 \
-  -old_format pkcs12 \
-  -target ~/temp/dynamicRouting/plugin-key.kdb \
-  -new_format cms \
-  -stash
-
-"${IHS_ROOT}/bin/gskcapicmd" -cert -setdefault \
-  -pw "Liberty26ctrl!" \
-  -db ~/temp/dynamicRouting/plugin-key.kdb \
-  -label default
-
-# 5. Copy certificates to the plugin config directory
-cp ~/temp/dynamicRouting/plugin-key.kdb "${IHS_ROOT}/plugin/config/webserver1/"
-cp ~/temp/dynamicRouting/plugin-key.sth "${IHS_ROOT}/plugin/config/webserver1/"
 
 ls -lrt "${IHS_ROOT}/plugin/config/webserver1/"
 cat "${IHS_ROOT}/plugin/config/webserver1/plugin-cfg.xml"
