@@ -54,6 +54,7 @@ cat > "${PLUGIN_CFG}" <<EOF
 
     <Log LogLevel="Error" Name="${IHS_ROOT}/plugin/logs/webserver1/http_plugin.log"/>
 
+    <Property Name="PluginInstallRoot"           Value="${IHS_ROOT}/plugin"/>
     <Property Name="ESIEnable"                   Value="false"/>
     <Property Name="ESIMaxCacheSize"             Value="1024"/>
     <Property Name="ESIInvalidationMonitor"      Value="false"/>
@@ -70,8 +71,8 @@ cat > "${PLUGIN_CFG}" <<EOF
                 MaxConnections="-1" Name="controller_9443"
                 ServerIOTimeout="900" WaitForContinue="false">
             <Transport Hostname="localhost" Port="9443" Protocol="https">
-                <Property Name="keyring"   Value="${KDB}"/>
-                <Property Name="stashfile" Value="${STH}"/>
+                <Property name="keyring"   value="${KDB}"/>
+                <Property name="stashfile" value="${STH}"/>
             </Transport>
         </Server>
         <PrimaryServers>
