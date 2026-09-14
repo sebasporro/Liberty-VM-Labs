@@ -31,12 +31,23 @@ mkdir -p ~/temp/dynamicRouting
 mv "${CONTROLLER_BIN}/plugin-cfg.xml" ~/temp/dynamicRouting/
 mv "${CONTROLLER_BIN}/plugin-key.p12" ~/temp/dynamicRouting/
 
-# Inject IgnoreAffinityRequests="true" into the generated plugin-cfg.xml so
-# that the plugin ignores JSESSIONID affinity hints and continues round-robin
-# distribution after the first request. Without this, the JSESSIONID set by
-# server-info/ (and any session-based app) causes the plugin to pin all
-# subsequent requests to whichever member answered first.
-sed -i 's/<ConnectorCluster /<ConnectorCluster IgnoreAffinityRequests="true" /' \
+# Patch the generated plugin-cfg.xml to keep round-robin working.
+#
+# The dynamicRouting setup command generates a <ServerCluster> with
+# IgnoreAffinityRequests="false" (or absent), and <Uri> elements with
+# AffinityCookie="JSESSIONID" AffinityURLIdentifier="jsessionid".
+# Together these cause the plugin to pin all requests to the first member
+# that answers (because server-info/ sets a JSESSIONID cookie).
+#
+# Fix 1: set IgnoreAffinityRequests="true" on <ServerCluster>
+sed -i 's/IgnoreAffinityRequests="false"/IgnoreAffinityRequests="true"/g' \
+  ~/temp/dynamicRouting/plugin-cfg.xml
+# Also handle the case where the attribute is absent entirely
+sed -i 's/<ServerCluster \([^I]\)/<ServerCluster IgnoreAffinityRequests="true" \1/' \
+  ~/temp/dynamicRouting/plugin-cfg.xml
+
+# Fix 2: remove AffinityCookie and AffinityURLIdentifier from <Uri> elements
+sed -i 's/ AffinityCookie="[^"]*"//g; s/ AffinityURLIdentifier="[^"]*"//g' \
   ~/temp/dynamicRouting/plugin-cfg.xml
 
 cp ~/temp/dynamicRouting/plugin-cfg.xml "${IHS_ROOT}/plugin/config/webserver1/"
