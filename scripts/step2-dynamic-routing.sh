@@ -55,6 +55,15 @@ cat "${IHS_ROOT}/plugin/config/webserver1/plugin-cfg.xml"
 
 # 5. Restart IHS
 "${IHS_ROOT}/bin/apachectl" stop
+# Wait until port 1080 is released before starting again
+for i in $(seq 10); do
+  if ! ss -tlnp 2>/dev/null | grep -q ':1080 ' && \
+     ! netstat -tlnp 2>/dev/null | grep -q ':1080 '; then
+    break
+  fi
+  echo "Waiting for port 1080 to be released... ($i/10)"
+  sleep 2
+done
 "${IHS_ROOT}/bin/apachectl" start
 cat "${IHS_ROOT}/plugin/logs/webserver1/http_plugin.log"
 

@@ -113,7 +113,7 @@ bash scripts/install-ihs.sh
 
 IHS is the front-end HTTP server that load-balances requests across the Liberty collective
 members. Install it once before running the lab steps.
-**Expected result:** IHS installed under `ihs/` and ready to be configured.
+**Expected result:** IHS installed under `/home/itzuser/usr/IBM/IHS` and ready to be configured.
 
 ---
 
@@ -151,19 +151,47 @@ scripts/02-build-template-25.sh && \
 scripts/03-build-package-25.sh
 ```
 
+> **Where packages are stored:** each build script writes a self-contained ZIP into:
+> ```
+> /home/itzuser/Liberty-VM-Labs/packages/
+> ├── liberty-package-26.0.0.8.zip   ← produced by scripts/03-build-package.sh
+> └── liberty-package-25.0.0.1.zip   ← produced by scripts/03-build-package-25.sh
+> ```
+> These ZIPs are the "golden packages" consumed by the deploy scripts in Steps 3 and 5.
+> They are preserved across environment resets, so Step 2 only needs to run again if the
+> template configuration or application WAR changes.
+
 ---
 
 ### Step 3 — Deploy Controller and 26.0.0.8 Members
 
+**3.1 — Deploy and start the controller**
+
 ```bash
-scripts/install-controller.sh      # Deploy + start controller
-scripts/add-member-26.sh member1   # Deploy member1, join collective
-scripts/add-member-26.sh member2   # Deploy member2, join collective
+scripts/install-controller.sh
 ```
 
-Controller and both members are deployed, registered in the collective, and started.
-**Expected result:** Admin Center at `https://localhost:9443/adminCenter` (admin/admin),
-member1 at `http://localhost:9081/server-info/`, member2 at `http://localhost:9082/server-info/`.
+**Expected result:** Admin Center available at `https://localhost:9443/adminCenter` (admin/admin).
+
+---
+
+**3.2 — Deploy member1 and join collective**
+
+```bash
+scripts/add-member-26.sh member1
+```
+
+**Expected result:** member1 responding at `http://localhost:9081/server-info/` and visible in Admin Center.
+
+---
+
+**3.3 — Deploy member2 and join collective**
+
+```bash
+scripts/add-member-26.sh member2
+```
+
+**Expected result:** member2 responding at `http://localhost:9082/server-info/` and visible in Admin Center.
 
 ---
 
@@ -188,6 +216,47 @@ script to regenerate the static config. That limitation is what Step 4b solves.
 # Verify round robin across all members
 for i in $(seq 8); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
 ```
+
+> **Plugin config location:** the generated `plugin-cfg.xml` is written to
+> `/home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml`
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Config ASDisableNagle="false" AcceptAllContent="false" AppServerPortPreference="HostHeader"
+        ChunkedResponse="false" FIPSEnable="false" IISDisableNagle="false" IISPluginPriority="High"
+        IgnoreDNSFailures="false" RefreshInterval="60" ResponseChunkSize="64" SSLConsolidatedConfig="false"
+        TrustedProxyEnable="false" VHostMatchingCompat="false">
+  <Log LogLevel="Error" Name="/home/itzuser/usr/IBM/IHS/plugin/logs/webserver1/http_plugin.log"/>
+
+  <ServerCluster Name="defaultCollective" LoadBalance="Round Robin">
+    <Server CloneID="member1" Name="member1_9081">
+      <Transport Hostname="localhost" Port="9081" Protocol="http"/>
+    </Server>
+    <Server CloneID="member2" Name="member2_9082">
+      <Transport Hostname="localhost" Port="9082" Protocol="http"/>
+    </Server>
+    <PrimaryServers>
+      <Server Name="member1_9081"/>
+      <Server Name="member2_9082"/>
+    </PrimaryServers>
+  </ServerCluster>
+
+  <UriGroup Name="defaultCollective_URIs">
+    <Uri Name="/*"/>
+  </UriGroup>
+
+  <VirtualHostGroup Name="defaultCollective_Hosts">
+    <VirtualHost Name="*:1080"/>
+  </VirtualHostGroup>
+
+  <Route ServerCluster="defaultCollective" UriGroup="defaultCollective_URIs"
+         VirtualHostGroup="defaultCollective_Hosts"/>
+</Config>
+```
+
+> **Test connectivity:** once IHS is running, verify the plugin is routing correctly by opening
+> `http://localhost:1080/server-info/` in a browser. A successful response confirms IHS is
+> forwarding requests through to the member servers.
 
 #### Step 4b — Dynamic routing (Intelligent Management)
 
