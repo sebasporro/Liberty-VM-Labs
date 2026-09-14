@@ -30,27 +30,29 @@ cd "${CONTROLLER_BIN}"
 mkdir -p ~/temp/dynamicRouting
 mv "${CONTROLLER_BIN}/plugin-cfg.xml" ~/temp/dynamicRouting/
 mv "${CONTROLLER_BIN}/plugin-key.p12" ~/temp/dynamicRouting/
-
-# Patch the generated plugin-cfg.xml to keep round-robin working.
-#
-# The dynamicRouting setup command generates a <ServerCluster> with
-# IgnoreAffinityRequests="false" (or absent), and <Uri> elements with
-# AffinityCookie="JSESSIONID" AffinityURLIdentifier="jsessionid".
-# Together these cause the plugin to pin all requests to the first member
-# that answers (because server-info/ sets a JSESSIONID cookie).
-#
-# Fix 1: set IgnoreAffinityRequests="true" on <ServerCluster>
-sed -i 's/IgnoreAffinityRequests="false"/IgnoreAffinityRequests="true"/g' \
-  ~/temp/dynamicRouting/plugin-cfg.xml
-# Also handle the case where the attribute is absent entirely
-sed -i 's/<ServerCluster \([^I]\)/<ServerCluster IgnoreAffinityRequests="true" \1/' \
-  ~/temp/dynamicRouting/plugin-cfg.xml
-
-# Fix 2: remove AffinityCookie and AffinityURLIdentifier from <Uri> elements
-sed -i 's/ AffinityCookie="[^"]*"//g; s/ AffinityURLIdentifier="[^"]*"//g' \
-  ~/temp/dynamicRouting/plugin-cfg.xml
-
 cp ~/temp/dynamicRouting/plugin-cfg.xml "${IHS_ROOT}/plugin/config/webserver1/"
+
+# 3a. Override affinity on the controller so the dynamic routing publisher
+#     stops enforcing session stickiness.
+#
+#     The generated plugin-cfg.xml uses <IntelligentManagement>/<ConnectorCluster>
+#     — there are no affinity attributes in the file itself. In this mode the
+#     controller owns all routing decisions and pushes them to the plugin via
+#     /ibm/api/dynamicRouting. By default the controller enforces JSESSIONID
+#     affinity, which pins every browser session to the first member that answers.
+#
+#     Dropping a configDropins/overrides file with overrideAffinity="true" tells
+#     the controller to publish round-robin routing to the plugin instead.
+#     Liberty picks this up dynamically — no controller restart required.
+DROPIN_DIR="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/configDropins/overrides"
+mkdir -p "${DROPIN_DIR}"
+cat > "${DROPIN_DIR}/routing-affinity.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<server>
+    <routingRules overrideAffinity="true"/>
+</server>
+EOF
+echo "Controller dropin written → overrideAffinity=true (round-robin enabled)"
 
 # 3. Convert keystore and set default certificate
 "${IHS_ROOT}/bin/gskcapicmd" -keydb -convert \
