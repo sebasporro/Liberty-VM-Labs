@@ -5,16 +5,35 @@
 # collective. Follows the IBM documentation procedure:
 #   https://www.ibm.com/docs/en/was-liberty/nd?topic=collectives-setting-up-dynamic-routing-single-liberty-collective
 # =============================================================================
+set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
 IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/usr/IBM/IHS}"
 CONTROLLER_BIN="${WORKSPACE_ROOT}/installs/controller/wlp/bin"
+SCRATCH=~/temp/dynamicRouting
+PLUGIN_DIR="${IHS_ROOT}/plugin/config/webserver1"
 
 echo "=== Enabling Dynamic Routing ==="
 
-# 1. Run dynamicRouting setup on the controller
+# 1. Stop IHS before touching any plugin files so there is no hot-reload window
+#    where the new plugin-cfg.xml is in place but the keystore has not been
+#    converted yet.
+echo "Stopping IHS..."
+"${IHS_ROOT}/bin/apachectl" stop 2>/dev/null || true
+for i in $(seq 15); do
+  if ! ss -tlnp 2>/dev/null | grep -q ':1080 ' && \
+     ! netstat -tlnp 2>/dev/null | grep -q ':1080 '; then
+    break
+  fi
+  echo "Waiting for port 1080 to be released... ($i/15)"
+  sleep 2
+done
+
+# 2. Run dynamicRouting setup
+rm -rf "${SCRATCH}"
+mkdir -p "${SCRATCH}"
 cd "${CONTROLLER_BIN}"
 ./dynamicRouting setup \
   --host=localhost \
@@ -26,45 +45,49 @@ cd "${CONTROLLER_BIN}"
   --webServerNames=webserver1 \
   --autoAcceptCertificates 2>&1
 
-# 2. Stage files
-mkdir -p ~/temp/dynamicRouting
-mv "${CONTROLLER_BIN}/plugin-cfg.xml" ~/temp/dynamicRouting/
-mv "${CONTROLLER_BIN}/plugin-key.p12" ~/temp/dynamicRouting/
-cp ~/temp/dynamicRouting/plugin-cfg.xml "${IHS_ROOT}/plugin/config/webserver1/"
+# Verify the setup produced the expected files
+if [[ ! -f "${CONTROLLER_BIN}/plugin-cfg.xml" || ! -f "${CONTROLLER_BIN}/plugin-key.p12" ]]; then
+  echo "ERROR: dynamicRouting setup did not produce plugin-cfg.xml / plugin-key.p12 in ${CONTROLLER_BIN}" >&2
+  exit 1
+fi
 
-# 3. Convert keystore and set default certificate
+mv "${CONTROLLER_BIN}/plugin-cfg.xml" "${SCRATCH}/"
+mv "${CONTROLLER_BIN}/plugin-key.p12" "${SCRATCH}/"
+
+# 3. Patch the generated plugin-cfg.xml:
+#    The generated ConnectorCluster has no LoadBalance or IgnoreAffinityRequests
+#    attributes.  Without them the ODR honours JSESSIONID session affinity, which
+#    makes all requests from the same HTTP session stick to one member and breaks
+#    visible round-robin.  Adding these two attributes restores round-robin
+#    behaviour regardless of whether the client sends a JSESSIONID cookie.
+sed -i 's|<ConnectorCluster \(enabled="true"[^>]*\)>|<ConnectorCluster \1 LoadBalance="RoundRobin" IgnoreAffinityRequests="true">|' \
+  "${SCRATCH}/plugin-cfg.xml"
+
+# 4. Convert keystore and set default certificate
 "${IHS_ROOT}/bin/gskcapicmd" -keydb -convert \
   -pw "Liberty26ctrl!" \
-  -db ~/temp/dynamicRouting/plugin-key.p12 \
+  -db "${SCRATCH}/plugin-key.p12" \
   -old_format pkcs12 \
-  -target ~/temp/dynamicRouting/plugin-key.kdb \
+  -target "${SCRATCH}/plugin-key.kdb" \
   -new_format cms \
   -stash
 
 "${IHS_ROOT}/bin/gskcapicmd" -cert -setdefault \
   -pw "Liberty26ctrl!" \
-  -db ~/temp/dynamicRouting/plugin-key.kdb \
+  -db "${SCRATCH}/plugin-key.kdb" \
   -label default
 
-# 4. Copy certificates to the plugin config directory
-cp ~/temp/dynamicRouting/plugin-key.kdb "${IHS_ROOT}/plugin/config/webserver1/"
-cp ~/temp/dynamicRouting/plugin-key.sth "${IHS_ROOT}/plugin/config/webserver1/"
+# 5. Install all files atomically (IHS is already down)
+cp "${SCRATCH}/plugin-cfg.xml" "${PLUGIN_DIR}/"
+cp "${SCRATCH}/plugin-key.kdb" "${PLUGIN_DIR}/"
+cp "${SCRATCH}/plugin-key.sth" "${PLUGIN_DIR}/"
 
-ls -lrt "${IHS_ROOT}/plugin/config/webserver1/"
-cat "${IHS_ROOT}/plugin/config/webserver1/plugin-cfg.xml"
+ls -lrt "${PLUGIN_DIR}/"
+cat "${PLUGIN_DIR}/plugin-cfg.xml"
 
-# 5. Restart IHS
-"${IHS_ROOT}/bin/apachectl" stop
-# Wait until port 1080 is released before starting again
-for i in $(seq 10); do
-  if ! ss -tlnp 2>/dev/null | grep -q ':1080 ' && \
-     ! netstat -tlnp 2>/dev/null | grep -q ':1080 '; then
-    break
-  fi
-  echo "Waiting for port 1080 to be released... ($i/10)"
-  sleep 2
-done
+# 6. Start IHS
 "${IHS_ROOT}/bin/apachectl" start
+sleep 3
 cat "${IHS_ROOT}/plugin/logs/webserver1/http_plugin.log"
 
 echo "Dynamic routing configured!"
