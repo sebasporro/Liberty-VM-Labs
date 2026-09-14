@@ -14,11 +14,7 @@ CONTROLLER_BIN="${WORKSPACE_ROOT}/installs/controller/wlp/bin"
 
 echo "=== Enabling Dynamic Routing ==="
 
-# 1. Run dynamicRouting setup — used ONLY to generate the keystore files.
-#    We discard its plugin-cfg.xml and write our own (see step 2) because the
-#    generated file uses <IntelligentManagement>/<ConnectorCluster> which does
-#    not support IgnoreAffinityRequests, causing the plugin to pin all browser
-#    sessions to the first member via JSESSIONID affinity.
+# 1. Run dynamicRouting setup on the controller
 cd "${CONTROLLER_BIN}"
 ./dynamicRouting setup \
   --host=localhost \
@@ -30,12 +26,13 @@ cd "${CONTROLLER_BIN}"
   --webServerNames=webserver1 \
   --autoAcceptCertificates 2>&1
 
-# 2. Stage keystore files; discard the generated plugin-cfg.xml
+# 2. Stage files
 mkdir -p ~/temp/dynamicRouting
+mv "${CONTROLLER_BIN}/plugin-cfg.xml" ~/temp/dynamicRouting/
 mv "${CONTROLLER_BIN}/plugin-key.p12" ~/temp/dynamicRouting/
-rm -f "${CONTROLLER_BIN}/plugin-cfg.xml"
+cp ~/temp/dynamicRouting/plugin-cfg.xml "${IHS_ROOT}/plugin/config/webserver1/"
 
-# 3. Convert keystore FIRST so the .kdb/.sth files exist before the XML references them
+# 3. Convert keystore and set default certificate
 "${IHS_ROOT}/bin/gskcapicmd" -keydb -convert \
   -pw "Liberty26ctrl!" \
   -db ~/temp/dynamicRouting/plugin-key.p12 \
@@ -52,68 +49,6 @@ rm -f "${CONTROLLER_BIN}/plugin-cfg.xml"
 # 4. Copy certificates to the plugin config directory
 cp ~/temp/dynamicRouting/plugin-key.kdb "${IHS_ROOT}/plugin/config/webserver1/"
 cp ~/temp/dynamicRouting/plugin-key.sth "${IHS_ROOT}/plugin/config/webserver1/"
-
-# 5. Write a correct plugin-cfg.xml with:
-#    - <ServerCluster> pointing at the controller (dynamic routing format)
-#    - IgnoreAffinityRequests="true"  → no session pinning
-#    - No AffinityCookie / AffinityURLIdentifier on <Uri>  → true round-robin
-#    NOTE: PluginInstallRoot is NOT a valid <Property> inside the XML — it is
-#    resolved by the plugin binary from the LoadModule path in httpd.conf.
-PLUGIN_CFG="${IHS_ROOT}/plugin/config/webserver1/plugin-cfg.xml"
-KDB="${IHS_ROOT}/plugin/config/webserver1/plugin-key.kdb"
-STH="${IHS_ROOT}/plugin/config/webserver1/plugin-key.sth"
-
-cat > "${PLUGIN_CFG}" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<Config ASDisableNagle="false" AcceptAllContent="false"
-        AppServerPortPreference="HostHeader" ChunkedResponse="false"
-        FIPSEnable="false" IISDisableNagle="false" IISPluginPriority="High"
-        IgnoreDNSFailures="false" RefreshInterval="60" ResponseChunkSize="64"
-        SSLConsolidatedConfig="false" TrustedProxyEnable="false"
-        VHostMatchingCompat="false">
-
-    <Log LogLevel="Error" Name="${IHS_ROOT}/plugin/logs/webserver1/http_plugin.log"/>
-
-    <Property Name="ESIEnable"                   Value="false"/>
-    <Property Name="ESIMaxCacheSize"             Value="1024"/>
-    <Property Name="ESIInvalidationMonitor"      Value="false"/>
-    <Property Name="ESIEnableRecursiveInclude"   Value="false"/>
-    <Property Name="ESIMaxRecursiveIncludeDepth" Value="10"/>
-    <Property Name="Keyfile"                     Value="${KDB}"/>
-    <Property Name="Stashfile"                   Value="${STH}"/>
-
-    <ServerCluster CloneSeparatorChange="false" GetDWLMTable="false"
-                   IgnoreAffinityRequests="true" LoadBalance="Round Robin"
-                   Name="defaultCollective" PostSizeLimit="-1"
-                   RemoveSpecialHeaders="true" RetryInterval="60">
-        <Server CloneID="controller" ConnectTimeout="5" ExtendedHandshake="false"
-                MaxConnections="-1" Name="controller_9443"
-                ServerIOTimeout="900" WaitForContinue="false">
-            <Transport Hostname="localhost" Port="9443" Protocol="https">
-                <Property Name="keyring"   Value="${KDB}"/>
-                <Property Name="stashfile" Value="${STH}"/>
-            </Transport>
-        </Server>
-        <PrimaryServers>
-            <Server Name="controller_9443"/>
-        </PrimaryServers>
-    </ServerCluster>
-
-    <UriGroup Name="defaultCollective_URIs">
-        <Uri Name="/*"/>
-    </UriGroup>
-
-    <VirtualHostGroup Name="defaultCollective_Hosts">
-        <VirtualHost Name="*:1080"/>
-    </VirtualHostGroup>
-
-    <Route ServerCluster="defaultCollective"
-           UriGroup="defaultCollective_URIs"
-           VirtualHostGroup="defaultCollective_Hosts"/>
-
-</Config>
-EOF
-echo "plugin-cfg.xml written with IgnoreAffinityRequests=true and no affinity cookie."
 
 ls -lrt "${IHS_ROOT}/plugin/config/webserver1/"
 cat "${IHS_ROOT}/plugin/config/webserver1/plugin-cfg.xml"
@@ -137,7 +72,7 @@ echo ""
 echo "=== Verify round-robin ==="
 echo "IMPORTANT: use curl (not a browser) to test round-robin."
 echo "Browsers send JSESSIONID cookies which cause the plugin to stick to one server."
-echo "Hit the api/health JSON endpoint and print the port (all members share the same hostname):"
+echo "Use curl with -c /dev/null to discard cookies between requests:"
 echo ""
 echo "  for i in \$(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api/health | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d['server']['port'])\"; done"
 echo ""
