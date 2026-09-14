@@ -30,6 +30,15 @@ cd "${CONTROLLER_BIN}"
 mkdir -p ~/temp/dynamicRouting
 mv "${CONTROLLER_BIN}/plugin-cfg.xml" ~/temp/dynamicRouting/
 mv "${CONTROLLER_BIN}/plugin-key.p12" ~/temp/dynamicRouting/
+
+# Inject IgnoreAffinityRequests="true" into the generated plugin-cfg.xml so
+# that the plugin ignores JSESSIONID affinity hints and continues round-robin
+# distribution after the first request. Without this, the JSESSIONID set by
+# server-info/ (and any session-based app) causes the plugin to pin all
+# subsequent requests to whichever member answered first.
+sed -i 's/<ConnectorCluster /<ConnectorCluster IgnoreAffinityRequests="true" /' \
+  ~/temp/dynamicRouting/plugin-cfg.xml
+
 cp ~/temp/dynamicRouting/plugin-cfg.xml "${IHS_ROOT}/plugin/config/webserver1/"
 
 # 3. Convert keystore and set default certificate
