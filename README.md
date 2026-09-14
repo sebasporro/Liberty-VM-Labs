@@ -268,13 +268,18 @@ Enables Intelligent Management so IHS automatically discovers members as they jo
 **Expected result:** Responses rotate across all running members without any static config change.
 
 > **Important — test with `curl`, not a browser.**
-> Browsers persist the `JSESSIONID` cookie set by `server-info/` and send it on every
-> refresh, causing the plugin to stick to the same server. Use `curl -c /dev/null` to
-> discard cookies between requests so you see true round-robin:
+> The `server-info/` page is a single-page app — the HTML shell contains no server name.
+> Since all members share the same hostname (`vm-1`), use the **port** to identify which
+> member answered. Use `-c /dev/null` to discard cookies so each request is routed independently:
 
 ```bash
-for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
+for i in $(seq 8); do \
+  curl -s -c /dev/null http://localhost:1080/server-info/api/health \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; \
+done
 ```
+
+> You should see the port alternating between `9081` (member1) and `9082` (member2).
 
 #### Step 4c — Dynamic Routing Rules (optional)
 
