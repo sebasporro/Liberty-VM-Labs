@@ -267,9 +267,13 @@ scripts/step2-dynamic-routing.sh
 Enables Intelligent Management so IHS automatically discovers members as they join or leave.
 **Expected result:** Responses rotate across all running members without any static config change.
 
+> **Important — test with `curl`, not a browser.**
+> Browsers persist the `JSESSIONID` cookie set by `server-info/` and send it on every
+> refresh, causing the plugin to stick to the same server. Use `curl -c /dev/null` to
+> discard cookies between requests so you see true round-robin:
+
 ```bash
-# Verify dynamic routing — responses should rotate across all running members
-for i in $(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
+for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
 ```
 
 #### Step 4c — Dynamic Routing Rules (optional)

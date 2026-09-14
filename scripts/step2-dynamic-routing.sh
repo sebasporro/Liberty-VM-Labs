@@ -32,28 +32,6 @@ mv "${CONTROLLER_BIN}/plugin-cfg.xml" ~/temp/dynamicRouting/
 mv "${CONTROLLER_BIN}/plugin-key.p12" ~/temp/dynamicRouting/
 cp ~/temp/dynamicRouting/plugin-cfg.xml "${IHS_ROOT}/plugin/config/webserver1/"
 
-# 3a. Override affinity on the controller so the dynamic routing publisher
-#     stops enforcing session stickiness.
-#
-#     The generated plugin-cfg.xml uses <IntelligentManagement>/<ConnectorCluster>
-#     — there are no affinity attributes in the file itself. In this mode the
-#     controller owns all routing decisions and pushes them to the plugin via
-#     /ibm/api/dynamicRouting. By default the controller enforces JSESSIONID
-#     affinity, which pins every browser session to the first member that answers.
-#
-#     Dropping a configDropins/overrides file with overrideAffinity="true" tells
-#     the controller to publish round-robin routing to the plugin instead.
-#     Liberty picks this up dynamically — no controller restart required.
-DROPIN_DIR="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/configDropins/overrides"
-mkdir -p "${DROPIN_DIR}"
-cat > "${DROPIN_DIR}/routing-affinity.xml" <<'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<server>
-    <routingRules overrideAffinity="true"/>
-</server>
-EOF
-echo "Controller dropin written → overrideAffinity=true (round-robin enabled)"
-
 # 3. Convert keystore and set default certificate
 "${IHS_ROOT}/bin/gskcapicmd" -keydb -convert \
   -pw "Liberty26ctrl!" \
@@ -89,14 +67,20 @@ done
 "${IHS_ROOT}/bin/apachectl" start
 cat "${IHS_ROOT}/plugin/logs/webserver1/http_plugin.log"
 
-echo "Dynamic routing configured! Verify at http://localhost:1080/server-info/"
-
-# -----------------------------------------------------------------------------
-# Optional Manual Verification Steps:
-# -----------------------------------------------------------------------------
-# 1. Access http://localhost:1080/server-info/
-# 2. Stop member1:
-#    "${WORKSPACE_ROOT}/installs/member1/wlp/bin/server" stop member1
-# 3. Access http://localhost:1080/server-info/ again (should route to member2)
-# 4. Start member1:
-#    "${WORKSPACE_ROOT}/installs/member1/wlp/bin/server" start member1
+echo "Dynamic routing configured!"
+echo ""
+echo "=== Verify round-robin ==="
+echo "IMPORTANT: use curl (not a browser) to test round-robin."
+echo "Browsers send JSESSIONID cookies which cause the plugin to stick to one server."
+echo "Use curl with -c /dev/null to discard cookies between requests:"
+echo ""
+echo "  for i in \$(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done"
+echo ""
+echo "You should see responses alternating between member1 and member2."
+echo ""
+echo "=== Verify failover ==="
+echo "1. Stop member1:"
+echo "   ${WORKSPACE_ROOT}/installs/member1/wlp/bin/server stop member1"
+echo "2. Re-run the curl loop above — all responses should come from member2."
+echo "3. Restart member1:"
+echo "   ${WORKSPACE_ROOT}/installs/member1/wlp/bin/server start member1"
