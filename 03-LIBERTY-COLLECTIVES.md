@@ -38,31 +38,14 @@ with highest precedence. The golden package is never modified.
 
 ---
 
-## Prerequisites
+> **Before you begin:** Make sure you have cloned the lab repository to
+> `/home/itzuser/Liberty-VM-Labs` on the VM. If you haven't done that yet, see
+> [01-START-HERE.md](01-START-HERE.md) for setup instructions. All commands in this
+> lab are run from the repo root unless otherwise noted.
 
-| Requirement | Version | Notes |
-|-------------|---------|-------|
-| Java | 17 | Pre-installed on lab VM (IBM Semeru recommended) |
-| IBM HTTP Server (IHS) + WAS Plugins | 9.0.5 FP025 | `9.0.5-WS-IHS-ARCHIVE-linux-x86_64-FP025.zip` pre-provisioned at `/home/itzuser/software/IHS/`. Must include a working `gskcapicmd` and the Intelligent Management-capable `mod_was_ap24_http.so`. |
-| Shell | bash | All scripts use `#!/bin/bash` |
-| Liberty installer | 26.0.0.8 ND | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` |
-| Liberty installer | 25.0.0.1 Base | Pre-provisioned at `/home/itzuser/software/Liberty/Liberty/wlp-base-all-25.0.0.1.jar` |
-| Application WAR | — | `App/server-info.war` (committed to repo) |
-
-> **Note:** Installer binaries are pre-provisioned on the lab VM at fixed paths and are not
-> committed to git. No manual download is required before running the scripts.
->
-> **IHS requirement:** Native Liberty dynamic routing (Step 3b) requires the full IHS package
-> that includes the **Web Server Plug-ins for WebSphere Application Server** product. This
-> provides a working `gskcapicmd` (for keystore conversion) and the Intelligent Management-
-> capable `mod_was_ap24_http.so`. A plain Apache-only ZIP is not sufficient.
-
----
-
-> **New to Liberty?** Before running the collective lab steps below, work through the
-> [Standalone Liberty Orientation](02-LIBERTY-STANDALONE.md) to learn how to install,
-> operate, and front a single Liberty server with IHS. It takes about 20–30 minutes and
-> teaches the core concepts this lab builds on.
+> **New to Liberty?** Complete [Lab 1 — Liberty Standalone](02-LIBERTY-STANDALONE.md)
+> before this lab. It covers the core Liberty concepts this lab builds on and takes
+> about 30 minutes.
 
 ## Running the Lab — Full Sequence
 

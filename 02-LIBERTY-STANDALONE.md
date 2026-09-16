@@ -11,26 +11,18 @@
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Section 1 — Extract the Liberty runtime](#section-1--extract-the-liberty-runtime)
-3. [Section 2 — Create a server, start/stop, and check logs](#section-2--create-a-server-startstop-and-check-logs)
-4. [Section 3 — Review server.xml and enable Admin Center](#section-3--review-serverxml-and-enable-admin-center)
-5. [Section 4 — Deploy server-info.war manually](#section-4--deploy-server-infowar-manually)
-6. [Section 5 — Add IHS as a front-end](#section-5--add-ihs-as-a-front-end)
+1. [Section 1 — Extract the Liberty runtime](#section-1--extract-the-liberty-runtime)
+2. [Section 2 — Create a server, start/stop, and check logs](#section-2--create-a-server-startstop-and-check-logs)
+3. [Section 3 — Review server.xml and enable Admin Center](#section-3--review-serverxml-and-enable-admin-center)
+4. [Section 4 — Deploy server-info.war manually](#section-4--deploy-server-infowar-manually)
+5. [Section 5 — Add IHS as a front-end](#section-5--add-ihs-as-a-front-end)
 
 ---
 
-## Prerequisites
-
-| Requirement | Version | Where to find it on the lab VM |
-|-------------|---------|-------------------------------|
-| Java 17 | 17 | Pre-installed; verify with `java -version` |
-| Liberty ND installer JAR | 26.0.0.8 | `/home/itzuser/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar` |
-| IHS + WAS Plugins installer ZIP | 9.0.5 FP025 | Pre-provisioned at `/home/itzuser/software/IHS/WAS/9.0.5-WS-IHS-ARCHIVE-linux-x86_64-FP025.zip` |
-| Application WAR | — | `App/server-info.war` (in this repo) |
-
-All commands in this module are run from the repo root
-(`/home/itzuser/Liberty-VM-Labs`) unless otherwise noted.
+> **Before you begin:** Make sure you have cloned the lab repository to
+> `/home/itzuser/Liberty-VM-Labs` on the VM. If you haven't done that yet, see
+> [01-START-HERE.md](01-START-HERE.md) for setup instructions. All commands in this
+> lab are run from the repo root unless otherwise noted.
 
 ---
 
