@@ -54,6 +54,7 @@ The installer always extracts into a `wlp/` sub-folder of the target, so the act
 binary lands at `wlp-standalone/wlp/`. Move its contents up one level:
 
 ```bash
+cd Liberty-VM-Labs
 mv wlp-standalone/wlp/* wlp-standalone/
 rmdir wlp-standalone/wlp
 ```
@@ -181,24 +182,40 @@ Key points:
 
 ### 3.2 Add Admin Center
 
-Edit `wlp-standalone/usr/servers/myServer/server.xml` and replace its contents with the
-following. This adds the Admin Center UI, application security, and a REST connector:
+Open `wlp-standalone/usr/servers/myServer/server.xml` in a text editor. You need to make
+three additions to the existing file — do **not** replace the whole file.
+
+**1. Add the three new features inside `<featureManager>`**
+
+The existing block has only `jsp-2.3`. Add the three lines below it:
 
 ```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<server description="Standalone Liberty — Admin Center enabled">
-
     <featureManager>
+        <feature>jsp-2.3</feature>
+        <!-- Add these three: -->
         <feature>adminCenter-1.0</feature>
         <feature>appSecurity-5.0</feature>
         <feature>restConnector-2.0</feature>
     </featureManager>
+```
 
+**2. Add `host="*"` to `<httpEndpoint>`**
+
+Without `host="*"` the Admin Center UI will not load. Change the existing element to:
+
+```xml
     <httpEndpoint id="defaultHttpEndpoint"
                   host="*"
                   httpPort="9080"
-                  httpsPort="9443"/>
+                  httpsPort="9443" />
+```
 
+**3. Add the user registry, administrator role, and keystore before `</server>`**
+
+Paste these three new elements anywhere inside the `<server>` block (e.g. just before
+`</server>`):
+
+```xml
     <!-- User registry: admin / admin -->
     <basicRegistry id="basic">
         <user name="admin" password="admin"/>
@@ -210,8 +227,37 @@ following. This adds the Admin Center UI, application security, and a REST conne
     </administrator-role>
 
     <keyStore id="defaultKeyStore" password="Liberty1"/>
+```
+
+Your complete `server.xml` should now look like this:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<server description="new server">
+
+    <featureManager>
+        <feature>jsp-2.3</feature>
+        <feature>adminCenter-1.0</feature>
+        <feature>appSecurity-5.0</feature>
+        <feature>restConnector-2.0</feature>
+    </featureManager>
+
+    <httpEndpoint id="defaultHttpEndpoint"
+                  host="*"
+                  httpPort="9080"
+                  httpsPort="9443" />
 
     <applicationManager autoExpand="true"/>
+
+    <basicRegistry id="basic">
+        <user name="admin" password="admin"/>
+    </basicRegistry>
+
+    <administrator-role>
+        <user>admin</user>
+    </administrator-role>
+
+    <keyStore id="defaultKeyStore" password="Liberty1"/>
 
 </server>
 ```
