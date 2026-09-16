@@ -5,7 +5,7 @@
 > hands-on lifecycle of a **single, standalone Liberty server** — install, create, configure,
 > operate, deploy an app, and front it with IBM HTTP Server (IHS) — all with manual commands,
 > no automation scripts.  
-> Once you are comfortable, continue to the [Liberty Collective Lab](LIBERTY-COLLECTIVES.md).
+> Once you are comfortable, continue to the [Liberty Collective Lab](03-LIBERTY-COLLECTIVES.md).
 
 ---
 
@@ -524,7 +524,7 @@ Liberty Collective lab automates at scale across a controller and four members.
 
 ## → Next: Liberty Collective Lab
 
-Continue with the full [Liberty Collective Lab](README.md) to see how these same
+Continue with the full [Liberty Collective Lab](01-START-HERE.md) to see how these same
 concepts apply across a **controller + four-member collective** with Intelligent
 Management dynamic routing.
 

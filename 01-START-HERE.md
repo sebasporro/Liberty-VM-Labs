@@ -60,7 +60,7 @@ with highest precedence. The golden package is never modified.
 ---
 
 > **New to Liberty?** Before running the collective lab steps below, work through the
-> [Standalone Liberty Orientation](LIBERTY-STANDALONE.md) to learn how to install,
+> [Standalone Liberty Orientation](02-LIBERTY-STANDALONE.md) to learn how to install,
 > operate, and front a single Liberty server with IHS. It takes about 20–30 minutes and
 > teaches the core concepts this lab builds on.
 
