@@ -396,12 +396,9 @@ Run the script from the repository root:
 bash scripts/configure-standalone-ihs.sh
 ```
 
-### 5.2 Create plugin directories and write plugin-cfg.xml
+#### Generated `plugin-cfg.xml` sample:
 
-Write the plugin configuration file:
-
-```bash
-cat > /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml <<'EOF'
+```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <Config ASDisableNagle="false" AcceptAllContent="false"
         AppServerPortPreference="HostHeader" ChunkedResponse="false"
@@ -445,28 +442,19 @@ cat > /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml <<'EOF'
            VirtualHostGroup="standaloneCluster_Hosts"/>
 
 </Config>
-EOF
 ```
 
-### 5.3 Configure httpd.conf to load the WAS plugin
+#### Key directives added to `httpd.conf` sample:
 
-Add the `LoadModule` directive for the WAS plugin binary and the `WebSpherePluginConfig`
-directive pointing at the file you just wrote. Both commands are idempotent — they only
-append if the directive is not already present:
+```apache
+# Load the WebSphere plugin binary module
+LoadModule was_ap24_module /home/itzuser/usr/IBM/IHS/plugin/bin/64bits/mod_was_ap24_http.so
 
-```bash
-# Load the WAS plugin shared library
-grep -q "mod_was_ap24_http.so" /home/itzuser/usr/IBM/IHS/conf/httpd.conf || \
-  echo "LoadModule was_ap24_module /home/itzuser/usr/IBM/IHS/plugin/bin/64bits/mod_was_ap24_http.so" \
-  >> /home/itzuser/usr/IBM/IHS/conf/httpd.conf
-
-# Point the plugin at our plugin-cfg.xml
-grep -q "^WebSpherePluginConfig" /home/itzuser/usr/IBM/IHS/conf/httpd.conf || \
-  echo "WebSpherePluginConfig /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml" \
-  >> /home/itzuser/usr/IBM/IHS/conf/httpd.conf
+# Specify the path to the WAS plugin configuration file
+WebSpherePluginConfig /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml
 ```
 
-### 5.4 Restart IHS and verify end-to-end routing
+### 5.2 Restart IHS and verify end-to-end routing
 
 Restart IHS to pick up the new plugin directives:
 
@@ -529,7 +517,7 @@ concepts apply across a **controller + four-member collective** with Intelligent
 Management dynamic routing.
 
 When you are finished with this standalone orientation and ready to proceed, you can
-clean up the standalone server:
+clean up the standalone server and reset IHS:
 
 ```bash
 # Stop the standalone server
@@ -537,6 +525,7 @@ wlp-standalone/bin/server stop myServer
 
 # Remove the standalone runtime (keep the installer JAR)
 rm -rf wlp-standalone/
-```
 
-IHS can remain running — the collective lab reuses the same IHS installation.
+# Reset IHS to default configuration
+bash scripts/reset-ihs.sh
+```
