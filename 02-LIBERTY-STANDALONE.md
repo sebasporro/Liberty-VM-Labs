@@ -46,7 +46,6 @@ The installer always extracts into a `wlp/` sub-folder of the target, so the act
 binary lands at `wlp-standalone/wlp/`. Move its contents up one level:
 
 ```bash
-cd Liberty-VM-Labs
 mv wlp-standalone/wlp/* wlp-standalone/
 rmdir wlp-standalone/wlp
 ```
@@ -177,17 +176,16 @@ Key points:
 Open `wlp-standalone/usr/servers/myServer/server.xml` in a text editor. You need to make
 three additions to the existing file — do **not** replace the whole file.
 
-**1. Replace the default feature and add three new features inside `<featureManager>`**
+**1. Replace the entire `<featureManager>` block**
 
-The existing block has only `jsp-2.3`. **Replace** `jsp-2.3` with `pages-3.1` (the
-Jakarta EE 10 equivalent) and add the three Admin Center features. Keeping `jsp-2.3`
-here would cause a Java EE 7 / Jakarta EE 10 generation conflict that prevents Liberty
-from loading _any_ features.
+The default block contains only `jsp-2.3` (Java EE 7). Replace the whole block with the
+one below. `pages-3.1` is the Jakarta EE 10 equivalent of `jsp-2.3` — keeping the old
+feature alongside `appSecurity-5.0` would cause a generation conflict that prevents
+Liberty from loading any features at all.
 
 ```xml
     <featureManager>
-        <feature>pages-3.1</feature>          <!-- replaces jsp-2.3 -->
-        <!-- Add these three: -->
+        <feature>pages-3.1</feature>
         <feature>adminCenter-1.0</feature>
         <feature>appSecurity-5.0</feature>
         <feature>restConnector-2.0</feature>
