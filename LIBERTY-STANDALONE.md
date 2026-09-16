@@ -1,4 +1,4 @@
-# Standalone Liberty Orientation
+# Liberty Standalone
 
 > **What is this?**  
 > Before diving into the Liberty Collective lab, this module walks you through a complete
