@@ -6,11 +6,9 @@ Project-level instructions for AI agents (Bob, Codex, Claude, etc.) working in t
 
 ## What This Repo Is
 
-A complete, repeatable **IBM WebSphere Liberty 26.0.0.8 Collective** demonstration environment
-running on a single VM, used as an IBM TechZone lab. It deploys a Liberty collective
-(1 controller + 4 members across two Liberty versions) fronted by **IBM HTTP Server (IHS)**
-with the WAS plugin in both static and dynamic (Intelligent Management) routing modes.
-
+A complete, repeatable **IBM WebSphere Liberty Collective Lab
+Liberty fronted by IBM HTTP server (IHS)
+HTTP Server using WAS Plugin for both static and dynamic (Intelligent Management) routing modes.
 Target runtime environment: **`/home/itzuser/Liberty-VM-Labs`** on a TechZone Linux VM.
 
 ---

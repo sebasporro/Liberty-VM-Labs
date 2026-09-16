@@ -59,6 +59,11 @@ with highest precedence. The golden package is never modified.
 
 ---
 
+> **New to Liberty?** Before running the collective lab steps below, work through the
+> [Standalone Liberty Orientation](STANDALONE-ORIENTATION.md) to learn how to install,
+> operate, and front a single Liberty server with IHS. It takes about 20–30 minutes and
+> teaches the core concepts this lab builds on.
+
 ## Running the Lab — Full Sequence
 
 The lab supports two Liberty versions running as members of the **same collective**:
@@ -285,10 +290,27 @@ done
 
 > **Work in progress** — routing rule automation is not yet complete.
 
+With dynamic routing enabled, you can use routing rules in Liberty to customize exactly
+which servers are used to handle specific requests.
+By default, dynamic routing balances load requests across all servers that can handle the
+request. To override the default behavior, you must configure routing rules. Routing rules
+can route requests to specific server resources, redirect requests, or reject requests.
+Each <routing Rules> element can define the applicable set of web servers where the
+rules are published. In this example, there is only one web server, named “webserver1”.
+When a web server connects to the DynamicRouting service, the service delivers rules to
+that web server.
+
+IBM Documentation – Configuring routing rules from Dynamic Routing:
+https://www.ibm.com/docs/en/was-liberty/nd?topic=collectives-configuring-routing-rules-liberty-dynamic-routing
+
 ```bash
 scripts/apply-routing-rules.sh
 ```
-
+The dynamic rules are added to the Collective Controller by
+including the configuration in the server’s configDropins/overrides
+directory.
+Liberty dynamically applies the updated configuration to the
+controller.
 ---
 
 ### Step 5 — Add Liberty 25.0.0.1 Members
@@ -597,6 +619,36 @@ scripts/reset-ihs.sh
 ```
 
 > **Note:** Always run this before `step1-was-plugin.sh` or `step2-dynamic-routing.sh` when troubleshooting IHS plugin issues. Safe to run at any time — does not affect Liberty instances.
+
+---
+
+### `scripts/teardown-lab.sh`
+
+**Purpose:** Performs a complete end-of-lab teardown — removes all Liberty runtimes,
+deployed instances, the standalone orientation server, and the full IHS installation
+while preserving installer binaries, golden package ZIPs, and all repo source files.
+
+**Removes:**
+- `installs/` — all deployed Liberty instances (controller + members)
+- `wlp-26/` — extracted Liberty ND 26.0.0.8 runtime
+- `wlp-25/` — extracted Liberty Base 25.0.0.1 runtime
+- `wlp-standalone/` — standalone orientation server (if created)
+- `~/usr/IBM/IHS` — full IBM HTTP Server installation
+
+**Preserves:**
+- `packages/` — golden package ZIPs (expensive to rebuild; skip Step 2 on re-run)
+- `App/server-info.war` — committed to repo
+- Liberty installer JARs at `/home/itzuser/software/Liberty/Liberty/`
+- IHS installer ZIP at `/home/itzuser/software/IHS/`
+- All repo source files (`scripts/`, `config/`, `README.md`, etc.)
+
+**Usage:**
+```bash
+scripts/teardown-lab.sh
+```
+
+> ⚠️ **This is irreversible.** After running, re-run the full lab sequence from
+> Step 1 in `README.md` to restore the environment.
 
 ---
 

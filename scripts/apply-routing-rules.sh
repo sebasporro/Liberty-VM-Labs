@@ -1,95 +1,66 @@
 #!/bin/bash
-# Usage:
-#   scripts/apply-routing-rules.sh on    # round-robin across all members
-#   scripts/apply-routing-rules.sh off   # single member answers; failover if it goes down
+# =============================================================================
+# apply-routing-rules.sh
+# Pins /server-info/* to a collective member, or restores default dynamic routing.
+# =============================================================================
+set -e
 
-TARGET="$1"
-PLUGIN_CFG="/home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml"
-KDB="/home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-key.kdb"
-DROPIN="/home/itzuser/Liberty-VM-Labs/installs/controller/wlp/usr/servers/controller/configDropins/overrides/routing-affinity.xml"
-M1_BIN="/home/itzuser/Liberty-VM-Labs/installs/member1/wlp/bin/server"
-M2_BIN="/home/itzuser/Liberty-VM-Labs/installs/member2/wlp/bin/server"
-APACHECTL="/home/itzuser/usr/IBM/IHS/bin/apachectl"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/00-set-env.sh"
 
-if [[ "$TARGET" != "on" && "$TARGET" != "off" ]]; then
-    echo "Usage: $0 <on | off>"
+usage() {
+  echo "Usage: $0 -s <member1|member2|member3|member4|all>"
+  echo "  member1-member4: route /server-info/* to that member"
+  echo "  all: restore routing across all available members"
+}
+
+if [[ "$#" -ne 2 || "$1" != "-s" ]]; then
+  usage >&2
+  exit 1
+fi
+
+TARGET="$2"
+case "${TARGET}" in
+  member1|member2|member3|member4|all) ;;
+  *)
+    usage >&2
     exit 1
-fi
-
-[[ "$TARGET" == "on" ]] && AFFINITY="true" || AFFINITY="false"
-
-# ---------------------------------------------------------------------------
-# 1. Rewrite plugin-cfg.xml with correct IntelligentManagement structure
-# ---------------------------------------------------------------------------
-cat > "$PLUGIN_CFG" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<Config ASDisableNagle="false" AcceptAllContent="false"
-        AppServerPortPreference="HostHeader" ChunkedResponse="false"
-        FIPSEnable="false" IISDisableNagle="false" IISPluginPriority="High"
-        IgnoreDNSFailures="false" RefreshInterval="60" ResponseChunkSize="64"
-        SSLConsolidate="false" TrustedProxyEnable="false" VHostMatchingCompat="false">
-
-    <Log LogLevel="Error" Name="/home/itzuser/usr/IBM/IHS/plugin/logs/webserver1/http_plugin.log"/>
-
-    <Property Name="PluginInstallRoot" Value="/home/itzuser/usr/IBM/IHS/plugin/"/>
-    <Property Name="Keyfile"   Value="${KDB}"/>
-    <Property Name="Stashfile" Value="/home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-key.sth"/>
-
-    <IntelligentManagement>
-        <Property name="webserverName" value="webserver1"/>
-        <ConnectorCluster enabled="true" maxRetries="-1" name="defaultCollective"
-                          retryInterval="60"
-                          LoadBalance="RoundRobin"
-                          IgnoreAffinityRequests="${AFFINITY}">
-            <Property name="uri" value="/ibm/api/dynamicRouting"/>
-            <Connector host="localhost" port="9443" protocol="https">
-                <Property name="keyring" value="${KDB}"/>
-            </Connector>
-        </ConnectorCluster>
-        <Property name="RoutingRulesConnectorClusterName" value="defaultCollective"/>
-    </IntelligentManagement>
-
-</Config>
-EOF
-echo "plugin-cfg.xml → IgnoreAffinityRequests=${AFFINITY}"
-
-# ---------------------------------------------------------------------------
-# 2. Controller dropin: overrideAffinity tells the dynamic routing publisher
-#    to stop enforcing session affinity in the routing table it serves to the
-#    plug-in. Written on 'on', removed on 'off'.
-# ---------------------------------------------------------------------------
-if [[ "$TARGET" == "on" ]]; then
-    cat > "$DROPIN" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<server>
-    <routingRules overrideAffinity="true"/>
-</server>
-EOF
-    echo "controller dropin → overrideAffinity=true"
-else
-    rm -f "$DROPIN"
-    echo "controller dropin → removed"
-fi
-
-# ---------------------------------------------------------------------------
-# 3. Start/stop members
-# ---------------------------------------------------------------------------
-case "$TARGET" in
-    on)
-        echo "Starting all members..."
-        "$M1_BIN" start member1 2>/dev/null
-        "$M2_BIN" start member2 2>/dev/null
-        ;;
-    off)
-        echo "Stopping member2..."
-        "$M2_BIN" stop member2
-        echo "(If member1 goes down, member2 will take over automatically)"
-        ;;
+    ;;
 esac
 
-# ---------------------------------------------------------------------------
-# 4. Restart IHS to pick up the new plugin-cfg.xml immediately
-# ---------------------------------------------------------------------------
-"$APACHECTL" graceful
+CONTROLLER_DROPIN_DIR="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/configDropins/overrides"
+ROUTING_RULES_FILE="${CONTROLLER_DROPIN_DIR}/routing-rules.xml"
+
+if [[ ! -d "${CONTROLLER_DROPIN_DIR}" ]]; then
+  echo "ERROR: Controller overrides directory does not exist: ${CONTROLLER_DROPIN_DIR}" >&2
+  exit 1
+fi
+
+if [[ "${TARGET}" == "all" ]]; then
+  rm -f "${ROUTING_RULES_FILE}"
+  echo "Removed routing rule; /server-info/* uses the default dynamic-routing member set."
+  exit 0
+fi
+
+cat > "${ROUTING_RULES_FILE}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<server description="Dynamic Routing Rules">
+    <dynamicRouting>
+        <routingRules webServers="webserver1">
+            <routingRule order="100" matchExpression="URI LIKE '/server-info%'">
+                <permitAction>
+                    <loadBalanceEndPoints>
+                        <endpoint destination="server=*,*,*,${TARGET}"/>
+                    </loadBalanceEndPoints>
+                </permitAction>
+            </routingRule>
+        </routingRules>
+    </dynamicRouting>
+</server>
+EOF
+
+echo "Pinned /server-info/* to ${TARGET}."
+echo "Liberty applies the routing-rule change dynamically; no IHS or controller restart is needed."
 echo ""
-echo "Test: for i in \$(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done"
+echo "Verify:"
+echo "  for i in \$(seq 6); do curl -s -c /dev/null http://localhost:1080/server-info/api/health | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"server\"][\"port\"])'; done"
