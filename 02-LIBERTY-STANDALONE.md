@@ -378,64 +378,25 @@ IBM HTTP Server (IHS) uses the WebSphere Application Server (WAS) plugin
 install IHS, hand-craft a minimal `plugin-cfg.xml`, and verify end-to-end routing
 from IHS port **1080** through to the standalone Liberty server on port **9080**.
 
-### 5.1 Install IBM HTTP Server
+### 5.1 Configure IHS and WAS Plugin for Standalone Liberty
 
-The IHS installer is a ZIP archive that you unzip directly into `~/usr/IBM`:
+To streamline setting up IHS and the WAS plugin to route traffic to the standalone Liberty server, execute the helper script [`scripts/configure-standalone-ihs.sh`](scripts/configure-standalone-ihs.sh).
 
-```bash
-unzip /home/itzuser/software/IHS/WAS/9.0.5-WS-IHS-ARCHIVE-linux-x86_64-FP025.zip \
-  -d ~/usr/IBM
-```
+#### What the script does:
+1. **Installs & Post-configures IHS:** Extracts the IHS installer archive to `~/usr/IBM/IHS` (if not already extracted), runs `./postinstall.sh`, and sets the listening port to `1080` (non-root).
+2. **Creates Static Document Root:** Writes an `index.html` in `htdocs` to test direct IHS static responses.
+3. **Creates WAS Plugin Directories:** Ensures `$IHS_ROOT/plugin/config/webserver1` and `$IHS_ROOT/plugin/logs/webserver1` exist.
+4. **Generates `plugin-cfg.xml`:** Creates a static routing configuration directing requests for `/server-info/*` to the standalone Liberty instance on port `9080`.
+5. **Updates `httpd.conf` Directives:** Adds `LoadModule was_ap24_module` and `WebSpherePluginConfig` pointing to `plugin-cfg.xml`.
+6. **Restarts & Validates IHS:** Starts IHS and performs test requests against both the static root (`/`) and the proxied Liberty app (`/server-info/`).
 
-Run the post-install script (sets up OS-level symlinks and permissions):
-
-```bash
-cd /home/itzuser/usr/IBM/IHS
-./postinstall.sh
-```
-
-Change the default listen port from 80 to 1080 (required on the lab VM where port 80
-requires root):
+Run the script from the repository root:
 
 ```bash
-sed -i 's/Listen 80/Listen 1080/g' /home/itzuser/usr/IBM/IHS/conf/httpd.conf
-```
-
-Verify IHS installed correctly:
-
-```bash
-/home/itzuser/usr/IBM/IHS/bin/apachectl -version
-```
-
-Expected output includes a line like:
-```
-Server version: IBM_HTTP_Server/9.0.5.25
-```
-
-Create a simple static index page so you can confirm IHS responds independently of Liberty:
-
-```bash
-mkdir -p /home/itzuser/usr/IBM/IHS/htdocs
-echo "<html><body><h1>IBM HTTP Server is running!</h1></body></html>" \
-  > /home/itzuser/usr/IBM/IHS/htdocs/index.html
-```
-
-Start IHS and confirm the static page loads:
-
-```bash
-/home/itzuser/usr/IBM/IHS/bin/apachectl start
-curl -s http://localhost:1080/
-# Expected: IBM HTTP Server is running!
+bash scripts/configure-standalone-ihs.sh
 ```
 
 ### 5.2 Create plugin directories and write plugin-cfg.xml
-
-Create the WAS plugin configuration and log directories:
-
-```bash
-mkdir -p /home/itzuser/usr/IBM/IHS/plugin/config/webserver1
-mkdir -p /home/itzuser/usr/IBM/IHS/plugin/logs/webserver1
-```
 
 Write the plugin configuration file:
 

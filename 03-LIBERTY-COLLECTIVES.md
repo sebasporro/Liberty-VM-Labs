@@ -896,6 +896,17 @@ be running.
 
 ---
 
+### `scripts/configure-standalone-ihs.sh`
+
+**Purpose:** Automates the complete installation of IBM HTTP Server and configuration of the WAS plugin to front a single standalone Liberty instance (`myServer` on port `9080`).
+
+**Usage:**
+```bash
+bash scripts/configure-standalone-ihs.sh
+```
+
+---
+
 ## Override Mechanism
 
 Each deployed instance is customised via two XML files dropped into
