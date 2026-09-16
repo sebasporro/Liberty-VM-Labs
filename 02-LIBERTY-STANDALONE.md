@@ -185,13 +185,16 @@ Key points:
 Open `wlp-standalone/usr/servers/myServer/server.xml` in a text editor. You need to make
 three additions to the existing file — do **not** replace the whole file.
 
-**1. Add the three new features inside `<featureManager>`**
+**1. Replace the default feature and add three new features inside `<featureManager>`**
 
-The existing block has only `jsp-2.3`. Add the three lines below it:
+The existing block has only `jsp-2.3`. **Replace** `jsp-2.3` with `pages-3.1` (the
+Jakarta EE 10 equivalent) and add the three Admin Center features. Keeping `jsp-2.3`
+here would cause a Java EE 7 / Jakarta EE 10 generation conflict that prevents Liberty
+from loading _any_ features.
 
 ```xml
     <featureManager>
-        <feature>jsp-2.3</feature>
+        <feature>pages-3.1</feature>          <!-- replaces jsp-2.3 -->
         <!-- Add these three: -->
         <feature>adminCenter-1.0</feature>
         <feature>appSecurity-5.0</feature>
@@ -236,7 +239,7 @@ Your complete `server.xml` should now look like this:
 <server description="new server">
 
     <featureManager>
-        <feature>jsp-2.3</feature>
+        <feature>pages-3.1</feature>          <!-- Jakarta EE 10 replacement for jsp-2.3 -->
         <feature>adminCenter-1.0</feature>
         <feature>appSecurity-5.0</feature>
         <feature>restConnector-2.0</feature>
