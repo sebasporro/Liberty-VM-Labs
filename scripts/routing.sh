@@ -187,7 +187,11 @@ EOF
   echo "Routing rule written — pinning all traffic to '${target}'."
   ihs_restart
   echo ""
-  echo "Verify:  curl -s -c /dev/null http://localhost:1080/server-info/api/health"
+  echo "Verify with curl (cookies discarded — accurate routing test):"
+  echo "  curl -s -c /dev/null http://localhost:1080/server-info/api/health | python3 -c 'import json,sys; s=json.load(sys.stdin)[\"server\"]; print(s[\"port\"], s[\"serverSoftware\"])'"
+  echo ""
+  echo "NOTE: browsers cache JSESSIONID cookies — they will stick to the old member"
+  echo "      until you clear cookies or open a private/incognito window."
 }
 
 # ---------------------------------------------------------------------------
