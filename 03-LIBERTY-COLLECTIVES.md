@@ -77,7 +77,7 @@ At the end of this lab you will have the following topology running on a single 
 2. [Section 2 — Build the Golden Packages](#section-2--build-the-golden-packages)
 3. [Section 3 — Deploy Controller and 26.0.0.8 Members](#section-3--deploy-controller-and-26008-members)
 4. [Section 4 — Configure IHS with WAS Plugin Routing](#section-4--configure-ihs-with-was-plugin-routing)
-5. [Section 5 — Add Liberty 25.0.0.1 Members](#section-5--add-liberty-25001-members)
+5. [Section 5 — Add More 26.0.0.8 Members](#section-5--add-more-26008-members)
 6. [Section 6 — Validate](#section-6--validate)
 7. [Section 7 — Zero Migration Upgrade](#section-7--zero-migration-upgrade)
 
@@ -371,24 +371,25 @@ for i in $(seq 6); do curl -s -c /dev/null http://localhost:1080/server-info/api
 
 ---
 
-## Section 5 — Add Liberty 25.0.0.1 Members
+## Section 5 — Add More 26.0.0.8 Members
+
+Deploy member3 and member4 using the same 26.0.0.8 golden package as member1 and member2.
+With Intelligent Management active, IHS automatically picks them up the moment they join
+the collective — no plugin config changes or script re-run needed.
 
 ```bash
-scripts/add-member-25.sh member3
-scripts/add-member-25.sh member4
+scripts/add-member-26.sh member3
+scripts/add-member-26.sh member4
 ```
 
-With Intelligent Management active, member3 and member4 are automatically added to the IHS
-routing table as soon as they join the collective — no plugin config changes or script re-run needed.
-
-Test each new member directly by running the following commands and checking that the server-info page loads for each, showing the correct Liberty version:
+Test each new member directly by running the following commands and checking that the server-info page loads for each, showing Liberty 26.0.0.8:
 
 ```bash
 curl -s http://localhost:9083/server-info/
-# Expected: server-info page showing member3, Liberty 25.0.0.1
+# Expected: server-info page showing member3, Liberty 26.0.0.8
 
 curl -s http://localhost:9084/server-info/
-# Expected: server-info page showing member4, Liberty 25.0.0.1
+# Expected: server-info page showing member4, Liberty 26.0.0.8
 ```
 
 Then confirm IHS now distributes across all four members by sending 12 requests and checking that all four ports (`9081`, `9082`, `9083`, `9084`) appear in the rotation:
@@ -399,7 +400,7 @@ for i in $(seq 12); do curl -s -c /dev/null http://localhost:1080/server-info/ap
 # Expected: 9081, 9082, 9083, and 9084 appearing in the rotation
 ```
 
-All four members should be visible in the Admin Center **Servers** view.
+All four members should be visible in the Admin Center **Servers** view, all running Liberty 26.0.0.8.
 
 ---
 
