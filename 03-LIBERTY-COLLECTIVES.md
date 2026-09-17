@@ -250,17 +250,33 @@ three collective members are visible and running:
 https://localhost:9443/adminCenter
 ```
 
-Log in with `admin` / `admin` and navigate to **Servers**. You should see three entries:
+**1. Log in** with `admin` / `admin`:
+
+![Liberty Admin Center login screen](Resources/images/admin-center/1.jpg)
+
+**2. The Toolbox** is the Admin Center home — click **Explore** to inspect the collective:
+
+![Admin Center Toolbox showing Deploy, Explore, Server Config and openliberty.io tiles](Resources/images/admin-center/2.jpg)
+
+**3. The Explore dashboard** gives a summary of the collective — you should see **3 Servers**,
+**2 Applications** (server-info deployed on member1 and member2), and **1 Host**:
+
+![Explore dashboard showing 3 servers running, 2 applications, 1 host](Resources/images/admin-center/3.jpg)
+
+**4. Click Servers** to see the individual server cards. You should see three entries, all
+showing **Running**:
+
+![Explore Servers view showing controller, member1 and member2 all Running](Resources/images/admin-center/4.jpg)
 
 | Server | Role | Status |
 |--------|------|--------|
-| controller | Collective Controller | Started |
-| member1 | Collective Member | Started |
-| member2 | Collective Member | Started |
+| controller | Collective Controller | Running |
+| member1 | Collective Member | Running |
+| member2 | Collective Member | Running |
 
-> **Tip:** The Admin Center **Explore** view also shows server resource usage (CPU, heap)
-> and lets you start, stop, or restart members directly from the browser — without
-> touching the command line.
+> **Tip:** Click any server card to drill into its details — applications deployed,
+> JVM metrics, and log files. You can also start, stop, or restart members directly
+> from this view without touching the command line.
 
 ---
 
