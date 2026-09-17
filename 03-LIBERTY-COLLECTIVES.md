@@ -311,9 +311,16 @@ for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api
 ```
 Expected output: `9081` and `9082` alternating
 
-You can also open `http://localhost:1080/server-info/` in a browser — each refresh routes
-to a different member. The port shown in the page URL or server-info details will switch
-between `9081` and `9082`.
+You can also open `http://localhost:1080/server-info/` in a browser to observe Round Robin
+routing visually. The **server-info** app shows a **Runtime Dashboard** with the hostname,
+IP address, and — most importantly — the **PORT** field, which identifies which Liberty
+member served the request:
+
+![server-info Runtime Dashboard showing PORT 9082 served through IHS on port 1080](Resources/images/server-info-browser.jpg)
+
+Click the **Refresh** button (top left of the page) repeatedly — the PORT value will
+alternate between `9081` (member1) and `9082` (member2) with each request, confirming
+that IHS is distributing traffic across both members in Round Robin fashion.
 
 > **Plugin config location:** the generated `plugin-cfg.xml` is written to
 > `/home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml`
