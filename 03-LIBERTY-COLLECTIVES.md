@@ -135,7 +135,7 @@ bash scripts/install-ihs.sh
 IHS is the front-end HTTP server that load-balances requests across the Liberty collective
 members. Install it once before running any other lab steps.
 
-**Verify:**
+Test the installation by running the following command and checking that the output reports the IBM HTTP Server version:
 
 ```bash
 /home/itzuser/usr/IBM/IHS/bin/apachectl -v
@@ -198,7 +198,7 @@ scripts/03-build-package-25.sh
 scripts/install-controller.sh
 ```
 
-**Verify:**
+Test the controller deployment by running the following command and checking that the HTTP response code is `200`:
 
 ```bash
 curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adminCenter
@@ -216,7 +216,7 @@ You should see the Admin Center dashboard with no members yet.
 scripts/add-member-26.sh member1
 ```
 
-**Verify:**
+Test the deployment by running the following command and checking that the server-info page loads showing member1 running Liberty 26.0.0.8:
 
 ```bash
 curl -s http://localhost:9081/server-info/
@@ -233,7 +233,7 @@ member1 should also appear in the Admin Center **Servers** view.
 scripts/add-member-26.sh member2
 ```
 
-**Verify:**
+Test the deployment by running the following command and checking that the server-info page loads showing member2 running Liberty 26.0.0.8:
 
 ```bash
 curl -s http://localhost:9082/server-info/
@@ -259,16 +259,16 @@ The script discovers all running members, writes `plugin-cfg.xml`, adds the `Web
 directive to `httpd.conf`, and starts IHS. The config is **static** — members added or removed
 after this point are not reflected until the script is re-run. That limitation is what Section 4b solves.
 
-**Verify:**
+Test the IHS routing by running the following command and checking that IHS returns HTTP `200` through the plugin:
 
 ```bash
-# Confirm IHS is serving through the plugin
 curl -s -o /dev/null -w "%{http_code}" http://localhost:1080/server-info/
 # Expected: 200
 ```
 
+Then confirm Round Robin distribution by sending 8 requests and checking that responses alternate between member1 and member2:
+
 ```bash
-# Confirm round-robin distribution across members
 for i in $(seq 8); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
 # Expected: member1 and member2 alternating
 ```
@@ -328,7 +328,7 @@ Enables Liberty **Intelligent Management** — the WAS plugin connects to the co
 Members that join or leave the collective are reflected in IHS routing automatically, with no
 static `plugin-cfg.xml` regeneration required.
 
-**Verify:**
+Test dynamic routing by running the following commands and checking that the reported port alternates between `9081` (member1) and `9082` (member2):
 
 > **Use `curl`, not a browser.** The `server-info/` page is a single-page app and does not
 > embed the server name in the initial HTML. Use `-c /dev/null` to discard cookies so each
@@ -380,7 +380,7 @@ scripts/add-member-25.sh member4
 With Intelligent Management active, member3 and member4 are automatically added to the IHS
 routing table as soon as they join the collective — no plugin config changes or script re-run needed.
 
-**Verify:**
+Test each new member directly by running the following commands and checking that the server-info page loads for each, showing the correct Liberty version:
 
 ```bash
 curl -s http://localhost:9083/server-info/
@@ -390,8 +390,9 @@ curl -s http://localhost:9084/server-info/
 # Expected: server-info page showing member4, Liberty 25.0.0.1
 ```
 
+Then confirm IHS now distributes across all four members by sending 12 requests and checking that all four ports (`9081`, `9082`, `9083`, `9084`) appear in the rotation:
+
 ```bash
-# Confirm IHS now distributes across all four members
 for i in $(seq 12); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
 # Expected: 9081, 9082, 9083, and 9084 appearing in the rotation
@@ -751,12 +752,13 @@ scripts/step1-was-plugin.sh
 **Prerequisite:** `scripts/reset-ihs.sh` should be run first to ensure a clean baseline.
 Member servers must be running on ports 9081 and 9082.
 
-**Verify:**
+Test the static routing by running the following command and checking that responses alternate between port `9081` (member1) and `9082` (member2):
+
 ```bash
-# Should alternate between port 9081 and 9082
 for i in 1 2 3 4; do
   curl -s http://localhost:1080/server-info/ | grep -o "PORT.*[0-9]\{4\}"
 done
+# Expected: responses alternating between port 9081 and 9082
 ```
 
 ---
@@ -831,13 +833,20 @@ scripts/apply-routing-rules.sh -s all       # remove rule — restore round-robi
 
 **Prerequisite:** `scripts/step2-dynamic-routing.sh` must have been completed successfully.
 
-**Verify:**
-```bash
-# With -s member1: every response should show member1
-for i in $(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
+Test the routing rule by running the following command and checking that every response reports the pinned member:
 
-# With -s all: responses should alternate across members
+```bash
+# With -s member1: every response should report member1
 for i in $(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
+# Expected: member1 for every request
+```
+
+After restoring round-robin with `-s all`, run the same command again and check that responses distribute across all members:
+
+```bash
+# With -s all: responses should alternate across all members
+for i in $(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
+# Expected: member names alternating across all running members
 ```
 
 > **Reference:** See [`config/controller/routing-rules.xml`](config/controller/routing-rules.xml) for the annotated template.
