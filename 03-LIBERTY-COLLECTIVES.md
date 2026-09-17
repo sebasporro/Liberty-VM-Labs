@@ -449,6 +449,11 @@ Expected output: `9081`, `9082`, `9083`, and `9084` all appearing in the rotatio
 
 All four members should be visible in the Admin Center **Servers** view, all running Liberty 26.0.0.8.
 
+Open `https://localhost:9443/adminCenter` and navigate to **Explore → Servers** to confirm
+all four members appear as **Running** alongside the controller:
+
+![Admin Center Explore Servers view showing controller, member1, member2, member3 and member4 all Running](Resources/images/admin-center/5.jpg)
+
 ---
 
 ## Section 6 — Validate
