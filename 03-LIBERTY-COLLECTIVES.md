@@ -406,28 +406,43 @@ All four members should be visible in the Admin Center **Servers** view, all run
 
 ## Section 6 — Validate
 
+At this point you have a fully operational collective with four Liberty 26.0.0.8 members
+behind IHS dynamic routing. Run the validate script to confirm every component is healthy:
+
 ```bash
 scripts/07-validate.sh
 ```
 
-Runs 26 checks across the entire lab topology: Java version, both runtimes, both golden
-packages, the controller (Admin Center, configDropins), all four members (directory, port,
-app response, configDropins), and the IHS front-end.
+Runs 26 checks across the entire lab topology: Java version, the 26.0.0.8 runtime, the
+golden package, the controller (Admin Center, configDropins), all four members (directory,
+port, app response, configDropins), and the IHS front-end.
 
-**Expected result:** All checks print `PASS`. The script exits 0 on full pass, 1 if any check fails — each failure prints the fix command.
+**Expected result:** All checks print `PASS`. The script exits 0 on full pass, 1 if any
+check fails — each failure prints the fix command.
 
-You can also verify each component directly:
+Verify each member directly by running the following commands and checking that all four
+return the server-info page showing Liberty 26.0.0.8:
 
 ```bash
-curl -s http://localhost:9081/server-info/   # member1 direct (26.0.0.8)
-curl -s http://localhost:9082/server-info/   # member2 direct (26.0.0.8)
-curl -s http://localhost:9083/server-info/   # member3 direct (25.0.0.1)
-curl -s http://localhost:9084/server-info/   # member4 direct (25.0.0.1)
-curl -s http://localhost:1080/server-info/   # IHS → dynamic routing
+curl -s http://localhost:9081/server-info/   # member1 (26.0.0.8)
+curl -s http://localhost:9082/server-info/   # member2 (26.0.0.8)
+curl -s http://localhost:9083/server-info/   # member3 (26.0.0.8)
+curl -s http://localhost:9084/server-info/   # member4 (26.0.0.8)
+curl -s http://localhost:1080/server-info/   # IHS → all four members via dynamic routing
 ```
 
 Open `https://localhost:9443/adminCenter` to confirm all four members appear as **Started**
-in the Admin Center Servers view.
+in the Admin Center Servers view, all running Liberty 26.0.0.8.
+
+The collective topology at this stage:
+
+| Member | Liberty version | HTTP port | Status |
+|--------|----------------|-----------|--------|
+| controller | 26.0.0.8 ND | 9080 / 9443 | Started — Admin Center + dynamic routing |
+| member1 | 26.0.0.8 ND | 9081 | Started — serving traffic |
+| member2 | 26.0.0.8 ND | 9082 | Started — serving traffic |
+| member3 | 26.0.0.8 ND | 9083 | Started — serving traffic |
+| member4 | 26.0.0.8 ND | 9084 | Started — serving traffic |
 
 ---
 
