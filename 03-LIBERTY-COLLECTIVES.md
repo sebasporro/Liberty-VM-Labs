@@ -140,8 +140,8 @@ Test the installation by running the following command and checking that the out
 
 ```bash
 /home/itzuser/usr/IBM/IHS/bin/apachectl -v
-# Expected: Server version: Apache/2.4.x (IBM HTTP Server)
 ```
+Expected output: `Server version: Apache/2.4.x (IBM HTTP Server)`
 
 ---
 
@@ -203,8 +203,8 @@ Test the controller deployment by running the following command and checking tha
 
 ```bash
 curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adminCenter
-# Expected: 200
 ```
+Expected output: `200`
 
 Open `https://localhost:9443/adminCenter` in a browser and log in with `admin` / `admin`.
 You should see the Admin Center dashboard with no members yet.
@@ -221,8 +221,8 @@ Test the deployment by running the following command and checking that the serve
 
 ```bash
 curl -s http://localhost:9081/server-info/
-# Expected: server-info page showing member1, Liberty 26.0.0.8
 ```
+Expected output: server-info page showing member1, Liberty 26.0.0.8
 
 member1 should also appear in the Admin Center **Servers** view.
 
@@ -238,8 +238,8 @@ Test the deployment by running the following command and checking that the serve
 
 ```bash
 curl -s http://localhost:9082/server-info/
-# Expected: server-info page showing member2, Liberty 26.0.0.8
 ```
+Expected output: server-info page showing member2, Liberty 26.0.0.8
 
 member2 should appear in the Admin Center **Servers** view alongside member1.
 
@@ -299,8 +299,8 @@ Test the IHS routing by running the following command and checking that IHS retu
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}" http://localhost:1080/server-info/
-# Expected: 200
 ```
+Expected output: `200`
 
 Then confirm Round Robin distribution by sending 8 requests and checking that the reported
 port alternates between `9081` (member1) and `9082` (member2):
@@ -308,8 +308,8 @@ port alternates between `9081` (member1) and `9082` (member2):
 ```bash
 for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-# Expected: 9081 and 9082 alternating
 ```
+Expected output: `9081` and `9082` alternating
 
 You can also open `http://localhost:1080/server-info/` in a browser — each refresh routes
 to a different member. The port shown in the page URL or server-info details will switch
@@ -378,8 +378,8 @@ for i in $(seq 8); do \
   curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; \
 done
-# Expected: 9081 and 9082 alternating
 ```
+Expected output: `9081` and `9082` alternating
 
 ---
 
@@ -402,8 +402,8 @@ scripts/apply-routing-rules.sh -s all       # remove rule — restore round-robi
 ```bash
 for i in $(seq 6); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-# Expected: 9081 for every request
 ```
+Expected output: `9081` for every request
 
 > **Reference:** [IBM Docs — Configuring routing rules for Dynamic Routing](https://www.ibm.com/docs/en/was-liberty/nd?topic=collectives-configuring-routing-rules-liberty-dynamic-routing)
 
@@ -424,19 +424,21 @@ Test each new member directly by running the following commands and checking tha
 
 ```bash
 curl -s http://localhost:9083/server-info/
-# Expected: server-info page showing member3, Liberty 26.0.0.8
-
-curl -s http://localhost:9084/server-info/
-# Expected: server-info page showing member4, Liberty 26.0.0.8
 ```
+Expected output: server-info page showing member3, Liberty 26.0.0.8
+
+```bash
+curl -s http://localhost:9084/server-info/
+```
+Expected output: server-info page showing member4, Liberty 26.0.0.8
 
 Then confirm IHS now distributes across all four members by sending 12 requests and checking that all four ports (`9081`, `9082`, `9083`, `9084`) appear in the rotation:
 
 ```bash
 for i in $(seq 12); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-# Expected: 9081, 9082, 9083, and 9084 appearing in the rotation
 ```
+Expected output: `9081`, `9082`, `9083`, and `9084` all appearing in the rotation
 
 All four members should be visible in the Admin Center **Servers** view, all running Liberty 26.0.0.8.
 
@@ -462,12 +464,13 @@ Verify each member directly by running the following commands and checking that 
 return the server-info page showing Liberty 26.0.0.8:
 
 ```bash
-curl -s http://localhost:9081/server-info/   # member1 (26.0.0.8)
-curl -s http://localhost:9082/server-info/   # member2 (26.0.0.8)
-curl -s http://localhost:9083/server-info/   # member3 (26.0.0.8)
-curl -s http://localhost:9084/server-info/   # member4 (26.0.0.8)
-curl -s http://localhost:1080/server-info/   # IHS → all four members via dynamic routing
+curl -s http://localhost:9081/server-info/
+curl -s http://localhost:9082/server-info/
+curl -s http://localhost:9083/server-info/
+curl -s http://localhost:9084/server-info/
+curl -s http://localhost:1080/server-info/
 ```
+Expected output for each member curl: server-info page showing the member name and Liberty 26.0.0.8. The IHS curl should route to any of the four members.
 
 Open `https://localhost:9443/adminCenter` to confirm all four members appear as **Started**
 in the Admin Center Servers view, all running Liberty 26.0.0.8.
@@ -532,8 +535,8 @@ IHS rotation, confirming the collective is serving exclusively from 25.0.0.1 mem
 ```bash
 for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-# Expected: only 9081 and 9082 — pure 25.0.0.1 collective
 ```
+Expected output: only `9081` and `9082` — pure 25.0.0.1 collective
 
 You are ready to begin the zero migration upgrade.
 
@@ -581,11 +584,13 @@ commands and checking that each returns the server-info page showing Liberty 26.
 
 ```bash
 curl -s http://localhost:9083/server-info/
-# Expected: server-info page showing member3, Liberty 26.0.0.8
-
-curl -s http://localhost:9084/server-info/
-# Expected: server-info page showing member4, Liberty 26.0.0.8
 ```
+Expected output: server-info page showing member3, Liberty 26.0.0.8
+
+```bash
+curl -s http://localhost:9084/server-info/
+```
+Expected output: server-info page showing member4, Liberty 26.0.0.8
 
 Then confirm IHS is now distributing across all four members by sending requests and
 checking that all four ports appear in the rotation:
@@ -593,8 +598,8 @@ checking that all four ports appear in the rotation:
 ```bash
 for i in $(seq 16); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-# Expected: 9081, 9082, 9083, and 9084 all appearing — mixed-version collective active
 ```
+Expected output: `9081`, `9082`, `9083`, and `9084` all appearing — mixed-version collective active
 
 Open `http://localhost:1080/server-info/` in a browser and refresh several times — you
 will now see the Liberty version alternate between `25.0.0.1` (member1/member2) and
@@ -629,8 +634,8 @@ is still flowing through the remaining members:
 ```bash
 for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-# Expected: only 9082, 9083, and 9084 — member1 (9081) no longer appears
 ```
+Expected output: only `9082`, `9083`, and `9084` — member1 (9081) no longer appears
 
 **Stop member2 (25.0.0.1):**
 
@@ -643,8 +648,8 @@ Confirm IHS routing now uses only the 26.0.0.8 members:
 ```bash
 for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-# Expected: only 9083 and 9084 — collective is now pure 26.0.0.8
 ```
+Expected output: only `9083` and `9084` — collective is now pure 26.0.0.8
 
 Open `http://localhost:1080/server-info/` in a browser and refresh — every response
 now shows Liberty version `26.0.0.8`. The upgrade is complete and no requests were
@@ -667,14 +672,18 @@ verify IHS is routing exclusively to them:
 
 ```bash
 curl -s http://localhost:9083/server-info/
-# Expected: server-info page showing member3, Liberty 26.0.0.8
-
-curl -s http://localhost:9084/server-info/
-# Expected: server-info page showing member4, Liberty 26.0.0.8
-
-curl -s http://localhost:1080/server-info/
-# Expected: IHS routing only to 26.0.0.8 members (9083 / 9084)
 ```
+Expected output: server-info page showing member3, Liberty 26.0.0.8
+
+```bash
+curl -s http://localhost:9084/server-info/
+```
+Expected output: server-info page showing member4, Liberty 26.0.0.8
+
+```bash
+curl -s http://localhost:1080/server-info/
+```
+Expected output: IHS routing only to 26.0.0.8 members (9083 / 9084)
 
 ### Summary — what zero migration demonstrated
 
@@ -1017,8 +1026,8 @@ Test the static routing by running the following command and checking that respo
 for i in 1 2 3 4; do
   curl -s http://localhost:1080/server-info/ | grep -o "PORT.*[0-9]\{4\}"
 done
-# Expected: responses alternating between port 9081 and 9082
 ```
+Expected output: responses alternating between port 9081 and 9082
 
 ---
 
@@ -1095,18 +1104,16 @@ scripts/apply-routing-rules.sh -s all       # remove rule — restore round-robi
 Test the routing rule by running the following command and checking that every response reports the pinned member:
 
 ```bash
-# With -s member1: every response should report member1
 for i in $(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
-# Expected: member1 for every request
 ```
+Expected output: member1 for every request
 
 After restoring round-robin with `-s all`, run the same command again and check that responses distribute across all members:
 
 ```bash
-# With -s all: responses should alternate across all members
 for i in $(seq 6); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
-# Expected: member names alternating across all running members
 ```
+Expected output: member names alternating across all running members
 
 > **Reference:** See [`config/controller/routing-rules.xml`](config/controller/routing-rules.xml) for the annotated template.
 > IBM Documentation — [Configuring routing rules for Dynamic Routing](https://www.ibm.com/docs/en/was-liberty/nd?topic=SSAW57_liberty/com.ibm.websphere.wlp.zseries.doc/ae/twlp_wve_routing_rules.htm)
