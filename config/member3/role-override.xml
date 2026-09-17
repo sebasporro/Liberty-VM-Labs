@@ -15,4 +15,15 @@
             </security-role>
         </application-bnd>
     </application>
+
+    <application id="whereami"
+                 name="WhereAmI"
+                 type="war"
+                 location="${server.config.dir}/apps/WhereAmI.war">
+        <application-bnd>
+            <security-role name="Everyone">
+                <special-subject type="EVERYONE"/>
+            </security-role>
+        </application-bnd>
+    </application>
 </server>
