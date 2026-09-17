@@ -302,15 +302,18 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:1080/server-info/
 # Expected: 200
 ```
 
-Then confirm Round Robin distribution by sending 8 requests and checking that responses alternate between member1 and member2:
+Then confirm Round Robin distribution by sending 8 requests and checking that the reported
+port alternates between `9081` (member1) and `9082` (member2):
 
 ```bash
-for i in $(seq 8); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
-# Expected: member1 and member2 alternating
+for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
+# Expected: 9081 and 9082 alternating
 ```
 
-You can also open `http://localhost:1080/server-info/` in a browser — each refresh should
-show a different member name in the page.
+You can also open `http://localhost:1080/server-info/` in a browser — each refresh routes
+to a different member. The port shown in the page URL or server-info details will switch
+between `9081` and `9082`.
 
 > **Plugin config location:** the generated `plugin-cfg.xml` is written to
 > `/home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml`
