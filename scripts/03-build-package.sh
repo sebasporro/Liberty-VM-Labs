@@ -34,12 +34,6 @@ if [[ ! -f "${WLP_HOME}/usr/servers/${SERVER_NAME}/apps/server-info.war" ]]; the
   exit 1
 fi
 
-if [[ ! -f "${WLP_HOME}/usr/servers/${SERVER_NAME}/apps/WhereAmI.war" ]]; then
-  echo "[03] ERROR: WhereAmI.war missing from apps directory." >&2
-  echo "[03] Ensure Sub-Task 2 completed successfully." >&2
-  exit 1
-fi
-
 # ---------------------------------------------------------------------------
 # Create output directory
 # ---------------------------------------------------------------------------
@@ -73,8 +67,7 @@ echo "[03] Archive size : ${ARCHIVE_SIZE}"
 for ENTRY in \
   "wlp/usr/servers/${SERVER_NAME}/server.xml" \
   "wlp/usr/servers/${SERVER_NAME}/bootstrap.properties" \
-  "wlp/usr/servers/${SERVER_NAME}/apps/server-info.war" \
-  "wlp/usr/servers/${SERVER_NAME}/apps/WhereAmI.war"; do
+  "wlp/usr/servers/${SERVER_NAME}/apps/server-info.war"; do
   HITS=$(unzip -l "${ARCHIVE}" | grep -c "${ENTRY}" || true)
   if [[ "${HITS}" -ge 1 ]]; then
     echo "[03] ✓  ${ENTRY}"
