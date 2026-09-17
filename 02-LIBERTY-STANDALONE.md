@@ -11,7 +11,7 @@
 
 ## Table of Contents
 
-1. [Section 1 — Extract the Liberty runtime](#section-1--extract-the-liberty-runtime)
+1. [Section 1 — Liberty Installation](#section-1--liberty-installation)
 2. [Section 2 — Create a server, start/stop, and check logs](#section-2--create-a-server-startstop-and-check-logs)
 3. [Section 3 — Review server.xml and enable Admin Center](#section-3--review-serverxml-and-enable-admin-center)
 4. [Section 4 — Deploy server-info.war manually](#section-4--deploy-server-infowar-manually)
@@ -26,7 +26,18 @@
 
 ---
 
-## Section 1 — Extract the Liberty runtime
+## Section 1 — Liberty Installation
+
+### Installation options
+
+Liberty can be installed in two ways:
+
+| Method | When to use |
+|--------|-------------|
+| **IBM Installation Manager (IM)** | Enterprise environments where a central administrator manages fix packs, license entitlements, and multiple product installations from a single tool. IM tracks what is installed and can apply maintenance packages automatically. |
+| **Archive file (ZIP or JAR)** | Development, lab, and cloud-native scenarios where a self-contained, portable runtime is preferred. No additional tooling is required — extraction is a single command, and multiple runtimes can coexist side by side without conflict. |
+
+These labs use the **archive method**. The Liberty installer ships as a self-executing JAR (`wlp-nd-all-*.jar`). Running it with `--acceptLicense` extracts a complete, ready-to-use `wlp/` directory to the path you specify — no installation registry, no elevated privileges, no post-install configuration tool required.
 
 This module uses its own `wlp-standalone/` directory, completely separate from the
 `wlp-26/` and `wlp-25/` runtimes used by the collective lab.
@@ -43,7 +54,38 @@ java -jar /home/itzuser/software/Liberty/Liberty/wlp-nd-all-26.0.0.8.jar \
 ```
 
 The installer always extracts into a `wlp/` sub-folder of the target, so the actual
-binary lands at `wlp-standalone/wlp/`. Move its contents up one level:
+binary lands at `wlp-standalone/wlp/`. The resulting layout looks like this:
+
+```
+wlp-standalone/
+└── wlp/
+    ├── bin/                ← server, serverenv, securityUtility, …
+    ├── dev/                ← API JARs and SPI stubs for development
+    ├── etc/                ← global JVM and environment defaults
+    ├── lib/                ← Liberty kernel and feature bundles
+    ├── templates/          ← server.xml templates used by `server create`
+    └── usr/
+        └── servers/        ← your server instances will be created here
+```
+
+Move its contents up one level so the runtime root is `wlp-standalone/` directly.
+
+#### `bin/` command reference
+
+The `bin/` directory contains the scripts you will use throughout these labs:
+
+| Command | Purpose |
+|---------|---------|
+| `server` | Main lifecycle command — `create`, `start`, `stop`, `status`, `run`, `debug`, `package`, `dump`, `javadump`, `version` |
+| `securityUtility` | Encode passwords, generate TLS certificates, and create LTPA keys for use in `server.xml` |
+| `featureUtility` | Install individual Liberty features from Maven Central or a local mirror without rerunning the full installer |
+| `productInfo` | Display installed Liberty edition, version, and applied iFixes |
+| `serverenv` | Print the effective environment variables Liberty will use at runtime (useful for diagnosing `WLP_USER_DIR` and `JAVA_HOME` resolution) |
+| `installUtility` | Older feature installer (superseded by `featureUtility`); still present for compatibility |
+| `wlpenv` | Shell helper that sets `WLP_HOME` and related variables for the current session |
+
+> **Most-used in this lab:** `server` is the only command you need for the standalone exercises.
+> `securityUtility encode` becomes useful in the Collective lab when managing keystore passwords.
 
 ```bash
 mv wlp-standalone/wlp/* wlp-standalone/
@@ -311,10 +353,11 @@ Your complete `server.xml` should now look like this:
 <server description="Standalone Liberty — Admin Center enabled">
 
     <featureManager>
+        <feature>pages-3.1</feature>          <!-- Jakarta EE 10 JSP/pages support -->
         <feature>adminCenter-1.0</feature>
         <feature>appSecurity-5.0</feature>
         <feature>restConnector-2.0</feature>
-        <feature>servlet-6.0</feature>
+        <feature>servlet-6.0</feature>        <!-- required by server-info.war -->
     </featureManager>
 
     <httpEndpoint id="defaultHttpEndpoint"
@@ -345,7 +388,9 @@ Your complete `server.xml` should now look like this:
 ```
 
 > **Why `servlet-6.0`?** The `server-info.war` uses Jakarta Servlet 6.0 APIs. Without
-> this feature, Liberty will not load the application.
+> this feature, Liberty will not load the application. Note that `pages-3.1` (Jakarta
+> Pages / JSP) is kept from Section 3 — it does not conflict with `servlet-6.0` since
+> they target the same Jakarta EE 10 generation.
 
 ### 4.3 Restart and verify
 
@@ -375,14 +420,14 @@ server-info page showing the Liberty server name, version, and JVM details.
 
 IBM HTTP Server (IHS) uses the WebSphere Application Server (WAS) plugin
 (`mod_was_ap24_http.so`) to proxy requests to Liberty. In this section you will
-install IHS, hand-craft a minimal `plugin-cfg.xml`, and verify end-to-end routing
+configure IHS with a minimal `plugin-cfg.xml` and verify end-to-end routing
 from IHS port **1080** through to the standalone Liberty server on port **9080**.
 
 ### 5.1 Configure IHS and WAS Plugin for Standalone Liberty
 
 To streamline setting up IHS and the WAS plugin to route traffic to the standalone Liberty server, execute the helper script [`scripts/configure-standalone-ihs.sh`](scripts/configure-standalone-ihs.sh).
 
-#### What the script does:
+#### What the script does
 1. **Installs & Post-configures IHS:** Extracts the IHS installer archive to `~/usr/IBM/IHS` (if not already extracted), runs `./postinstall.sh`, and sets the listening port to `1080` (non-root).
 2. **Creates Static Document Root:** Writes an `index.html` in `htdocs` to test direct IHS static responses.
 3. **Creates WAS Plugin Directories:** Ensures `$IHS_ROOT/plugin/config/webserver1` and `$IHS_ROOT/plugin/logs/webserver1` exist.
@@ -444,7 +489,7 @@ bash scripts/configure-standalone-ihs.sh
 </Config>
 ```
 
-#### Key directives added to `httpd.conf` sample:
+#### Key directives added to `httpd.conf` sample
 
 ```apache
 # Load the WebSphere plugin binary module
@@ -454,9 +499,10 @@ LoadModule was_ap24_module /home/itzuser/usr/IBM/IHS/plugin/bin/64bits/mod_was_a
 WebSpherePluginConfig /home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml
 ```
 
-### 5.2 Restart IHS and verify end-to-end routing
+### 5.2 Verify end-to-end routing
 
-Restart IHS to pick up the new plugin directives:
+The script already started IHS and ran initial validation. If you need to restart
+IHS manually after a config change, use:
 
 ```bash
 /home/itzuser/usr/IBM/IHS/bin/apachectl stop 2>/dev/null || true
@@ -512,7 +558,7 @@ Liberty Collective lab automates at scale across a controller and four members.
 
 ## → Next: Liberty Collective Lab
 
-Continue with the full [Liberty Collective Lab](01-START-HERE.md) to see how these same
+Continue with the full [Liberty Collective Lab](03-LIBERTY-COLLECTIVES.md) to see how these same
 concepts apply across a **controller + four-member collective** with Intelligent
 Management dynamic routing.
 
@@ -523,7 +569,7 @@ clean up the standalone server and reset IHS:
 # Stop the standalone server
 wlp-standalone/bin/server stop myServer
 
-# Remove the standalone runtime (keep the installer JAR)
+# Remove the standalone runtime
 rm -rf wlp-standalone/
 
 # Reset IHS to default configuration
