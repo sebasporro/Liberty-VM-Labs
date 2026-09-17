@@ -95,7 +95,7 @@ cmd_list() {
       fi
 
       printf "  %-14s  %-10s  %-8s  %s\n" "${server_name}" "${host}" "${state}" "${app_status}"
-      (( found++ ))
+      (( found++ )) || true
     done <<< "${raw_members}"
   else
     # Fallback: collective CLI unavailable — scan installs/ directory
@@ -122,7 +122,7 @@ cmd_list() {
       fi
 
       printf "  %-14s  %-10s  %-8s  %s\n" "${name}" "localhost" "${state}" "${app_status}"
-      (( found++ ))
+      (( found++ )) || true
     done
   fi
 
