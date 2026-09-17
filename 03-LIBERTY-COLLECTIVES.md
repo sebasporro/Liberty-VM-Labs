@@ -521,17 +521,17 @@ This exercise starts from a collective containing **only two Liberty 25.0.0.1 me
 (member1 and member2) serving live traffic through IHS. All 26.0.0.8 members from the
 previous sections must be removed first so the starting state is unambiguous.
 
-**1. Stop and remove all existing members:**
+**1. Remove all existing members from the collective:**
+
+Use [`scripts/remove-member.sh`](scripts/remove-member.sh) for each member. The script
+stops the server, unregisters it from the collective registry (so it disappears from
+Admin Center and dynamic routing), and deletes its install directory:
 
 ```bash
-# Stop all members (ignore errors if already stopped)
-installs/member1/wlp/bin/server stop member1 2>/dev/null || true
-installs/member2/wlp/bin/server stop member2 2>/dev/null || true
-installs/member3/wlp/bin/server stop member3 2>/dev/null || true
-installs/member4/wlp/bin/server stop member4 2>/dev/null || true
-
-# Remove all member install directories
-rm -rf installs/member1 installs/member2 installs/member3 installs/member4
+scripts/remove-member.sh member1
+scripts/remove-member.sh member2
+scripts/remove-member.sh member3
+scripts/remove-member.sh member4
 ```
 
 **2. Deploy two fresh 25.0.0.1 members as member1 and member2:**
@@ -714,19 +714,26 @@ Expected output: IHS routing only to 26.0.0.8 members (9083 / 9084)
 **Full environment reset** — stops all servers, removes all deployed instances, both runtimes,
 and both packages. After a full reset the system is at a clean Step 1 baseline.
 
-```bash
-# Wipe everything (Liberty instances, runtimes, packages)
-scripts/reset-environment.sh
+Wipe everything (Liberty instances, runtimes, packages):
 
-# Rebuild Step 1 — both versions
+```bash
+scripts/reset-environment.sh
+```
+
+Rebuild both runtimes and golden packages:
+
+```bash
 scripts/01-install-runtime.sh
 scripts/02-build-template.sh
 scripts/03-build-package.sh
 scripts/01-install-runtime-25.sh
 scripts/02-build-template-25.sh
 scripts/03-build-package-25.sh
+```
 
-# Redeploy Steps 2–4
+Redeploy controller, members, and IHS routing:
+
+```bash
 scripts/install-controller.sh
 scripts/add-member-26.sh member1
 scripts/add-member-26.sh member2
@@ -735,8 +742,11 @@ scripts/step1-was-plugin.sh
 scripts/step2-dynamic-routing.sh
 scripts/add-member-25.sh member3
 scripts/add-member-25.sh member4
+```
 
-# Validate
+Validate:
+
+```bash
 scripts/07-validate.sh
 ```
 
@@ -1157,30 +1167,44 @@ scripts/reset-environment.sh
 > a no-op — a reset is always a full reset.
 
 After reset, run the full pipeline:
+
+Step 1 — build runtimes and golden packages:
+
 ```bash
-# Step 1 — build runtimes and golden packages
 scripts/01-install-runtime.sh
 scripts/02-build-template.sh
 scripts/03-build-package.sh
 scripts/01-install-runtime-25.sh
 scripts/02-build-template-25.sh
 scripts/03-build-package-25.sh
+```
 
-# Step 2 — deploy controller and 26.0.0.8 members
+Step 2 — deploy controller and 26.0.0.8 members:
+
+```bash
 scripts/install-controller.sh
 scripts/add-member-26.sh member1
 scripts/add-member-26.sh member2
+```
 
-# Step 3 — configure IHS and enable dynamic routing
+Step 3 — configure IHS and enable dynamic routing:
+
+```bash
 scripts/reset-ihs.sh
 scripts/step1-was-plugin.sh
 scripts/step2-dynamic-routing.sh
+```
 
-# Step 4 — add 25.0.0.1 members (picked up by /wr automatically)
+Step 4 — add 25.0.0.1 members:
+
+```bash
 scripts/add-member-25.sh member3
 scripts/add-member-25.sh member4
+```
 
-# Step 5 — validate
+Step 5 — validate:
+
+```bash
 scripts/07-validate.sh
 ```
 
@@ -1281,6 +1305,29 @@ be running.
 
 ---
 
+### `scripts/remove-member.sh`  ⭐
+
+**Purpose:** Gracefully removes a Liberty Collective Member — stops the server,
+unregisters it from the collective registry, and deletes its install directory.
+
+Steps performed:
+1. Checks the member install directory exists
+2. Stops the member server (graceful stop; skips if already stopped)
+3. Runs `collective remove` against the controller to deregister the member — it disappears from Admin Center and the dynamic routing table immediately
+4. Deletes `installs/<member-name>/`
+
+**Usage:**
+```bash
+scripts/remove-member.sh member1
+scripts/remove-member.sh member2
+```
+
+**Prerequisite:** Collective Controller must be running on HTTPS 9443. If the controller
+is not reachable, the member is still stopped and its directory deleted — only the
+registry deregistration is skipped.
+
+---
+
 ### `scripts/configure-standalone-ihs.sh`
 
 **Purpose:** Automates the complete installation of IBM HTTP Server and configuration of the WAS plugin to front a single standalone Liberty instance (`myServer` on port `9080`).
@@ -1323,29 +1370,38 @@ guidance covering:
 6. Collective communication failures
 
 **IHS ZIP patching issues** — if `gskcapicmd` fails after `install-ihs.sh`:
+
+The ARCHIVE ZIP ships with unresolved tokens and wrong permissions. This script fixes all of them in-place (idempotent):
+
 ```bash
-# The ARCHIVE ZIP ships with unresolved tokens and wrong permissions.
-# This script fixes all of them in-place (idempotent):
 scripts/patch-ihs-serverroot.sh
 ```
 Fixes applied: `@@SHLIBPATH_ENVAR@@` → `LD_LIBRARY_PATH` in `gsk_envvars`;
 `gsk8 → .gsk8` symlink; `chmod +x gsk8/bin/gsk8capicmd_64`.
 
 **Quick diagnostics:**
+
+Check all server statuses:
+
 ```bash
-# Check all server statuses
 installs/controller/wlp/bin/server status controller
 installs/member1/wlp/bin/server status member1
 installs/member2/wlp/bin/server status member2
 installs/member3/wlp/bin/server status member3
 installs/member4/wlp/bin/server status member4
+```
 
-# Check ports
+Check ports:
+
+```bash
 for port in 9080 9081 9082 9083 9084 9443 1080; do
   lsof -iTCP:$port -sTCP:LISTEN 2>/dev/null && echo "PORT $port IN USE" || echo "PORT $port free"
 done
+```
 
-# Tail controller log
+Tail controller log:
+
+```bash
 tail -50 installs/controller/wlp/usr/servers/controller/logs/messages.log
 ```
 

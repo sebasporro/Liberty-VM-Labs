@@ -1,145 +1,110 @@
 #!/bin/bash
 # =============================================================================
 # remove-member.sh
-# Gracefully removes one or more Collective Members from the running collective
-# and cleans up their on-disk installations.
+# Removes a Liberty Collective Member from the collective registry and
+# deletes its deployed install directory.
 #
-# Removal steps per member:
-#   1. Stop the member server (graceful, with force-kill fallback)
-#   2. Run 'collective remove' against the controller to deregister the member
-#   3. Delete the install directory (installs/<member-name>)
-#
-# Usage:
-#   scripts/remove-member.sh <member-name> [<member-name2> ...]
+# Usage:  scripts/remove-member.sh <member-name>
 #
 # Examples:
-#   scripts/remove-member.sh member3
-#   scripts/remove-member.sh member3 member4
+#   scripts/remove-member.sh member1
+#   scripts/remove-member.sh member2
+#
+# What it does:
+#   1. Validates input and that the member install directory exists
+#   2. Stops the member server (if running)
+#   3. Removes the member from the collective registry via 'collective remove'
+#   4. Deletes the member install directory
 #
 # Prerequisites:
-#   - Collective Controller must be running on localhost:9443
+#   - Collective Controller must be running (scripts/install-controller.sh)
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/00-set-env.sh"
 
+set -euo pipefail
+
 # ---------------------------------------------------------------------------
 # Input validation
 # ---------------------------------------------------------------------------
-if [[ $# -eq 0 ]]; then
+MEMBER_NAME="$1"
+
+if [[ -z "${MEMBER_NAME}" ]]; then
     echo ""
-    echo "  Usage: $0 <member-name> [<member-name2> ...]"
-    echo "  Example: $0 member3"
-    echo "  Example: $0 member3 member4"
+    echo "  Usage: $0 <member-name>"
+    echo "  Example: $0 member1"
+    echo "  Example: $0 member2"
     echo ""
     exit 1
 fi
+
+INSTALL_DIR="${WORKSPACE_ROOT}/installs/${MEMBER_NAME}"
+SERVER_DIR="${INSTALL_DIR}/wlp/usr/servers/${MEMBER_NAME}"
+WLP_BIN="${INSTALL_DIR}/wlp/bin/server"
 
 CONTROLLER_HOST="localhost"
 CONTROLLER_HTTPS=9443
 CONTROLLER_ADMIN_USER="admin"
 CONTROLLER_ADMIN_PASS="admin"
 
-# ---------------------------------------------------------------------------
-# Helper: stop a single server gracefully, force-kill if still running
-# ---------------------------------------------------------------------------
-stop_server() {
-    local name="$1"
-    local server_bin="${WORKSPACE_ROOT}/installs/${name}/wlp/bin/server"
-
-    if [[ -x "${server_bin}" ]]; then
-        echo "      Stopping ${name} gracefully..."
-        "${server_bin}" stop "${name}" 2>/dev/null || true
-        sleep 1
-    else
-        echo "      No server binary found for ${name} — skipping graceful stop"
-    fi
-
-    # Force-kill fallback if the JVM is still alive
-    if pgrep -f "ws-server.jar.*${name}" >/dev/null 2>&1; then
-        echo "      Force-killing remaining JVM process for ${name}..."
-        pkill -9 -f "ws-server.jar.*${name}" 2>/dev/null || true
-    fi
-}
+echo ""
+echo "=== Liberty Collective Member — Remove: ${MEMBER_NAME} ==="
+echo ""
 
 # ---------------------------------------------------------------------------
-# Process each member supplied on the command line
+# 1. Check install directory exists
 # ---------------------------------------------------------------------------
-for MEMBER_NAME in "$@"; do
-
-    INSTALL_DIR="${WORKSPACE_ROOT}/installs/${MEMBER_NAME}"
-    SERVER_DIR="${INSTALL_DIR}/wlp/usr/servers/${MEMBER_NAME}"
-
+echo "[1/4] Checking install directory..."
+if [[ ! -d "${INSTALL_DIR}" ]]; then
+    echo "      No install directory found at ${INSTALL_DIR} — nothing to remove."
     echo ""
-    echo "=== Removing Collective Member: ${MEMBER_NAME} ==="
-    echo ""
+    exit 0
+fi
+echo "      Found: ${INSTALL_DIR}"
+echo ""
 
-    # -------------------------------------------------------------------------
-    # 1. Verify the install directory exists
-    # -------------------------------------------------------------------------
-    echo "[1/3] Checking install directory..."
-    if [[ ! -d "${INSTALL_DIR}" ]]; then
-        echo "      WARNING: Install directory not found: ${INSTALL_DIR}"
-        echo "      Skipping collective remove — nothing to clean up."
-        echo ""
-        continue
-    fi
-    echo "      Found: ${INSTALL_DIR}"
-    echo ""
-
-    # -------------------------------------------------------------------------
-    # 2. Stop the member server
-    # -------------------------------------------------------------------------
-    echo "[2/3] Stopping member server..."
-    stop_server "${MEMBER_NAME}"
+# ---------------------------------------------------------------------------
+# 2. Stop the member server
+# ---------------------------------------------------------------------------
+echo "[2/4] Stopping ${MEMBER_NAME}..."
+if "${WLP_BIN}" status "${MEMBER_NAME}" 2>/dev/null | grep -q "is running"; then
+    "${WLP_BIN}" stop "${MEMBER_NAME}" 2>/dev/null || true
     echo "      Stopped"
-    echo ""
+else
+    echo "      Already stopped (or status unknown) — continuing"
+fi
+echo ""
 
-    # -------------------------------------------------------------------------
-    # 3. Deregister from the collective (collective remove)
-    #    Uses the member's own collective binary so the correct trust store is
-    #    available; falls back to the build-phase controller binary if the
-    #    member install was already partially removed.
-    # -------------------------------------------------------------------------
-    echo "[3/3] Removing member from collective registry..."
-    COLLECTIVE_BIN="${INSTALL_DIR}/wlp/bin/collective"
-    if [[ ! -x "${COLLECTIVE_BIN}" ]]; then
-        # Fall back to the controller-version binary
-        COLLECTIVE_BIN="${WLP_HOME}/bin/collective"
-    fi
+# ---------------------------------------------------------------------------
+# 3. Remove from collective registry
+# ---------------------------------------------------------------------------
+echo "[3/4] Removing ${MEMBER_NAME} from collective registry..."
+CTRL_STATUS=$(curl -k -s -o /dev/null -w "%{http_code}" \
+    https://${CONTROLLER_HOST}:${CONTROLLER_HTTPS}/adminCenter 2>/dev/null)
 
-    if [[ -x "${COLLECTIVE_BIN}" ]]; then
-        "${COLLECTIVE_BIN}" remove "${MEMBER_NAME}" \
-            --host="${CONTROLLER_HOST}" \
-            --port="${CONTROLLER_HTTPS}" \
-            --user="${CONTROLLER_ADMIN_USER}" \
-            --password="${CONTROLLER_ADMIN_PASS}" \
-            --hostName=localhost \
-            --autoAcceptCertificates \
-            --disableHostnameVerification 2>&1
-        RC=${PIPESTATUS[0]:-$?}
-        if [[ ${RC} -ne 0 ]]; then
-            echo "      WARNING: collective remove returned non-zero (${RC})."
-            echo "      The member may have already been deregistered, or the"
-            echo "      controller may not be running. Continuing with disk cleanup."
-        else
-            echo "      Deregistered from collective"
-        fi
-    else
-        echo "      WARNING: No collective binary available — skipping deregistration."
-        echo "      The controller registry entry (if any) was not removed."
-    fi
+if [[ "${CTRL_STATUS}" == "200" || "${CTRL_STATUS}" == "302" ]]; then
+    "${WORKSPACE_ROOT}/installs/controller/wlp/bin/collective" remove "${MEMBER_NAME}" \
+        --host="${CONTROLLER_HOST}" \
+        --port="${CONTROLLER_HTTPS}" \
+        --user="${CONTROLLER_ADMIN_USER}" \
+        --password="${CONTROLLER_ADMIN_PASS}" \
+        --autoAcceptCertificates \
+        --disableHostnameVerification 2>/dev/null || true
+    echo "      Removed from collective"
+else
+    echo "      Controller not reachable (HTTP ${CTRL_STATUS}) — skipping collective remove"
+    echo "      Member install directory will still be deleted"
+fi
+echo ""
 
-    # Wipe the install directory regardless of collective remove outcome
-    echo "      Removing install directory: ${INSTALL_DIR}"
-    rm -rf "${INSTALL_DIR}"
-    echo "      Removed"
-
-    echo ""
-    echo "=== Member '${MEMBER_NAME}' removed ==="
-
-done
+# ---------------------------------------------------------------------------
+# 4. Delete install directory
+# ---------------------------------------------------------------------------
+echo "[4/4] Deleting install directory..."
+rm -rf "${INSTALL_DIR}"
+echo "      Deleted: ${INSTALL_DIR}"
 
 echo ""
-echo "Admin Center: https://localhost:${CONTROLLER_HTTPS}/adminCenter"
+echo "=== Member '${MEMBER_NAME}' removed ==="
 echo ""
