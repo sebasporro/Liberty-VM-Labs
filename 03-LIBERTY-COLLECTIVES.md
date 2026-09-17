@@ -1,40 +1,85 @@
 # IBM WebSphere Liberty Collective Lab
 
-A complete, repeatable IBM WebSphere Liberty 26.0.0.8 Collective demonstration environment
-running on a single machine, built using a **package-first, override-driven deployment pattern**
-analogous to container images.
+## Lab Objectives
+
+By the end of this lab you will be able to:
+
+- Explain the **package-first, override-driven** deployment pattern Liberty uses for collectives.
+- Build a reusable golden package from a role-neutral Liberty template server.
+- Deploy and start a **Collective Controller** and verify Admin Center.
+- Join multiple **Collective Members** (Liberty 26.0.0.8 and 25.0.0.1) to the controller.
+- Configure IBM HTTP Server (IHS) with the WAS plugin for **static Round Robin** routing across members.
+- Enable **Intelligent Management dynamic routing** so IHS automatically discovers members as they join or leave.
+- Apply **dynamic routing rules** to pin or redirect traffic to specific members.
+- Operate a **mixed-version collective** where members of different Liberty versions coexist under the same controller.
+
+All steps are scripted and repeatable. Each section explains what the script does and provides
+verification commands so you can confirm the expected state before moving to the next step.
 
 ---
 
-## Architecture
+## Target Architecture
+
+At the end of this lab you will have the following topology running on a single VM:
 
 ```
-wlp-nd-all-26.0.0.8.jar
-        │  (extracted once)
-        ▼
-   wlp-26/  ── build-phase runtime
-        │
-        └── template-26.0.0.8  ── role-neutral server + server-info.war
-                │
-                └── server package --include=all
-                        │
-                        ▼
-            liberty-package-26.0.0.8.zip  ◄── Golden Artifact
-                        │
-          ┌─────────────┼──────────────┐
-          ▼             ▼              ▼
-    controller      member1        member2
-    (HTTPS 9443)   (HTTP 9081)   (HTTP 9082)
-          │             │              │
-          └─────────────┴──────────────┘
-                        │
-               IBM HTTP Server (IHS)
-                    (port 1080)
+┌──────────────────────────────────────────────────────────────────────┐
+│                              Lab VM                                  │
+│                                                                      │
+│   Browser / curl                                                     │
+│        │                                                             │
+│        │  HTTP :1080                                                 │
+│        ▼                                                             │
+│  ┌──────────────────────────────────┐                                │
+│  │     IBM HTTP Server (IHS)        │                                │
+│  │     Apache 2.4 — port 1080       │                                │
+│  │     mod_was_ap24_http.so         │                                │
+│  │     plugin-cfg.xml               │                                │
+│  └────────────────┬─────────────────┘                                │
+│                   │  dynamic routing (Intelligent Management)        │
+│                   │  HTTP :9081 / :9082 / :9083 / :9084              │
+│      ┌────────────┼────────────┬────────────┐                        │
+│      ▼            ▼            ▼            ▼                        │
+│  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐                     │
+│  │member1 │  │member2 │  │member3 │  │member4 │                     │
+│  │26.0.0.8│  │26.0.0.8│  │25.0.0.1│  │25.0.0.1│                     │
+│  │:9081   │  │:9082   │  │:9083   │  │:9084   │                     │
+│  └────────┘  └────────┘  └────────┘  └────────┘                     │
+│       │           │           │           │                          │
+│       └───────────┴───────────┴───────────┘                          │
+│                         │  collective protocol (HTTPS :9443)         │
+│                         ▼                                            │
+│  ┌──────────────────────────────────┐                                │
+│  │   Collective Controller          │                                │
+│  │   Liberty ND 26.0.0.8            │                                │
+│  │   HTTP :9080 / HTTPS :9443       │                                │
+│  │   adminCenter-1.0                │                                │
+│  │   dynamicRouting-1.0             │                                │
+│  └──────────────────────────────────┘                                │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-Each deployed instance receives its identity by dropping XML files into
-`${server.config.dir}/configDropins/overrides/` — Liberty merges them at startup
-with highest precedence. The golden package is never modified.
+| Layer | Component | Version | Port |
+|-------|-----------|---------|------|
+| Web server | IBM HTTP Server (IHS) | 9.0.5 | 1080 |
+| Collective Controller | Liberty ND | 26.0.0.8 | 9080 (HTTP) / 9443 (HTTPS) |
+| Member 1 | Liberty ND | 26.0.0.8 | 9081 (HTTP) / 9444 (HTTPS) |
+| Member 2 | Liberty ND | 26.0.0.8 | 9082 (HTTP) / 9445 (HTTPS) |
+| Member 3 | Liberty Base | 25.0.0.1 | 9083 (HTTP) / 9446 (HTTPS) |
+| Member 4 | Liberty Base | 25.0.0.1 | 9084 (HTTP) / 9447 (HTTPS) |
+
+---
+
+## Table of Contents
+
+1. [Section 0 — Clone the Repository](#section-0--clone-the-repository)
+2. [Section 1 — Install IBM HTTP Server (IHS)](#section-1--install-ibm-http-server-ihs)
+3. [Section 2 — Build the Golden Packages](#section-2--build-the-golden-packages)
+4. [Section 3 — Deploy Controller and 26.0.0.8 Members](#section-3--deploy-controller-and-26008-members)
+5. [Section 4 — Configure IHS with WAS Plugin Routing](#section-4--configure-ihs-with-was-plugin-routing)
+6. [Section 5 — Add Liberty 25.0.0.1 Members](#section-5--add-liberty-25001-members)
+7. [Section 6 — Validate](#section-6--validate)
 
 ---
 
@@ -47,7 +92,33 @@ with highest precedence. The golden package is never modified.
 > before this lab. It covers the core Liberty concepts this lab builds on and takes
 > about 30 minutes.
 
-## Running the Lab — Full Sequence
+---
+
+## How the deployment pattern works
+
+This lab uses a **package-first, override-driven** pattern analogous to container images:
+
+```
+wlp-nd-all-26.0.0.8.jar
+        │  (extracted once)
+        ▼
+   wlp-26/  ── build-phase runtime
+        │
+        └── template-26.0.0.8  ── role-neutral server + server-info.war
+                │
+                └── server package --include=all
+                        │
+                        ▼
+            liberty-package-26.0.0.8.zip  ◄── Golden Package (built once)
+                        │
+          ┌─────────────┼─────────────────┐
+          ▼             ▼                 ▼
+    controller      member1          member2 …
+```
+
+Each deployed instance receives its identity by dropping XML files into
+`${server.config.dir}/configDropins/overrides/` — Liberty merges them at startup
+with highest precedence. The golden package is **never modified**.
 
 The lab supports two Liberty versions running as members of the **same collective**:
 
@@ -61,7 +132,7 @@ of different Liberty versions coexist in the same collective without any special
 
 ---
 
-### Step 0 — Clone the Repository
+## Section 0 — Clone the Repository
 
 Open a terminal on the lab VM. All commands in this lab are run from
 `/home/itzuser/Liberty-VM-Labs` unless noted otherwise.
@@ -93,19 +164,25 @@ grep WORKSPACE_ROOT scripts/00-set-env.sh
 
 ---
 
-### Step 1 — Install IBM HTTP Server (IHS)
+## Section 1 — Install IBM HTTP Server (IHS)
 
 ```bash
 bash scripts/install-ihs.sh
 ```
 
 IHS is the front-end HTTP server that load-balances requests across the Liberty collective
-members. Install it once before running the lab steps.
-**Expected result:** IHS installed under `/home/itzuser/usr/IBM/IHS` and ready to be configured.
+members. Install it once before running any other lab steps.
+
+**Verify:**
+
+```bash
+/home/itzuser/usr/IBM/IHS/bin/apachectl -v
+# Expected: Server version: Apache/2.4.x (IBM HTTP Server)
+```
 
 ---
 
-### Step 2 — Build (run once per version)
+## Section 2 — Build the Golden Packages
 
 Build both golden packages before deploying anything. Only needs to be repeated if the
 template configuration or application changes.
@@ -151,59 +228,91 @@ scripts/03-build-package-25.sh
 
 ---
 
-### Step 3 — Deploy Controller and 26.0.0.8 Members
+## Section 3 — Deploy Controller and 26.0.0.8 Members
 
-**3.1 — Deploy and start the controller**
+### 3.1 — Deploy and start the controller
 
 ```bash
 scripts/install-controller.sh
 ```
 
-**Expected result:** Admin Center available at `https://localhost:9443/adminCenter` (admin/admin).
+**Verify:**
+
+```bash
+curl -k -s -o /dev/null -w "%{http_code}" https://localhost:9443/adminCenter
+# Expected: 200
+```
+
+Open `https://localhost:9443/adminCenter` in a browser and log in with `admin` / `admin`.
+You should see the Admin Center dashboard with no members yet.
 
 ---
 
-**3.2 — Deploy member1 and join collective**
+### 3.2 — Deploy member1 and join collective
 
 ```bash
 scripts/add-member-26.sh member1
 ```
 
-**Expected result:** member1 responding at `http://localhost:9081/server-info/` and visible in Admin Center.
+**Verify:**
+
+```bash
+curl -s http://localhost:9081/server-info/
+# Expected: server-info page showing member1, Liberty 26.0.0.8
+```
+
+member1 should also appear in the Admin Center **Servers** view.
 
 ---
 
-**3.3 — Deploy member2 and join collective**
+### 3.3 — Deploy member2 and join collective
 
 ```bash
 scripts/add-member-26.sh member2
 ```
 
-**Expected result:** member2 responding at `http://localhost:9082/server-info/` and visible in Admin Center.
+**Verify:**
+
+```bash
+curl -s http://localhost:9082/server-info/
+# Expected: server-info page showing member2, Liberty 26.0.0.8
+```
+
+member2 should appear in the Admin Center **Servers** view alongside member1.
 
 ---
 
-### Step 4 — Configure IHS with WAS Plugin Routing
+## Section 4 — Configure IHS with WAS Plugin Routing
 
 The lab uses the Liberty WAS plugin (`mod_was_ap24_http.so`) for IHS routing.
 There are two sub-steps: static routing first, then dynamic routing.
 
-#### Step 4a — Static WAS plugin routing (Round Robin)
+### 4a — Static WAS plugin routing (Round Robin)
 
 ```bash
 scripts/step1-was-plugin.sh
 ```
 
-Discovers all running members, writes `plugin-cfg.xml`, adds `WebSpherePluginConfig`, and starts IHS.
-**Expected result:** `http://localhost:1080/server-info/` returns `200` and
-round-robins across **all members that were running when the script executed**.
-Members added or removed after the script runs are NOT reflected — rerun the
-script to regenerate the static config. That limitation is what Step 4b solves.
+The script discovers all running members, writes `plugin-cfg.xml`, adds the `WebSpherePluginConfig`
+directive to `httpd.conf`, and starts IHS. The config is **static** — members added or removed
+after this point are not reflected until the script is re-run. That limitation is what Section 4b solves.
+
+**Verify:**
 
 ```bash
-# Verify round robin across all members
-for i in $(seq 8); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
+# Confirm IHS is serving through the plugin
+curl -s -o /dev/null -w "%{http_code}" http://localhost:1080/server-info/
+# Expected: 200
 ```
+
+```bash
+# Confirm round-robin distribution across members
+for i in $(seq 8); do curl -s http://localhost:1080/server-info/ | grep -o 'member[0-9]*'; done
+# Expected: member1 and member2 alternating
+```
+
+You can also open `http://localhost:1080/server-info/` in a browser — each refresh should
+show a different member name in the page.
 
 > **Plugin config location:** the generated `plugin-cfg.xml` is written to
 > `/home/itzuser/usr/IBM/IHS/plugin/config/webserver1/plugin-cfg.xml`
@@ -246,87 +355,114 @@ for i in $(seq 8); do curl -s http://localhost:1080/server-info/ | grep -o 'memb
 > `http://localhost:1080/server-info/` in a browser. A successful response confirms IHS is
 > forwarding requests through to the member servers.
 
-#### Step 4b — Dynamic routing (Intelligent Management)
+### 4b — Dynamic routing (Intelligent Management)
 
 ```bash
 scripts/step2-dynamic-routing.sh
 ```
 
-Enables Intelligent Management so IHS automatically discovers members as they join or leave.
-**Expected result:** Responses rotate across all running members without any static config change.
+Enables Liberty **Intelligent Management** — the WAS plugin connects to the controller's
+`/ibm/api/dynamicRouting` endpoint and continuously receives the live member routing table.
+Members that join or leave the collective are reflected in IHS routing automatically, with no
+static `plugin-cfg.xml` regeneration required.
 
-> **Important — test with `curl`, not a browser.**
-> The `server-info/` page is a single-page app — the HTML shell contains no server name.
-> Since all members share the same hostname (`vm-1`), use the **port** to identify which
-> member answered. Use `-c /dev/null` to discard cookies so each request is routed independently:
+**Verify:**
+
+> **Use `curl`, not a browser.** The `server-info/` page is a single-page app and does not
+> embed the server name in the initial HTML. Use `-c /dev/null` to discard cookies so each
+> request is routed independently:
 
 ```bash
 for i in $(seq 8); do \
   curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; \
 done
+# Expected: 9081 and 9082 alternating
 ```
-
-> You should see the port alternating between `9081` (member1) and `9082` (member2).
-
-#### Step 4c — Dynamic Routing Rules (optional)
-
-> **Work in progress** — routing rule automation is not yet complete.
-
-With dynamic routing enabled, you can use routing rules in Liberty to customize exactly
-which servers are used to handle specific requests.
-By default, dynamic routing balances load requests across all servers that can handle the
-request. To override the default behavior, you must configure routing rules. Routing rules
-can route requests to specific server resources, redirect requests, or reject requests.
-Each <routing Rules> element can define the applicable set of web servers where the
-rules are published. In this example, there is only one web server, named “webserver1”.
-When a web server connects to the DynamicRouting service, the service delivers rules to
-that web server.
-
-IBM Documentation – Configuring routing rules from Dynamic Routing:
-https://www.ibm.com/docs/en/was-liberty/nd?topic=collectives-configuring-routing-rules-liberty-dynamic-routing
-
-```bash
-scripts/apply-routing-rules.sh
-```
-The dynamic rules are added to the Collective Controller by
-including the configuration in the server’s configDropins/overrides
-directory.
-Liberty dynamically applies the updated configuration to the
-controller.
----
-
-### Step 5 — Add Liberty 25.0.0.1 Members
-
-```bash
-scripts/add-member-25.sh member3   # Deploy member3 (25.0.0.1), join collective
-scripts/add-member-25.sh member4   # Deploy member4 (25.0.0.1), join collective
-```
-
-With Intelligent Management active, member3 and member4 are automatically added to the routing
-table as soon as they join — no IHS config changes or script re-run required.
-**Expected result:** All four members visible in Admin Center. IHS at `http://localhost:1080/server-info/` now rotates across all four members.
 
 ---
 
-### Step 6 — Validate
+### 4c — Dynamic Routing Rules (optional)
+
+With dynamic routing active, you can use routing rules to pin, redirect, or reject requests
+for specific URI patterns — for example, to send all `/server-info/*` traffic to a single member.
+
+Rules are applied by dropping an XML file into the controller's `configDropins/overrides/` directory.
+Liberty picks up the change dynamically — no controller restart required.
+
+```bash
+scripts/apply-routing-rules.sh -s member1   # pin /server-info/* → member1 only
+scripts/apply-routing-rules.sh -s member2   # pin /server-info/* → member2 only
+scripts/apply-routing-rules.sh -s all       # remove rule — restore round-robin
+```
+
+**Verify (pin to member1):**
+
+```bash
+for i in $(seq 6); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
+# Expected: 9081 for every request
+```
+
+> **Reference:** [IBM Docs — Configuring routing rules for Dynamic Routing](https://www.ibm.com/docs/en/was-liberty/nd?topic=collectives-configuring-routing-rules-liberty-dynamic-routing)
+
+---
+
+## Section 5 — Add Liberty 25.0.0.1 Members
+
+```bash
+scripts/add-member-25.sh member3
+scripts/add-member-25.sh member4
+```
+
+With Intelligent Management active, member3 and member4 are automatically added to the IHS
+routing table as soon as they join the collective — no plugin config changes or script re-run needed.
+
+**Verify:**
+
+```bash
+curl -s http://localhost:9083/server-info/
+# Expected: server-info page showing member3, Liberty 25.0.0.1
+
+curl -s http://localhost:9084/server-info/
+# Expected: server-info page showing member4, Liberty 25.0.0.1
+```
+
+```bash
+# Confirm IHS now distributes across all four members
+for i in $(seq 12); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
+# Expected: 9081, 9082, 9083, and 9084 appearing in the rotation
+```
+
+All four members should be visible in the Admin Center **Servers** view.
+
+---
+
+## Section 6 — Validate
 
 ```bash
 scripts/07-validate.sh
 ```
 
-Checks all 4 members (directories, ports, app response, configDropins), the controller
-(Admin Center, dropins), both package files, the 26.0.0.8 runtime, and the IHS front-end.
-**Expected result:** All checks `PASS`.
+Runs 26 checks across the entire lab topology: Java version, both runtimes, both golden
+packages, the controller (Admin Center, configDropins), all four members (directory, port,
+app response, configDropins), and the IHS front-end.
 
-Direct member verification:
+**Expected result:** All checks print `PASS`. The script exits 0 on full pass, 1 if any check fails — each failure prints the fix command.
+
+You can also verify each component directly:
+
 ```bash
-curl http://localhost:9081/server-info/   # member1 (26.0.0.8)
-curl http://localhost:9082/server-info/   # member2 (26.0.0.8)
-curl http://localhost:9083/server-info/   # member3 (25.0.0.1)
-curl http://localhost:9084/server-info/   # member4 (25.0.0.1)
-curl http://localhost:1080/server-info/   # IHS → dynamic routing
+curl -s http://localhost:9081/server-info/   # member1 direct (26.0.0.8)
+curl -s http://localhost:9082/server-info/   # member2 direct (26.0.0.8)
+curl -s http://localhost:9083/server-info/   # member3 direct (25.0.0.1)
+curl -s http://localhost:9084/server-info/   # member4 direct (25.0.0.1)
+curl -s http://localhost:1080/server-info/   # IHS → dynamic routing
 ```
+
+Open `https://localhost:9443/adminCenter` to confirm all four members appear as **Started**
+in the Admin Center Servers view.
 
 ---
 
