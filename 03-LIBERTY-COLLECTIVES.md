@@ -483,6 +483,32 @@ for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api
 
 You are ready to begin the zero migration upgrade.
 
+At this point the collective contains:
+
+| Member | Liberty version | HTTP port | Role |
+|--------|----------------|-----------|------|
+| member3 | 25.0.0.1 Base | 9083 | Active — serving traffic |
+| member4 | 25.0.0.1 Base | 9084 | Active — serving traffic |
+| controller | 26.0.0.8 ND | 9080 / 9443 | Controller only — no application traffic |
+
+Open a browser and navigate to the IHS front-end to see the application being served
+from the 25.0.0.1 members:
+
+```
+http://localhost:1080/server-info/
+```
+
+Refresh the page several times — you should see the server name alternate between
+**member3** and **member4**. The server-info page also shows the Liberty version
+(`25.0.0.1`) confirming which runtime is currently serving the request.
+
+You can also hit each member directly to compare them side by side:
+
+```
+http://localhost:9083/server-info/   ← member3 (25.0.0.1)
+http://localhost:9084/server-info/   ← member4 (25.0.0.1)
+```
+
 ---
 
 ### Step 7.1 — Introduce the 26.0.0.8 replacement members
