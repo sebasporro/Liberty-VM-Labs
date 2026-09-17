@@ -23,6 +23,7 @@ CONTROLLER_BIN="${INSTALLS_DIR}/controller/wlp/bin/collective"
 CONTROLLER_HTTPS=9443
 CONTROLLER_USER="admin"
 CONTROLLER_PASS="admin"
+IHS_ROOT="${IHS_INSTALL_ROOT:-/home/itzuser/usr/IBM/IHS}"
 
 # ---------------------------------------------------------------------------
 # usage
@@ -183,8 +184,8 @@ cmd_pin() {
 </server>
 EOF
 
-  echo "All traffic pinned to '${target}'."
-  echo "Liberty applies routing-rule changes dynamically — no IHS or controller restart needed."
+  echo "Routing rule written — pinning all traffic to '${target}'."
+  ihs_restart
   echo ""
   echo "Verify:  curl -s -c /dev/null http://localhost:1080/server-info/api/health"
 }
@@ -199,8 +200,21 @@ cmd_roundrobin() {
   fi
 
   rm -f "${ROUTING_RULES_FILE}"
-  echo "Routing rule removed — traffic is now distributed round-robin across all members."
-  echo "Liberty applies the change dynamically — no IHS or controller restart needed."
+  echo "Routing rule removed — restoring round-robin across all members."
+  ihs_restart
+}
+
+# ---------------------------------------------------------------------------
+# ihs_restart — graceful IHS restart so the WAS plugin re-reads routing rules
+# ---------------------------------------------------------------------------
+ihs_restart() {
+  local apachectl="${IHS_ROOT}/bin/apachectl"
+  if [[ -x "${apachectl}" ]]; then
+    echo "Restarting IHS (graceful) so the WAS plugin picks up the new routing rule..."
+    "${apachectl}" graceful 2>/dev/null && echo "IHS restarted." || echo "WARNING: IHS graceful restart failed — try: ${apachectl} graceful"
+  else
+    echo "NOTE: IHS not found at ${IHS_ROOT} — restart IHS manually to apply the routing change."
+  fi
 }
 
 # ---------------------------------------------------------------------------
