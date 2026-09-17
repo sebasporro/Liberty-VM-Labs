@@ -172,7 +172,7 @@ cmd_pin() {
 <server description="Dynamic Routing Rules — pinned to ${target}">
     <dynamicRouting>
         <routingRules webServers="webserver1">
-            <routingRule order="100" matchExpression="URI LIKE '/%'">
+            <routingRule order="100" matchExpression="URI LIKE '/server-info%'">
                 <permitAction>
                     <loadBalanceEndPoints>
                         <endpoint destination="server=*,*,*,${target}"/>
