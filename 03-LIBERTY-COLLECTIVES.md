@@ -243,6 +243,25 @@ curl -s http://localhost:9082/server-info/
 
 member2 should appear in the Admin Center **Servers** view alongside member1.
 
+Now that both members are joined, open the Admin Center in a browser to confirm all
+three collective members are visible and running:
+
+```
+https://localhost:9443/adminCenter
+```
+
+Log in with `admin` / `admin` and navigate to **Servers**. You should see three entries:
+
+| Server | Role | Status |
+|--------|------|--------|
+| controller | Collective Controller | Started |
+| member1 | Collective Member | Started |
+| member2 | Collective Member | Started |
+
+> **Tip:** The Admin Center **Explore** view also shows server resource usage (CPU, heap)
+> and lets you start, stop, or restart members directly from the browser — without
+> touching the command line.
+
 ---
 
 ## Section 4 — Configure IHS with WAS Plugin Routing
