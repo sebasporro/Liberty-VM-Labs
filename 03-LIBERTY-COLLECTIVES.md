@@ -73,24 +73,20 @@ At the end of this lab you will have the following topology running on a single 
 
 ## Table of Contents
 
-1. [Section 0 — Clone the Repository](#section-0--clone-the-repository)
-2. [Section 1 — Install IBM HTTP Server (IHS)](#section-1--install-ibm-http-server-ihs)
-3. [Section 2 — Build the Golden Packages](#section-2--build-the-golden-packages)
-4. [Section 3 — Deploy Controller and 26.0.0.8 Members](#section-3--deploy-controller-and-26008-members)
-5. [Section 4 — Configure IHS with WAS Plugin Routing](#section-4--configure-ihs-with-was-plugin-routing)
-6. [Section 5 — Add Liberty 25.0.0.1 Members](#section-5--add-liberty-25001-members)
-7. [Section 6 — Validate](#section-6--validate)
+1. [Section 1 — Install IBM HTTP Server (IHS)](#section-1--install-ibm-http-server-ihs)
+2. [Section 2 — Build the Golden Packages](#section-2--build-the-golden-packages)
+3. [Section 3 — Deploy Controller and 26.0.0.8 Members](#section-3--deploy-controller-and-26008-members)
+4. [Section 4 — Configure IHS with WAS Plugin Routing](#section-4--configure-ihs-with-was-plugin-routing)
+5. [Section 5 — Add Liberty 25.0.0.1 Members](#section-5--add-liberty-25001-members)
+6. [Section 6 — Validate](#section-6--validate)
 
 ---
 
-> **Before you begin:** Make sure you have cloned the lab repository to
-> `/home/itzuser/Liberty-VM-Labs` on the VM. If you haven't done that yet, see
-> [01-START-HERE.md](01-START-HERE.md) for setup instructions. All commands in this
-> lab are run from the repo root unless otherwise noted.
-
-> **New to Liberty?** Complete [Lab 1 — Liberty Standalone](02-LIBERTY-STANDALONE.md)
-> before this lab. It covers the core Liberty concepts this lab builds on and takes
-> about 30 minutes.
+> **Before you begin:**
+> - Clone the lab repository to `/home/itzuser/Liberty-VM-Labs` on the VM. If you haven't done that yet, see [01-START-HERE.md](01-START-HERE.md) for setup instructions.
+> - Update `WORKSPACE_ROOT` in `scripts/00-set-env.sh` to match your clone location — every script derives its paths from this variable.
+> - All commands in this lab are run from the repo root unless otherwise noted.
+> - **New to Liberty?** Complete [Lab 1 — Liberty Standalone](02-LIBERTY-STANDALONE.md) first — it covers the core concepts this lab builds on (~30 minutes).
 
 ---
 
@@ -129,40 +125,6 @@ The lab supports two Liberty versions running as members of the **same collectiv
 
 The controller always runs 26.0.0.8. The collective protocol is version-agnostic — members
 of different Liberty versions coexist in the same collective without any special configuration.
-
----
-
-## Section 0 — Clone the Repository
-
-Open a terminal on the lab VM. All commands in this lab are run from
-`/home/itzuser/Liberty-VM-Labs` unless noted otherwise.
-
-```bash
-cd /home/itzuser
-git clone https://github.com/sebasporro/Liberty-VM-Labs.git
-cd Liberty-VM-Labs
-```
-
-Once cloned, update the `WORKSPACE_ROOT` variable in `scripts/00-set-env.sh` to match
-the clone location:
-
-```bash
-sed -i 's|^export WORKSPACE_ROOT=.*|export WORKSPACE_ROOT="/home/itzuser/Liberty-VM-Labs"|' \
-  scripts/00-set-env.sh
-```
-
-Verify the change:
-
-```bash
-grep WORKSPACE_ROOT scripts/00-set-env.sh
-# Expected output:
-# export WORKSPACE_ROOT="/home/itzuser/Liberty-VM-Labs"
-```
-
-> **Note:** Every other path in the lab scripts is derived from `WORKSPACE_ROOT`, so this
-> one-line change is the only configuration required after cloning.
-
----
 
 ## Section 1 — Install IBM HTTP Server (IHS)
 
