@@ -1,11 +1,62 @@
 # Liberty Standalone
 
-> **What is this?**  
-> Before diving into the Liberty Collective lab, this module walks you through a complete
-> hands-on lifecycle of a **single, standalone Liberty server** — install, create, configure,
-> operate, deploy an app, and front it with IBM HTTP Server (IHS) — all with manual commands,
-> no automation scripts.  
-> Once you are comfortable, continue to the [Liberty Collective Lab](03-LIBERTY-COLLECTIVES.md).
+## Lab Objectives
+
+By the end of this lab you will be able to:
+
+- Install a Liberty runtime from an archive file and understand its directory structure.
+- Create, start, stop, and monitor a Liberty server from the command line.
+- Read and modify `server.xml` to enable features and configure endpoints.
+- Enable the Liberty Admin Center and log in to the browser-based management UI.
+- Deploy a WAR application manually and verify it is running.
+- Install and configure IBM HTTP Server (IHS) with the WAS plugin to front Liberty.
+- Trace a request end-to-end from a browser through IHS to the Liberty application.
+
+All steps are performed with manual commands — no automation scripts — so that every
+building block is visible before the [Liberty Collective Lab](03-LIBERTY-COLLECTIVES.md)
+automates the same concepts at scale.
+
+---
+
+## Target Architecture
+
+At the end of this lab you will have the following topology running on the VM:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                        Lab VM                           │
+│                                                         │
+│   Browser / curl                                        │
+│        │                                                │
+│        │  HTTP :1080                                    │
+│        ▼                                                │
+│  ┌─────────────────────────────┐                        │
+│  │   IBM HTTP Server (IHS)     │                        │
+│  │   Apache 2.4 — port 1080    │                        │
+│  │                             │                        │
+│  │   mod_was_ap24_http.so      │                        │
+│  │   plugin-cfg.xml            │                        │
+│  └──────────────┬──────────────┘                        │
+│                 │  HTTP :9080  (URI: /server-info/*)    │
+│                 ▼                                       │
+│  ┌─────────────────────────────┐                        │
+│  │  Liberty standalone         │                        │
+│  │  server: myServer           │                        │
+│  │  port: 9080 / 9443          │                        │
+│  │                             │                        │
+│  │  ├── adminCenter-1.0        │                        │
+│  │  ├── appSecurity-5.0        │                        │
+│  │  └── server-info.war        │                        │
+│  └─────────────────────────────┘                        │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+| Layer | Product | Port |
+|-------|---------|------|
+| Web server | IBM HTTP Server 9.0.5 | 1080 |
+| Application server | WebSphere Liberty 26.0.0.8 | 9080 (HTTP) / 9443 (HTTPS) |
+| Application | server-info.war | `/server-info/` context root |
 
 ---
 
