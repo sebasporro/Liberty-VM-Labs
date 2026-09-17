@@ -411,12 +411,71 @@ Verify the application is responding:
 curl http://localhost:9080/server-info/
 ```
 
-Or open `http://localhost:9080/server-info/` in a browser. You should see the
-server-info page showing the Liberty server name, version, and JVM details.
+You can also open the application in a web browser. Navigate to:
+
+```
+http://localhost:9080/server-info/
+```
+
+The page displays a summary of the running Liberty instance, including:
+
+- **Server name** — the name you gave the server (`myServer`)
+- **Liberty version** — the full build version string (e.g. `26.0.0.8`)
+- **JVM information** — vendor, version, and heap settings
+- **Host name** — the machine the server is running on
+
+> **Tip:** Bookmark this URL — you will return to it in Section 5 to confirm the same
+> page is reachable through IHS on port **1080** instead of Liberty's direct port **9080**.
 
 ---
 
 ## Section 5 — Add IHS as a front-end
+
+### Why front an application server with a web server?
+
+Running Liberty directly on a public port works fine for development, but production
+deployments typically place a dedicated web server in front of the application server
+for several reasons:
+
+| Concern | How IHS helps |
+|---------|--------------|
+| **Static content performance** | IHS serves HTML, CSS, images, and downloads directly from disk without involving the JVM, freeing Liberty threads for application logic. |
+| **SSL/TLS termination** | TLS handshakes are offloaded to IHS, reducing CPU overhead on Liberty. |
+| **Port standardisation** | IHS listens on the standard HTTP port (80/443). Liberty can run on unprivileged ports without requiring root. |
+| **Load balancing** | In a collective, IHS distributes requests across multiple Liberty members. The WAS plugin handles session affinity and failover automatically. |
+| **Security boundary** | Only IHS is exposed to the network. Liberty members sit on an internal network and are not directly reachable by clients. |
+
+Even in this single-server standalone lab the pattern is the same as in a multi-member
+collective — learning it here makes the collective setup in Section 5 of the next lab
+immediately recognisable.
+
+### Components involved
+
+Three pieces work together to route a request from a browser to Liberty:
+
+```
+Browser
+  │  HTTP request
+  ▼
+IBM HTTP Server (IHS)                    ← Apache-based web server
+  │  mod_was_ap24_http.so                ← WAS plugin module loaded into IHS
+  │  reads plugin-cfg.xml                ← routing rules: which URIs go to which Liberty servers
+  ▼
+Liberty (myServer, port 9080)            ← application server
+  └── server-info.war
+```
+
+| Component | Role |
+|-----------|------|
+| **IBM HTTP Server (IHS)** | Apache HTTP Server 2.4 packaged and supported by IBM. Handles the client-facing connection. |
+| **WAS Plugin (`mod_was_ap24_http.so`)** | A native Apache module that intercepts matched requests and forwards them to Liberty over HTTP or HTTPS using IBM's proprietary binary protocol. |
+| **`plugin-cfg.xml`** | XML file that tells the plugin which URI patterns to intercept, which Liberty servers exist (hostname + port), and how to handle failover and session affinity. |
+
+In a Liberty Collective, `plugin-cfg.xml` is generated and refreshed automatically by
+the controller's Intelligent Management feature. In this standalone lab you will write it
+by hand (via the helper script) to understand its structure before automation takes over.
+
+### 5.1 Configure IHS and WAS Plugin for Standalone Liberty
 
 IBM HTTP Server (IHS) uses the WebSphere Application Server (WAS) plugin
 (`mod_was_ap24_http.so`) to proxy requests to Liberty. In this section you will
