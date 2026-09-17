@@ -1,12 +1,12 @@
 #!/bin/bash
 # =============================================================================
-# apply-routing-rules.sh
+# routing.sh
 # Manage Liberty Collective dynamic routing rules via simple subcommands.
 #
 # Usage:
-#   apply-routing-rules.sh list                 — list all collective members
-#   apply-routing-rules.sh pin <member-name>    — route ALL traffic to one member
-#   apply-routing-rules.sh roundrobin           — restore default round-robin routing
+#   routing.sh list                 — list all collective members
+#   routing.sh pin <member-name>    — route ALL traffic to one member
+#   routing.sh roundrobin           — restore default round-robin routing
 # =============================================================================
 set -euo pipefail
 
@@ -40,35 +40,81 @@ cmd_list() {
   echo ""
   echo "Collective members"
   echo "────────────────────────────────────────────────────────"
-  printf "  %-12s  %-6s  %-8s  %s\n" "Member" "HTTP" "Status" "Server dir"
-  printf "  %-12s  %-6s  %-8s  %s\n" "──────────" "────" "──────" "──────────"
+  printf "  %-14s  %-10s  %-8s  %s\n" "Member" "Host" "State" "App (server-info)"
+  printf "  %-14s  %-10s  %-8s  %s\n" "────────────" "──────────" "──────" "─────────────────"
 
   local found=0
-  for member_dir in "${INSTALLS_DIR}"/*/; do
-    local name
-    name="$(basename "${member_dir}")"
-    [[ "${name}" == "controller" ]] && continue
 
-    # Derive HTTP port from member index (member1=9081, member2=9082, …)
-    local idx="${name//[^0-9]/}"
-    local port="?"
-    if [[ -n "${idx}" ]]; then
-      port=$(( 9080 + idx ))
-    fi
+  # Query the controller REST API — authoritative source for collective membership.
+  # Response is JSON with a "members" array; each element has "name", "host", "wlpUserDir",
+  # "serverName", and "isConnected".
+  local api_json
+  api_json=$(curl -k -s -u "${CONTROLLER_USER}:${CONTROLLER_PASS}" \
+    "https://localhost:${CONTROLLER_HTTPS}/ibm/api/collective/v1/members" 2>/dev/null || true)
 
-    # Port up/down check
-    local status="stopped"
-    if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
-      status="running"
-    fi
+  if echo "${api_json}" | python3 -c "import json,sys; json.load(sys.stdin)" &>/dev/null 2>&1; then
+    # Parse with python3 — available on all lab VMs
+    while IFS='|' read -r server_name host connected; do
+      local state="offline"
+      [[ "${connected}" == "True" ]] && state="online"
 
-    local server_dir="${member_dir}wlp/usr/servers/${name}"
-    printf "  %-12s  %-6s  %-8s  %s\n" "${name}" "${port}" "${status}" "${server_dir}"
-    (( found++ ))
-  done
+      # Derive HTTP port from numeric suffix in server name
+      local idx="${server_name//[^0-9]/}"
+      local port="?"
+      [[ -n "${idx}" ]] && port=$(( 9080 + idx ))
+
+      # Live HTTP check against the app
+      local app_status="-"
+      if [[ "${port}" != "?" ]]; then
+        local http_code
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+          --max-time 2 "http://localhost:${port}/server-info/" 2>/dev/null || true)
+        [[ "${http_code}" == "200" ]] && app_status="HTTP ${http_code}" || app_status="HTTP ${http_code:-err}"
+      fi
+
+      printf "  %-14s  %-10s  %-8s  %s\n" "${server_name}" "${host}" "${state}" "${app_status}"
+      (( found++ ))
+    done < <(echo "${api_json}" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+members = data if isinstance(data, list) else data.get('members', [])
+for m in members:
+    name = m.get('serverName') or m.get('name','?')
+    host = m.get('hostName') or m.get('host','?')
+    connected = str(m.get('isConnected', False))
+    print(f'{name}|{host}|{connected}')
+")
+  else
+    # Fallback: controller not reachable — scan installs/ directory
+    echo "  (controller API unreachable — falling back to filesystem scan)"
+    echo ""
+    for member_dir in "${INSTALLS_DIR}"/*/; do
+      local name
+      name="$(basename "${member_dir}")"
+      [[ "${name}" == "controller" ]] && continue
+
+      local idx="${name//[^0-9]/}"
+      local port="?"
+      [[ -n "${idx}" ]] && port=$(( 9080 + idx ))
+
+      local state="stopped"
+      ss -tlnp 2>/dev/null | grep -q ":${port} " && state="running"
+
+      local app_status="-"
+      if [[ "${port}" != "?" ]]; then
+        local http_code
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+          --max-time 2 "http://localhost:${port}/server-info/" 2>/dev/null || true)
+        [[ "${http_code}" == "200" ]] && app_status="HTTP ${http_code}" || app_status="HTTP ${http_code:-err}"
+      fi
+
+      printf "  %-14s  %-10s  %-8s  %s\n" "${name}" "localhost" "${state}" "${app_status}"
+      (( found++ ))
+    done
+  fi
 
   if [[ "${found}" -eq 0 ]]; then
-    echo "  (no members found under ${INSTALLS_DIR})"
+    echo "  (no members found)"
   fi
 
   echo ""
