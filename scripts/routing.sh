@@ -19,6 +19,7 @@ source "${SCRIPT_DIR}/00-set-env.sh"
 CONTROLLER_DROPIN_DIR="${WORKSPACE_ROOT}/installs/controller/wlp/usr/servers/controller/configDropins/overrides"
 ROUTING_RULES_FILE="${CONTROLLER_DROPIN_DIR}/routing-rules.xml"
 INSTALLS_DIR="${WORKSPACE_ROOT}/installs"
+CONTROLLER_BIN="${INSTALLS_DIR}/controller/wlp/bin/collective"
 CONTROLLER_HTTPS=9443
 CONTROLLER_USER="admin"
 CONTROLLER_PASS="admin"
@@ -45,23 +46,44 @@ cmd_list() {
 
   local found=0
 
-  # Query the controller REST API — authoritative source for collective membership.
-  # Response is JSON with a "members" array; each element has "name", "host", "wlpUserDir",
-  # "serverName", and "isConnected".
-  local api_json
-  api_json=$(curl -k -s -u "${CONTROLLER_USER}:${CONTROLLER_PASS}" \
-    "https://localhost:${CONTROLLER_HTTPS}/ibm/api/collective/v1/members" 2>/dev/null || true)
+  # Query the controller using the collective CLI — authoritative source for membership.
+  # 'collective listMembers' talks directly to the controller over the JMX REST connector
+  # and returns one "host/wlpUserDir/serverName" triplet per line.
+  local raw_members=""
+  if [[ -x "${CONTROLLER_BIN}" ]]; then
+    raw_members=$(
+      "${CONTROLLER_BIN}" listMembers \
+        --host=localhost \
+        --port="${CONTROLLER_HTTPS}" \
+        --user="${CONTROLLER_USER}" \
+        --password="${CONTROLLER_PASS}" \
+        --disableHostnameVerification \
+        --autoAcceptCertificates 2>/dev/null \
+      | grep -v '^\s*$' \
+      | grep -v '^Successfully\|^CWWKX\|^The\|^Members' \
+      || true
+    )
+  fi
 
-  if echo "${api_json}" | python3 -c "import json,sys; json.load(sys.stdin)" &>/dev/null 2>&1; then
-    # Parse with python3 — available on all lab VMs
-    while IFS='|' read -r server_name host connected; do
-      local state="offline"
-      [[ "${connected}" == "True" ]] && state="online"
+  if [[ -n "${raw_members}" ]]; then
+    # Each line is:  host,/wlpUserDir/,serverName
+    while IFS= read -r line; do
+      # Extract the last comma-separated token as the server name
+      local server_name
+      server_name=$(echo "${line}" | awk -F',' '{print $NF}' | tr -d ' ')
+      [[ -z "${server_name}" ]] && continue
 
-      # Derive HTTP port from numeric suffix in server name
+      local host
+      host=$(echo "${line}" | awk -F',' '{print $1}' | tr -d ' ')
+
+      # Derive HTTP port from numeric suffix (member1→9081, member2→9082, …)
       local idx="${server_name//[^0-9]/}"
       local port="?"
       [[ -n "${idx}" ]] && port=$(( 9080 + idx ))
+
+      # Is the member process actually listening?
+      local state="stopped"
+      ss -tlnp 2>/dev/null | grep -q ":${port} " && state="running"
 
       # Live HTTP check against the app
       local app_status="-"
@@ -74,19 +96,10 @@ cmd_list() {
 
       printf "  %-14s  %-10s  %-8s  %s\n" "${server_name}" "${host}" "${state}" "${app_status}"
       (( found++ ))
-    done < <(echo "${api_json}" | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-members = data if isinstance(data, list) else data.get('members', [])
-for m in members:
-    name = m.get('serverName') or m.get('name','?')
-    host = m.get('hostName') or m.get('host','?')
-    connected = str(m.get('isConnected', False))
-    print(f'{name}|{host}|{connected}')
-")
+    done <<< "${raw_members}"
   else
-    # Fallback: controller not reachable — scan installs/ directory
-    echo "  (controller API unreachable — falling back to filesystem scan)"
+    # Fallback: collective CLI unavailable — scan installs/ directory
+    echo "  (collective CLI unavailable — falling back to filesystem scan)"
     echo ""
     for member_dir in "${INSTALLS_DIR}"/*/; do
       local name
