@@ -464,37 +464,37 @@ zero downtime.
 
 ### Starting point
 
-This exercise starts from a clean collective that contains **only two Liberty 25.0.0.1
-members** (member3 and member4). Any 26.0.0.8 members left over from previous sections
-must be stopped and removed before beginning, so the starting state is unambiguous.
+This exercise starts from a collective containing **only two Liberty 25.0.0.1 members**
+(member1 and member2) serving live traffic through IHS. All 26.0.0.8 members from the
+previous sections must be removed first so the starting state is unambiguous.
 
-**1. Stop and remove member1 and member2 (26.0.0.8) if they are running:**
+**1. Stop and remove all existing members:**
 
 ```bash
-# Stop member1 if running (ignore error if already stopped)
+# Stop all members (ignore errors if already stopped)
 installs/member1/wlp/bin/server stop member1 2>/dev/null || true
-
-# Stop member2 if running
 installs/member2/wlp/bin/server stop member2 2>/dev/null || true
+installs/member3/wlp/bin/server stop member3 2>/dev/null || true
+installs/member4/wlp/bin/server stop member4 2>/dev/null || true
 
-# Remove their deployed directories
-rm -rf installs/member1 installs/member2
+# Remove all member install directories
+rm -rf installs/member1 installs/member2 installs/member3 installs/member4
 ```
 
-**2. Deploy the two 25.0.0.1 members if not already running:**
+**2. Deploy two fresh 25.0.0.1 members as member1 and member2:**
 
 ```bash
-scripts/add-member-25.sh member3
-scripts/add-member-25.sh member4
+scripts/add-member-25.sh member1
+scripts/add-member-25.sh member2
 ```
 
-**3. Confirm the starting state** — only ports `9083` and `9084` should appear in the
+**3. Confirm the starting state** — only ports `9081` and `9082` should appear in the
 IHS rotation, confirming the collective is serving exclusively from 25.0.0.1 members:
 
 ```bash
 for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-# Expected: only 9083 and 9084 — pure 25.0.0.1 collective
+# Expected: only 9081 and 9082 — pure 25.0.0.1 collective
 ```
 
 You are ready to begin the zero migration upgrade.
@@ -503,9 +503,9 @@ At this point the collective contains:
 
 | Member | Liberty version | HTTP port | Role |
 |--------|----------------|-----------|------|
-| member3 | 25.0.0.1 Base | 9083 | Active — serving traffic |
-| member4 | 25.0.0.1 Base | 9084 | Active — serving traffic |
 | controller | 26.0.0.8 ND | 9080 / 9443 | Controller only — no application traffic |
+| member1 | 25.0.0.1 Base | 9081 | Active — serving traffic |
+| member2 | 25.0.0.1 Base | 9082 | Active — serving traffic |
 
 Open a browser and navigate to the IHS front-end to see the application being served
 from the 25.0.0.1 members:
@@ -515,37 +515,38 @@ http://localhost:1080/server-info/
 ```
 
 Refresh the page several times — you should see the server name alternate between
-**member3** and **member4**. The server-info page also shows the Liberty version
-(`25.0.0.1`) confirming which runtime is currently serving the request.
+**member1** and **member2**. The server-info page shows the Liberty version (`25.0.0.1`)
+confirming which runtime is currently serving each request.
 
-You can also hit each member directly to compare them side by side:
+You can also hit each member directly to compare them side by side before the upgrade:
 
 ```
-http://localhost:9083/server-info/   ← member3 (25.0.0.1)
-http://localhost:9084/server-info/   ← member4 (25.0.0.1)
+http://localhost:9081/server-info/   ← member1 (25.0.0.1)
+http://localhost:9082/server-info/   ← member2 (25.0.0.1)
 ```
 
 ---
 
 ### Step 7.1 — Introduce the 26.0.0.8 replacement members
 
-Deploy member1 and member2 running Liberty 26.0.0.8. Because Intelligent Management is
+Deploy member3 and member4 running Liberty 26.0.0.8. Because Intelligent Management is
 active, IHS begins routing traffic to them the moment they join the collective — no
 plugin config change required.
 
 ```bash
-scripts/add-member-26.sh member1
-scripts/add-member-26.sh member2
+scripts/add-member-26.sh member3
+scripts/add-member-26.sh member4
 ```
 
-Test that the new 26.0.0.8 members are reachable directly:
+Test that the new 26.0.0.8 members are reachable directly by running the following
+commands and checking that each returns the server-info page showing Liberty 26.0.0.8:
 
 ```bash
-curl -s http://localhost:9081/server-info/
-# Expected: server-info page showing member1, Liberty 26.0.0.8
+curl -s http://localhost:9083/server-info/
+# Expected: server-info page showing member3, Liberty 26.0.0.8
 
-curl -s http://localhost:9082/server-info/
-# Expected: server-info page showing member2, Liberty 26.0.0.8
+curl -s http://localhost:9084/server-info/
+# Expected: server-info page showing member4, Liberty 26.0.0.8
 ```
 
 Then confirm IHS is now distributing across all four members by sending requests and
@@ -557,35 +558,46 @@ for i in $(seq 16); do curl -s -c /dev/null http://localhost:1080/server-info/ap
 # Expected: 9081, 9082, 9083, and 9084 all appearing — mixed-version collective active
 ```
 
-At this point the collective is running a **mixed-version state**: two 25.0.0.1 members
-and two 26.0.0.8 members all handling live traffic. No users are affected.
+Open `http://localhost:1080/server-info/` in a browser and refresh several times — you
+will now see the Liberty version alternate between `25.0.0.1` (member1/member2) and
+`26.0.0.8` (member3/member4), confirming the mixed-version state with zero disruption.
+
+At this point the collective contains:
+
+| Member | Liberty version | HTTP port | Role |
+|--------|----------------|-----------|------|
+| controller | 26.0.0.8 ND | 9080 / 9443 | Controller only |
+| member1 | 25.0.0.1 Base | 9081 | Active — serving traffic |
+| member2 | 25.0.0.1 Base | 9082 | Active — serving traffic |
+| member3 | 26.0.0.8 ND | 9083 | Active — serving traffic |
+| member4 | 26.0.0.8 ND | 9084 | Active — serving traffic |
 
 ---
 
-### Step 7.2 — Ripple-start: drain and stop the 25.0.0.1 members one at a time
+### Step 7.2 — Ripple-stop: drain and remove the 25.0.0.1 members one at a time
 
-A ripple start (also called a rolling restart) removes old members from service
-individually, ensuring at least one member is always available to serve requests.
+A ripple stop removes old-version members from service individually, ensuring at least
+one member is always available to serve requests throughout the process.
 
-**Stop member3 (25.0.0.1):**
+**Stop member1 (25.0.0.1):**
 
 ```bash
-installs/member3/wlp/bin/server stop member3
+installs/member1/wlp/bin/server stop member1
 ```
 
-Immediately confirm IHS has automatically removed member3 from routing and traffic
+Immediately confirm IHS has automatically removed member1 from routing and traffic
 is still flowing through the remaining members:
 
 ```bash
 for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-# Expected: only 9081, 9082, and 9084 — member3 (9083) no longer appears
+# Expected: only 9082, 9083, and 9084 — member1 (9081) no longer appears
 ```
 
-**Stop member4 (25.0.0.1):**
+**Stop member2 (25.0.0.1):**
 
 ```bash
-installs/member4/wlp/bin/server stop member4
+installs/member2/wlp/bin/server stop member2
 ```
 
 Confirm IHS routing now uses only the 26.0.0.8 members:
@@ -593,49 +605,48 @@ Confirm IHS routing now uses only the 26.0.0.8 members:
 ```bash
 for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-# Expected: only 9081 and 9082 — collective is now pure 26.0.0.8
+# Expected: only 9083 and 9084 — collective is now pure 26.0.0.8
 ```
+
+Open `http://localhost:1080/server-info/` in a browser and refresh — every response
+now shows Liberty version `26.0.0.8`. The upgrade is complete and no requests were
+dropped during the entire process.
 
 > **No downtime:** at no point during steps 7.1 and 7.2 did IHS return an error or
 > stop serving traffic. The routing table was updated automatically by Intelligent
-> Management as members joined and left.
+> Management each time a member joined or stopped.
 
 ---
 
 ### Step 7.3 — Confirm the final state
 
 The collective is now fully upgraded to Liberty 26.0.0.8. Confirm the final topology
-by opening `https://localhost:9443/adminCenter` — member3 and member4 should appear
-as **Stopped** (or absent) while member1 and member2 are **Started**.
+by opening `https://localhost:9443/adminCenter` — member1 and member2 should appear
+as **Stopped** while member3 and member4 are **Started**.
 
-Run the validate script to confirm the 26.0.0.8 members are healthy:
-
-```bash
-scripts/07-validate.sh
-```
-
-You can also do a final direct spot-check on each 26.0.0.8 member:
+Run the following commands to do a final spot-check on each 26.0.0.8 member and
+verify IHS is routing exclusively to them:
 
 ```bash
-curl -s http://localhost:9081/server-info/
-# Expected: server-info page showing member1, Liberty 26.0.0.8
+curl -s http://localhost:9083/server-info/
+# Expected: server-info page showing member3, Liberty 26.0.0.8
 
-curl -s http://localhost:9082/server-info/
-# Expected: server-info page showing member2, Liberty 26.0.0.8
+curl -s http://localhost:9084/server-info/
+# Expected: server-info page showing member4, Liberty 26.0.0.8
 
 curl -s http://localhost:1080/server-info/
-# Expected: IHS routing only to 26.0.0.8 members
+# Expected: IHS routing only to 26.0.0.8 members (9083 / 9084)
 ```
 
 ### Summary — what zero migration demonstrated
 
 | Phase | Active members | Liberty versions in rotation | Traffic impact |
 |-------|---------------|------------------------------|----------------|
-| Before upgrade | member3, member4 | 25.0.0.1 only | Normal |
+| Before upgrade | member1, member2 | 25.0.0.1 only | Normal |
 | New members added | member1, member2, member3, member4 | 25.0.0.1 + 26.0.0.8 | None — IHS adds new members automatically |
-| member3 stopped | member1, member2, member4 | 25.0.0.1 + 26.0.0.8 | None — IHS removes stopped member automatically |
-| member4 stopped | member1, member2 | 26.0.0.8 only | None |
-| **Final state** | member1, member2 | **26.0.0.8 only** | **Zero downtime achieved** |
+| member1 stopped | member2, member3, member4 | 25.0.0.1 + 26.0.0.8 | None — IHS removes stopped member automatically |
+| member2 stopped | member3, member4 | 26.0.0.8 only | None |
+| **Final state** | member3, member4 | **26.0.0.8 only** | **Zero downtime achieved** |
 
 ---
 
