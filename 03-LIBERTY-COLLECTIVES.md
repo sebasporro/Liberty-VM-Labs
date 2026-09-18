@@ -16,6 +16,9 @@ By the end of this lab you will be able to:
 All steps are scripted and repeatable. Each section explains what the script does and provides
 verification commands so you can confirm the expected state before moving to the next step.
 
+> **Note:** Scripts used in these labs are not official IBM tools. They are provided solely
+> to automate some of the processes described here for lab convenience.
+
 ---
 
 ## Liberty Collectives
