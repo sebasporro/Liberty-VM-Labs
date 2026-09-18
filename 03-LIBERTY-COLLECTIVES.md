@@ -377,14 +377,6 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:1080/server-info/
 ```
 Expected output: `200`
 
-Then confirm Round Robin distribution by sending 8 requests and checking that the reported
-port alternates between `9081` (member1) and `9082` (member2):
-
-```bash
-for i in $(seq 8); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-```
-Expected output: `9081` and `9082` alternating
 
 You can also open `http://localhost:1080/server-info/` in a browser to observe Round Robin
 routing visually. The **server-info** app shows a **Runtime Dashboard** with the hostname,
@@ -465,29 +457,42 @@ Expected output: `9081` and `9082` alternating
 
 ---
 
-### 4c — Dynamic Routing Rules (optional)
+### 4c — Failover Testing
 
-With dynamic routing active, you can use routing rules to pin, redirect, or reject requests
-for specific URI patterns — for example, to send all `/server-info/*` traffic to a single member.
+This step demonstrates that Intelligent Management detects a member going down and automatically
+reroutes traffic to the remaining healthy member — no manual plugin update required.
 
-Rules are applied by dropping an XML file into the controller's `configDropins/overrides/` directory.
-Liberty picks up the change dynamically — no controller restart required.
+**1. Open the app and note the serving member**
 
-```bash
-scripts/apply-routing-rules.sh -s member1   # pin /server-info/* → member1 only
-scripts/apply-routing-rules.sh -s member2   # pin /server-info/* → member2 only
-scripts/apply-routing-rules.sh -s all       # remove rule — restore round-robin
-```
+Open `http://localhost:1080/server-info/` in a browser. The **Runtime Dashboard** shows a
+**PORT** field — note the value. For example, `9081` means **member1** is serving this request.
 
-**Verify (pin to member1):**
+**2. Stop that member from Admin Center**
 
-```bash
-for i in $(seq 6); do curl -s -c /dev/null http://localhost:1080/server-info/api/health \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; done
-```
-Expected output: `9081` for every request
+Open `https://localhost:9443/adminCenter` and navigate to **Explore → Servers**.
+Find the member that was just serving (e.g. **member1**), click its card, and click **Stop**.
+Wait for the status to change to **Stopped**.
 
-> **Reference:** [IBM Docs — Configuring routing rules for Dynamic Routing](https://www.ibm.com/docs/en/was-liberty/nd?topic=collectives-configuring-routing-rules-liberty-dynamic-routing)
+**3. Refresh the app and verify failover**
+
+Return to the `http://localhost:1080/server-info/` browser tab and refresh the page.
+The PORT field should now show the other member's port (e.g. `9082` — **member2**).
+Intelligent Management has detected the stopped member and rerouted all traffic automatically.
+
+**4. Restart the stopped member**
+
+Return to Admin Center **Explore → Servers**, find the stopped member, and click **Start**.
+Wait for its status to return to **Running**.
+
+**5. Refresh the app and observe load balancing resume**
+
+Return to the browser tab and refresh several times. The PORT value will begin alternating
+between `9081` and `9082` again, confirming the restarted member has been added back into
+the rotation automatically.
+
+> **What this proves:** Intelligent Management (4b) keeps IHS routing state in sync with
+> the collective in real time. Stopping or starting a member is reflected in routing
+> immediately — no `plugin-cfg.xml` regeneration or IHS restart required.
 
 ---
 
