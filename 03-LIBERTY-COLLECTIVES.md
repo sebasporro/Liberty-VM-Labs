@@ -1487,6 +1487,71 @@ tail -50 installs/controller/wlp/usr/servers/controller/logs/messages.log
 
 ---
 
+## Hostname Usage — localhost vs FQDN
+
+### Why this lab uses `localhost` everywhere
+
+All scripts hard-code `localhost` (or `--hostName=localhost`) as the Liberty server hostname.
+This is **intentional for this single-VM lab** and works correctly because every component —
+IHS, the collective controller, and all four members — runs on the same host. All inter-process
+communication is loopback.
+
+The three places where `localhost` has technical consequences (not just display) are:
+
+| Location | Property / Flag | Effect |
+|---|---|---|
+| `install-controller.sh` | `collective create --hostName=localhost` | Bakes `localhost` as the CN in the controller's collective PKI certificate |
+| `add-member-26.sh` / `add-member-25.sh` | `collective join --hostName=localhost` | Bakes `localhost` as the member's PKI identity in the collective registry |
+| `bootstrap.properties` (all instances) | `default.hostname=localhost` | Sets the `${default.hostname}` variable; not referenced by any config XML in this lab — informational only |
+
+Because the certificate CN is `localhost`, both member scripts pass `--disableHostnameVerification`
+to `collective join`. This is the correct workaround for a single-VM lab where TLS hostname
+verification would always fail against the loopback CN.
+
+A side-effect is that all members appear as `localhost` in the Admin Center topology view.
+This is expected — all four members genuinely live on the same host.
+
+### Adapting to a real multi-VM topology
+
+If you want to replicate this lab across multiple VMs you must replace `localhost` with the
+actual **fully-qualified domain name (FQDN)** or IP address of each host **before** running
+`collective create` or `collective join`. The certificate is generated during those commands
+and cannot be changed without tearing down and rejoining the collective.
+
+Concretely, for a two-VM setup (controller on `ctrl.example.com`, members on `app.example.com`):
+
+1. In `install-controller.sh`, change:
+   ```bash
+   --hostName=localhost
+   ```
+   to:
+   ```bash
+   --hostName=ctrl.example.com
+   ```
+
+2. In `add-member-26.sh` / `add-member-25.sh`, change both:
+   ```bash
+   CONTROLLER_HOST="localhost"
+   # ...
+   --hostName=localhost
+   ```
+   to:
+   ```bash
+   CONTROLLER_HOST="ctrl.example.com"
+   # ...
+   --hostName=app.example.com
+   ```
+   and **remove** `--disableHostnameVerification` (hostname verification should pass with the correct FQDN in the cert).
+
+3. Update `bootstrap.properties` generation to use `${MEMBER_HOSTNAME}` if you want the
+   variable to reflect reality (it is not consumed by Liberty itself in this codebase, but
+   it aids readability).
+
+4. Update `Transport Hostname=` in `step1-was-plugin.sh` and the generated `plugin-cfg.xml`
+   to use the member and controller FQDNs/IPs accordingly.
+
+---
+
 ## Mixed-Version Collective
 
 This workspace runs a **mixed-version Liberty collective**: the controller and member1/member2

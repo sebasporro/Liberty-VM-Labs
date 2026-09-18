@@ -175,11 +175,11 @@ echo ""
 echo "[4/7] Removing WAS plugin artifacts from IHS..."
 REMOVED=0
 for f in \
-    "${IHS_ROOT}/config/webserver1/plugin-cfg.xml" \
-    "${IHS_ROOT}/config/webserver1/plugin-key.kdb" \
-    "${IHS_ROOT}/config/webserver1/plugin-key.sth" \
-    "${IHS_ROOT}/config/webserver1/plugin-key.rdb" \
-    "${IHS_ROOT}/config/webserver1/plugin-key.p12" \
+    "${IHS_ROOT}/plugin/config/webserver1/plugin-cfg.xml" \
+    "${IHS_ROOT}/plugin/config/webserver1/plugin-key.kdb" \
+    "${IHS_ROOT}/plugin/config/webserver1/plugin-key.sth" \
+    "${IHS_ROOT}/plugin/config/webserver1/plugin-key.rdb" \
+    "${IHS_ROOT}/plugin/config/webserver1/plugin-key.p12" \
     "${IHS_ROOT}/conf/plugin-cfg.xml" \
     "${IHS_ROOT}/conf/plugin-key.p12" \
     "${IHS_ROOT}/conf/plugin-key.kdb" \
