@@ -536,6 +536,90 @@ all four members appear as **Running** alongside the controller:
 
 ---
 
+### 5b — Failover Testing with Four Members
+
+> **Key takeaway:** Because Intelligent Management is already active, adding member3 and
+> member4 required **zero changes** to `plugin-cfg.xml`, no IHS restart, and no re-run of
+> `step2-dynamic-routing.sh`. The moment each member joined the collective, the controller
+> updated the routing table it serves to the WAS plugin, and IHS began distributing traffic
+> across all four members automatically within one `RefreshInterval` (10 seconds).
+
+This step confirms that Intelligent Management handles arrivals and departures across the
+full four-member pool — and gives you hands-on practice using Admin Center to operate
+servers in a running collective.
+
+**1. Confirm all four members are receiving traffic**
+
+Send 12 requests through IHS and verify all four ports appear:
+
+```bash
+for i in $(seq 12); do \
+  curl -s -c /dev/null http://localhost:1080/server-info/api/health \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; \
+done
+```
+
+Expected output: `9081`, `9082`, `9083`, and `9084` all appear in the rotation.
+
+**2. Stop one member from Admin Center and observe routing**
+
+Open `https://localhost:9443/adminCenter` and navigate to **Explore → Servers**.
+
+Pick any member — for example **member3** — click its card, and click **Stop**.
+Wait for the status indicator to change to **Stopped**.
+
+Now re-run the curl loop from Step 1. You should see only **three** port values in the
+output (`9081`, `9082`, `9084`). Intelligent Management detected the stopped member
+within one `RefreshInterval` and removed it from the routing table automatically.
+
+> **No `plugin-cfg.xml` regeneration, no IHS restart — the plugin picked up the change
+> dynamically from the controller.**
+
+**3. Stop a second member and observe further routing change**
+
+Back in Admin Center, stop **member4** as well. Wait for **Stopped** status.
+
+Re-run the curl loop again. Output should now show only `9081` and `9082` — the two
+remaining running members. IHS is routing correctly with a reduced pool, with no manual
+intervention.
+
+**4. Explore the server-info app behaviour directly**
+
+Open `http://localhost:1080/server-info/` in a browser. The **Runtime Dashboard** shows
+the **PORT** and **Server Name** fields for whichever member served the request.
+
+- Refresh the page several times. Because the browser sends a `JSESSIONID` cookie after
+  the first request, it will stick to the same member (session affinity). To force
+  round-robin, use `curl -c /dev/null` as in the steps above.
+- Try navigating to a stopped member's direct URL (e.g. `http://localhost:9083/server-info/`).
+  The request times out or is refused because that Liberty process is not running.
+- Navigate to `http://localhost:1080/server-info/` — IHS routes only to the running members,
+  so the stopped ports never appear.
+
+**5. Restart both stopped members**
+
+Back in Admin Center **Explore → Servers**, click **Start** on member3, then member4.
+Wait for both to return to **Running** status.
+
+Re-run the curl loop one final time and confirm all four ports are back in rotation:
+
+```bash
+for i in $(seq 12); do \
+  curl -s -c /dev/null http://localhost:1080/server-info/api/health \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['server']['port'])"; \
+done
+```
+
+Expected output: `9081`, `9082`, `9083`, and `9084` all appearing again.
+
+> **What this proves:** Intelligent Management keeps the IHS routing table in sync with
+> the collective in real time across the full server lifecycle — new members auto-join the
+> rotation on startup and are removed immediately on stop, with no static configuration
+> changes at any layer. Adding more servers to a collective never requires regenerating
+> `plugin-cfg.xml` or touching IHS.
+
+---
+
 ## Section 6 — Validate
 
 At this point you have a fully operational collective with four Liberty 26.0.0.8 members
