@@ -1,3 +1,8 @@
+> **⚠️ Beta Version** — This lab is under active development. If you encounter any errors,
+> broken steps, or unclear instructions, please report them to **Sebastian Porro**
+> (sebastian.porro@ibm.com). Your feedback helps improve the experience for everyone.
+
+
 # Liberty on Virtual Machines — Start Here
 
 Welcome to the **WebSphere Liberty on Virtual Machines** labs. You will complete two hands-on
