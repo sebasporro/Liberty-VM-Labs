@@ -18,6 +18,34 @@ verification commands so you can confirm the expected state before moving to the
 
 ---
 
+## Liberty Collectives
+
+In the modern-day business, the application is king. To provide workload balancing and
+failover protection for application high availability, the WebSphere Plug-in can be used
+with an Apache web server to route HTTP requests to the application running in
+application servers.
+
+Traditionally this is done by creating the plug-in configuration for each application server
+and using a utility to merge these configurations into a single file, then copying it to the
+web server installation.
+
+The Liberty dynamic routing feature enables routing of HTTP requests to members of
+Liberty collectives without regenerating the WebSphere plug-in configuration file when
+the environment changes.
+
+When servers, collective members, applications, or virtual hosts are added, removed,
+started, stopped, or modified; the new information is dynamically delivered to the
+WebSphere plug-in through the Liberty Collective Controller.
+
+Requests are routed based on up-to-date information. In this approach, the web server
+plug-in configuration file (plugin-cfg.xml) only needs to contain routing information about
+the collective controller process(es).
+
+The plug-in then contacts the controller to obtain information about all the servers in the
+collective and directs HTTP requests to the appropriate Liberty servers in the collective.
+
+---
+
 ## Target Architecture
 
 At the end of this lab you will have the following topology running on a single VM:
@@ -146,6 +174,50 @@ Expected output: `Server version: Apache/2.4.x (IBM HTTP Server)`
 ---
 
 ## Section 2 — Build the Golden Packages
+
+A Liberty server is lightweight due to its modular architecture, so you can easily package
+a server installation and applications in a compressed "zip" or "jar" package. You can then
+store this package and use it to deploy the installation to different nodes or machines in
+your Liberty Collective.
+
+In this lab, you will deploy Liberty and sample applications to a Liberty Collective, while
+following several common practices as illustrated below.
+
+> **Recommended practice: Produce server packages as build output**
+>
+> It is recommended to create immutable server packages that include the Liberty binaries,
+> server configuration, application, and shared configuration as build output.
+>
+> The build output, "server package", is the deployable unit to Liberty collective members.
+> Using this practice is very similar to recommended practices for container image deployments
+> in Kubernetes platforms.
+
+> **Recommended practice: Automate the build and deployment of server packages to the collective**
+>
+> Automating installation, deployment, and configuration is always recommended to achieve
+> greater agility, repeatability, and productivity.
+>
+> In this lab, you will follow this recommended practice of using automation scripts that
+> perform the following processes:
+>
+> - Build the server packages for deployment to the collective
+> - Create the Liberty Collective
+> - Deploy the server packages to the collective
+
+> **Recommended practice: Add configuration overrides to the server after the server package is uncompressed**
+>
+> The automation scripts used in the lab follow this practice. The server package is built as
+> a template that contains the application, libraries, and default configuration.
+>
+> Then, when the server package is deployed and uncompressed on the target machine, the
+> configuration overrides are added. These overrides can override any default configuration
+> from the server package.
+>
+> However, in this lab, the http and https ports are overridden for each deployment of the
+> package server to avoid port conflicts in the event of vertical scaling of Liberty servers
+> on the VM.
+>
+> In the labs, additional overrides are applied in the context of the learning modules.
 
 Build both golden packages before deploying anything. Only needs to be repeated if the
 template configuration or application changes.

@@ -13,7 +13,8 @@
     - The controller returns the live routing table of all healthy collective
       members; the plugin routes requests accordingly.
     - Members joining or leaving the collective are reflected automatically
-      within one RefreshInterval (60 s by default).
+      within one RefreshInterval (10 s — tuned down from the 60 s default
+      for demo/lab responsiveness).
 
   SSL:
     The plugin authenticates to /wr using the GSKit CMS keystore
@@ -32,7 +33,7 @@
 <Config ASDisableNagle="false" AcceptAllContent="false"
         AppServerPortPreference="HostHeader" ChunkedResponse="false"
         FIPSEnable="false" IISDisableNagle="false" IISPluginPriority="High"
-        IgnoreDNSFailures="false" RefreshInterval="60" ResponseChunkSize="64"
+        IgnoreDNSFailures="false" RefreshInterval="10" ResponseChunkSize="64"
         SSLConsolidatedConfig="false" TrustedProxyEnable="false"
         VHostMatchingCompat="false">
 

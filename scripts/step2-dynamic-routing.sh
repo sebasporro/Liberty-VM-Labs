@@ -55,12 +55,14 @@ mv "${CONTROLLER_BIN}/plugin-cfg.xml" "${SCRATCH}/"
 mv "${CONTROLLER_BIN}/plugin-key.p12" "${SCRATCH}/"
 
 # 3. Patch the generated plugin-cfg.xml:
-#    The generated ConnectorCluster has no LoadBalance or IgnoreAffinityRequests
-#    attributes.  Without them the ODR honours JSESSIONID session affinity, which
-#    makes all requests from the same HTTP session stick to one member and breaks
-#    visible round-robin.  Adding these two attributes restores round-robin
-#    behaviour regardless of whether the client sends a JSESSIONID cookie.
+#    a) Add LoadBalance and IgnoreAffinityRequests to ConnectorCluster so the
+#       ODR does not honour JSESSIONID session affinity — required for visible
+#       round-robin in curl tests and for pin rules to work from fresh sessions.
+#    b) Lower RefreshInterval from 60 s (default) to 10 s so routing changes
+#       propagate quickly during demos without waiting a full minute.
 sed -i 's|<ConnectorCluster \(enabled="true"[^>]*\)>|<ConnectorCluster \1 LoadBalance="RoundRobin" IgnoreAffinityRequests="true">|' \
+  "${SCRATCH}/plugin-cfg.xml"
+sed -i 's|RefreshInterval="60"|RefreshInterval="10"|' \
   "${SCRATCH}/plugin-cfg.xml"
 
 # 4. Convert keystore and set default certificate
