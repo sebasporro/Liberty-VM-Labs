@@ -498,6 +498,8 @@ the rotation automatically.
 
 ## Section 5 — Add More 26.0.0.8 Members
 
+### 5a — Deploy member3 and member4
+
 Deploy member3 and member4 using the same 26.0.0.8 golden package as member1 and member2.
 With Intelligent Management active, IHS automatically picks them up the moment they join
 the collective — no plugin config changes or script re-run needed.
